@@ -1,0 +1,138 @@
+@inherits GridTestContext
+
+@code {
+    // GS-045 · GS-047 · GS-059 (그리드 쪽) + Addendum A-10 (컬럼 검증 규칙)
+
+    private static readonly CultureInfo En = new("en-US");
+
+    /// <summary>GS-047: 행 복사 — 각 원래 행 바로 아래, OnRowAdding에 원본 행 키 (A-12)</summary>
+    [Fact]
+    public async Task GS_047_CopyRows_InsertsBelowEachOriginal()
+    {
+        var ds = TestData.ThreeLines();
+        var (r1, r2, r3) = (ds.RowKeys[0], ds.RowKeys[1], ds.RowKeys[2]);
+        var sources = new List<int?>();
+
+        var cut = Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" Culture="En"
+                                                     OnRowAdding="(RowAddingArgs<PoLine> e) => { sources.Add(e.SourceRowKey); e.Item.LineNo = 0; }">
+                                               <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" />
+                                           </QuroGrid>);
+
+        var copies = await cut.InvokeAsync(() => cut.Instance.CopyRows([r2, r1]));   // 선택 순서와 무관하게 표시 순서로
+
+        Assert.Equal([r1, r2], sources.Select(s => s!.Value));
+        Assert.Equal([r1, copies[0], r2, copies[1], r3], ds.RowKeys);
+        Assert.Equal("A1001", ds.GetValue(copies[0], "ItemCode"));
+        Assert.Equal(0, ds.GetValue(copies[0], "LineNo"));            // 앱이 OnRowAdding에서 정리
+        Assert.Equal(RowState.Inserted, ds.GetState(copies[1]));
+        var rendered = cut.FindAll("[role=row][data-row]").Select(r => int.Parse(r.GetAttribute("data-row")!));
+        Assert.Equal([r1, copies[0], r2, copies[1], r3], rendered);
+    }
+
+    /// <summary>GS-045: 일반 행 추가는 원본 없음</summary>
+    [Fact]
+    public async Task GS_045_AddRow_NoSource()
+    {
+        var ds = TestData.ThreeLines();
+        int? source = -99;
+        var cut = Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" OnRowAdding="(RowAddingArgs<PoLine> e) => source = e.SourceRowKey">
+                                               <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" />
+                                           </QuroGrid>);
+
+        await cut.InvokeAsync(() => cut.Instance.AddRow());
+
+        Assert.Null(source);
+    }
+
+    /// <summary>GS-045: 행 추가 위치 지정 — 활성 행 바로 아래 (A-15). 원본이 아니므로 SourceRowKey 없음</summary>
+    [Fact]
+    public async Task GS_045_AddRow_BelowGivenRow()
+    {
+        var ds = TestData.ThreeLines();
+        var (r1, r2, r3) = (ds.RowKeys[0], ds.RowKeys[1], ds.RowKeys[2]);
+        int? source = -99;
+        var cut = Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" OnRowAdding="(RowAddingArgs<PoLine> e) => source = e.SourceRowKey">
+                                               <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" />
+                                           </QuroGrid>);
+
+        var key = await cut.InvokeAsync(() => cut.Instance.AddRow(r1));
+
+        Assert.Equal([r1, key, r2, r3], ds.RowKeys);
+        Assert.Null(source);
+        Assert.NotEqual("A1001", ds.GetValue(key, "ItemCode"));      // 복사가 아님: 위 행 값을 가져오지 않는다
+    }
+
+    /// <summary>GS-047: 삭제 후 OnRowDeleted 1회 — 실제 삭제된 행만 (취소 행 제외, A-14)</summary>
+    [Fact]
+    public async Task GS_047_DeleteRows_RaisesDeletedOnce()
+    {
+        var ds = TestData.ThreeLines();
+        var (r1, r2, r3) = (ds.RowKeys[0], ds.RowKeys[1], ds.RowKeys[2]);
+        var seen = new List<IReadOnlyList<int>>();
+        var cut = Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds"
+                                                     OnRowDeleting="(RowDeletingArgs<PoLine> e) => e.Cancel = e.RowKey == r2"
+                                                     OnRowDeleted="(RowDeletedArgs e) => seen.Add(e.RowKeys)">
+                                               <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" />
+                                           </QuroGrid>);
+
+        await cut.InvokeAsync(() => cut.Instance.DeleteRows([r1, r2, r3]));
+
+        var keys = Assert.Single(seen);
+        Assert.Equal([r1, r3], keys);
+        Assert.Equal(RowState.Deleted, ds.GetState(keys[0]));    // 이벤트 시점에 이미 삭제 반영
+    }
+
+    /// <summary>GS-059: 활성 행 변경 → OnSelectionChanged (A-13)</summary>
+    [Fact]
+    public async Task GS_059_SelectionChanged_RaisesWithRow()
+    {
+        var ds = TestData.ThreeLines();
+        SelectionChangedArgs<PoLine>? seen = null;
+        var cut = Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" OnSelectionChanged="(SelectionChangedArgs<PoLine> e) => seen = e">
+                                               <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" />
+                                           </QuroGrid>);
+
+        await cut.InvokeAsync(() => cut.Instance.SelectionChanged(ds.RowKeys[1]));
+
+        Assert.Equal(ds.RowKeys[1], seen!.RowKey);
+        Assert.Equal("A1002", seen.Item.ItemCode);
+    }
+
+    /// <summary>GS-059: 구독할 때만 JS가 선택 변경을 보낸다 (불필요한 서버 호출 방지)</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void GS_059_NotifySelection_OnlyWhenSubscribed(bool subscribe)
+    {
+        var module = JSInterop.SetupModule(ModulePath);
+        module.SetupVoid("init", _ => true);
+        var ds = TestData.ThreeLines();
+        var handler = EventCallback.Factory.Create<SelectionChangedArgs<PoLine>>(this, () => { });
+
+        if (subscribe)
+            Render(@<QuroGrid DataSet="ds" OnSelectionChanged="handler"><QuroColumn Field="Qty" HeaderKey="mm.qty" /></QuroGrid>);
+        else
+            Render(@<QuroGrid DataSet="ds"><QuroColumn Field="Qty" HeaderKey="mm.qty" /></QuroGrid>);
+
+        var options = Assert.IsType<GridJsOptions>(Assert.Single(module.Invocations["init"]).Arguments[2]);
+        Assert.Equal(subscribe, options.NotifySelection);
+    }
+
+    /// <summary>A-10: QuroColumn의 Required·Min·Max는 DataSet 규칙 API로 등록된다</summary>
+    [Fact]
+    public void A10_ColumnRules_RegisteredToDataSet()
+    {
+        var ds = TestData.ThreeLines();
+        Render(@<QuroGrid DataSet="ds">
+                    <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" Required="true" />
+                    <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" Min="0" Max="100" />
+                </QuroGrid>);
+
+        var row = ds.AddRow();
+        ds.SetValue(row, "Qty", 101m);
+        var errors = ds.Validate().Errors;
+
+        Assert.Contains(errors, e => e.RowKey == row && e.Field == "ItemCode" && e.MessageKey == ValidationKeys.Required);
+        Assert.Contains(errors, e => e.RowKey == row && e.Field == "Qty" && e.MessageKey == ValidationKeys.Max);
+    }
+}
