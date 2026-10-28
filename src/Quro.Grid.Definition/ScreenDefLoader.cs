@@ -7,8 +7,9 @@ namespace Quro.Grid.Definition;
 public static class ScreenDefLoader
 {
     /// <summary>
-    /// Parses <paramref name="text"/> in strict mode and builds the screen definition. All errors are collected and
-    /// returned together; <see cref="DefinitionResult{T}.Value"/> is null when there is any error.
+    /// Parses <paramref name="text"/> in strict mode, builds the screen definition and checks its structure
+    /// (V-01..V-18). All errors are collected and returned together; <see cref="DefinitionResult{T}.Value"/> is null
+    /// when there is any error. Structure checks run only when the file has no syntax, key or value errors.
     /// </summary>
     /// <param name="path">File path used in errors and <see cref="SourceInfo"/></param>
     /// <param name="text">File content</param>
@@ -16,7 +17,11 @@ public static class ScreenDefLoader
     {
         var errors = new List<DefinitionError>();
         var root = ToonReader.Read(path, text, errors);
-        var screen = new ScreenBuilder(path, errors).Build(root);
+        var builder = new ScreenBuilder(path, errors);
+        var screen = builder.Build(root);
+        // Structure checks only on a cleanly read file: dropped rows or unknown keys would cause follow-up errors.
+        if (screen is not null && errors.Count == 0)
+            new StructureChecks(path, builder.Lines, errors).Run(screen);
         errors.Sort((a, b) => a.Line.CompareTo(b.Line));
         return new DefinitionResult<ScreenDef>(screen, errors);
     }
@@ -83,6 +88,9 @@ internal sealed class ScreenBuilder(string file, List<DefinitionError> errors)
 
     private SourceInfo At(int line) => new(file, line);
 
+    /// <summary>Lines of top-level and <c>screen</c> entries that have no <see cref="SourceInfo"/> in the model.</summary>
+    public Dictionary<string, int> Lines { get; } = [];
+
     public ScreenDef? Build(ToonObject root)
     {
         var top = Entries(root, "file", required: ["screen"], optional: ["toolbar", "form", "grids"]);
@@ -92,6 +100,8 @@ internal sealed class ScreenBuilder(string file, List<DefinitionError> errors)
 
         var s = Entries(screenObj, "screen",
             required: ["id", "module", "title", "version", "api", "key", "layout", "perm"], optional: ["lockWhen"]);
+        foreach (var (key, entry) in s.Concat(top))
+            Lines.TryAdd(key, entry.Line);
         var perm = s.TryGetValue("perm", out var permEntry) && Obj(permEntry) is { } permObj
             ? BuildPerm(permObj)
             : new PermDef("", "");

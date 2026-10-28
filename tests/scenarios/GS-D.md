@@ -25,23 +25,23 @@ TOBE의 Harness 8개 중 QuroGrid가 판정할 수 있는 것은 여기서, Quro
 
 | 파일 | 내용 | 출처 |
 |---|---|---|
-| `sd/sd.so.entry.screen.toon` | 설계서 4장 스키마의 전체 예 (폼 22, 그리드 1, 열 10, rules 4, validate 3) | TOBE 2.7 예제(QuroHarness 보관본)에서 AS IS 주석을 뺀 것 + 할인 차감식 |
-| `bad/*.toon` | 시나리오별 오류 1개만 넣은 파일 | 이 문서 |
+| `sd/sd.so.entry.screen.toon` | 설계서 4장 스키마의 전체 예 (폼 22, 그리드 1, 열 10, rules 4, validate 3) | TOBE 2.7 예제(QuroHarness 보관본)에서 AS IS 주석을 뺀 것 + 할인 차감식. `customer`(select)의 `max 40`은 V-11에 걸려 비움 |
+| `bad/*.toon` | 시나리오별 오류 1개만 넣은 파일 | 이 문서. D-2부터는 골든 텍스트 한 곳을 바꾸는 방식(테스트 코드 안)을 주로 쓴다 |
 | `catalog.json` | 테스트 카탈로그 (리소스 키, code Major, lookup id, 핸들러, 권한) | 이 문서 |
 
 카탈로그 내용 (요약): 골든 파일의 모든 `label`·`msg`·`title` 키, `S200 A300 S600 S800 S900 S910`, `salesOrder customer item discount`, `loadCustomer calcDueDate`, `SD.SO.Read SD.SO.Write SD.SO.ReadOnlyTerms`.
 
 ## 3. 시나리오
 
-### 3.1 파서·구조 (xUnit, `Quro.Grid.Definition.Tests`) — 묶음 D-1(GS-D01·GS-D02 ✅)·D-2
+### 3.1 파서·구조 (xUnit, `Quro.Grid.Definition.Tests`) — 묶음 D-1(GS-D01·GS-D02 ✅)·D-2(GS-D03 구조·GS-D05·GS-D07 ✅)
 
 | ID | 시나리오 | 입력 | 기대 결과 | H |
 |---|---|---|---|---|
 | GS-D01 | 골든 로드 | `sd/sd.so.entry.screen.toon` | 오류 0. `Form.Fields` 22, `Grids` 1, `lines.Columns` 10, `Rules` 4, `Validate` 3, `Toolbar` 9. `Key`=`soNo`, `LockWhen` 파싱됨. 열 `qty`의 `Fmt`=`#,##0.###` (값 안 쉼표 보존) | H1 |
 | GS-D02 | 개수 불일치 | `columns[10]`에 9행 / 표 행 하나에 값 9개 / `toolbar[9]`에 8개 | 각각 V-01, 메시지에 `파일명:줄`. 오류 3개를 한 번에 보고 (첫 오류에서 멈추지 않음) | H1 |
-| GS-D03 | 열거값·리소스 키 | `mode: required` / `type: combo` / `label`에 `Item Code`(문구) / 카탈로그에 없는 키 | V-03 ×2, V-21 ×2 | H1 H3 |
+| GS-D03 | 열거값·구조·리소스 키 | `mode: required` / `type: combo` / `span` 범위 밖·비숨김 0 / id 중복(열↔폼, 그리드↔폼) / `screen.id`≠파일명 / `key` 없음 / `max`가 date에 / `req`인데 `edit=false` / `sum`이 text에 / 그리드 명령인데 그리드 없음 (D-2) · `label`에 `Item Code`(문구) / 카탈로그에 없는 키 (D-3) | V-03 ×4, V-04 ×2, V-05, V-10, V-11, V-12, V-13, V-14 · V-21 ×2. 문법·키 오류(V-01~V-03)가 있으면 구조 검사는 건너뜀 | H1 H3 |
 | GS-D04 | 참조·토큰 | `code:S999` / `lookup:vendor` / `on: noSuchHandler` / `default: @tody` / `perm.write` 미등록 | V-22, V-22, V-23, 토큰 문법 오류, V-24 | H4 |
-| GS-D05 | 규칙 대상 | `calc` 대상 열 없음 / `calc` 대상이 `edit=true` / `sum` 대상 폼 필드가 `mode=req` / `lookup` 대상 목록에 없는 열 (R5) / `calc` 순환 (a←b, b←a) | V-15, V-15, V-16, V-15, V-17 | H2 |
+| GS-D05 | 규칙 대상 | `calc` 대상 열 없음 / `calc` 대상이 `edit=true` / `sum` 대상 폼 필드가 `mode=req` / `lookup` 대상 목록에 없는 열 (R5) / `calc` 입력 열 없음 / `calc` 순환 (a←b, b←a) / validate `requires` 필드 없음 | V-15, V-15, V-16, V-15, V-15, V-17, V-18 | H2 |
 | GS-D06 | SQL·Clean-room | 값에 `select name from codes where id = 1` / 열 id가 clean-room 금지 식별자 / 열 id `item_code`(snake_case) / 값 `#ffff00` | V-30, V-31, V-31, V-32 | H7 |
 | GS-D07 | mode × state 매트릭스 | `FieldModeResolver.Resolve`의 7 mode × 3 state × permReadOnly 2 = 42조합 (`[Theory]`) | 설계서 5.2 표와 일치. 그리드 열 환산: `edit=new` + Inserted → 편집, + Normal → 읽기 | H6 |
 
