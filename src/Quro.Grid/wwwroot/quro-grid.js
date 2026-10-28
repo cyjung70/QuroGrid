@@ -1,6 +1,6 @@
 // quro-grid.js — QuroGrid의 얇은 JS 층 (Spec 4.2).
 // 소유: 활성 셀(포커스)·활성 헤더·범위 선택·키보드 이동·편집 중 키 입력·클립보드 (R1).
-// 서버 호출은 편집 시작·커밋·취소·행 추가·행 삭제·붙여넣기(1회, R3)·활성 행 변경(구독 시)·
+// 서버 호출은 편집 시작·커밋·취소·행 추가·행 삭제·붙여넣기(1회, R3)·활성 행 변경(구독 시)·정렬·컬럼 너비·이동(놓을 때)·
 // 코드도움(F4)·선택 목록 열기(Alt+↓)·체크 토글·버튼 클릭 때만 (R2).
 // 셀마다 핸들러를 달지 않고 그리드 루트 하나에서 이벤트를 받아 data-row / data-field로 좌표를 해석한다 (R5).
 
@@ -73,6 +73,7 @@ export function dispose(root) {
     clearTimeout(s.notifyTimer);
     s.style.remove();
     s.resizeStyle?.remove();
+    s.dragStyle?.remove();
     grids.delete(root);
 }
 
@@ -137,14 +138,8 @@ function onMouseDown(s, e) {
     }
     const header = e.target.closest('.quro-head [role=columnheader][data-field]');
     if (header) {
-        // 헤더 클릭 정렬 (A-22): 편집 중이면 먼저 커밋. 포커스는 그리드에 둔다.
-        e.preventDefault();
-        const field = header.dataset.field;
-        const additive = e.shiftKey;
-        enqueue(s, async () => {
-            if (s.editing && !(await commit(s))) return;
-            await s.dotnet.invokeMethodAsync('Sort', field, additive);
-        });
+        e.preventDefault();   // 포커스는 그리드(편집 중이면 에디터)에 둔다
+        startHeaderDrag(s, header, e);
         return;
     }
     const cell = e.target.closest('.quro-body [role=gridcell][data-field]');
@@ -159,6 +154,70 @@ function onMouseDown(s, e) {
         activate(s, target.row, target.field, extend);
         if (type) await cellAction(s, type);
     });
+}
+
+// ── 헤더: 클릭 정렬 (A-22) / 드래그 이동 (GS-068). 5px 넘게 움직이면 드래그, 아니면 놓을 때 클릭 ──
+
+const DRAG_THRESHOLD = 5;
+
+function startHeaderDrag(s, header, e) {
+    const field = header.dataset.field;
+    const additive = e.shiftKey;
+    const startX = e.clientX;
+    let dragging = false;
+    let target = null;   // 놓을 화면 위치 (보이는 컬럼 중)
+
+    const move = ev => {
+        if (!dragging && Math.abs(ev.clientX - startX) <= DRAG_THRESHOLD) return;
+        dragging = true;
+        target = dropTarget(s, field, ev.clientX);
+        drawDrag(s, field, target);
+    };
+    const up = () => {
+        document.removeEventListener('mousemove', move, true);
+        document.removeEventListener('mouseup', up, true);
+        drawDrag(s, null);
+        if (!dragging) {
+            // 클릭 정렬: 편집 중이면 먼저 커밋
+            enqueue(s, async () => {
+                if (s.editing && !(await commit(s))) return;
+                await s.dotnet.invokeMethodAsync('Sort', field, additive);
+            });
+        } else if (target && target.index !== target.from) {
+            // 드래그 중에는 브라우저에서만 표시하고, 놓을 때 서버 1회 (R1). 고정 열 경계는 서버가 맞춘다
+            enqueue(s, () => s.dotnet.invokeMethodAsync('MoveColumn', field, target.index));
+        }
+    };
+    document.addEventListener('mousemove', move, true);
+    document.addEventListener('mouseup', up, true);
+}
+
+/** 포인터 아래 헤더의 왼쪽 절반이면 그 앞, 오른쪽 절반이면 뒤. index는 옮긴 뒤 위치, marker는 표시할 경계 */
+function dropTarget(s, field, x) {
+    const all = headers(s);
+    const from = all.findIndex(h => h.dataset.field === field);
+    let insert = all.length;
+    for (let i = 0; i < all.length; i++) {
+        const r = all[i].getBoundingClientRect();
+        if (x < r.left + r.width / 2) { insert = i; break; }
+    }
+    const marker = insert < all.length ? { field: all[insert].dataset.field, side: 'left' } : { field: all[all.length - 1].dataset.field, side: 'right' };
+    return { from, index: insert > from ? insert - 1 : insert, marker };
+}
+
+/** 드래그 중 표시: 잡은 헤더는 흐리게, 놓을 경계에 선. field가 null이면 지운다 */
+function drawDrag(s, field, target) {
+    s.dragStyle ??= document.head.appendChild(document.createElement('style'));
+    if (!field) {
+        s.dragStyle.textContent = '';
+        return;
+    }
+    const head = `[data-quro-grid="${s.id}"] .quro-head`;
+    const line = target.marker.side === 'left' ? 'inset 3px 0 0' : 'inset -3px 0 0';
+    s.dragStyle.textContent = [
+        `${head} [data-field="${CSS.escape(field)}"] { opacity: 0.5; }`,
+        `${head} [data-field="${CSS.escape(target.marker.field)}"] { box-shadow: ${line} var(--quro-active,#2e6be6); }`,
+    ].join('\n');
 }
 
 // ── 컬럼 리사이즈 (GS-053, A-23): 드래그 중에는 브라우저에서만 그리고, 끝날 때 서버 1회 (R1) ──
@@ -745,7 +804,10 @@ export function endEdit(root) {
     s.root.focus({ preventScroll: true });
 }
 
-/** 행 삭제 렌더 뒤 서버가 호출한다: 활성 셀이 사라졌으면 같은 순번(없으면 마지막) 행의 같은 열로. */
+/**
+ * 행 삭제·컬럼 숨김 렌더 뒤 서버가 호출한다: 활성 셀이 사라졌으면 같은 행(행이 없어졌으면 같은 순번, 없으면 마지막 행)의
+ * 같은 열(숨겼으면 첫 열)로.
+ */
 export function ensureActive(root) {
     const s = grids.get(root);
     if (!s || !s.active || currentCell(s)) return;
@@ -755,7 +817,7 @@ export function ensureActive(root) {
         s.style.textContent = '';
         return;
     }
-    const row = all[Math.min(Math.max(s.activeIndex ?? 0, 0), all.length - 1)];
+    const row = rowEl(s, s.active.row) ?? all[Math.min(Math.max(s.activeIndex ?? 0, 0), all.length - 1)];
     const cells = cellsOf(row);
     const cell = cells.find(c => c.dataset.field === s.active.field) ?? cells[0];
     activate(s, rowKey(row), cell.dataset.field);

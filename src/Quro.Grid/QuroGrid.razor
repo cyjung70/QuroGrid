@@ -15,7 +15,7 @@
 <Deferred>
     @{ var bodyRows = BodyRowCount(); }
     <div @ref="_root" class="@(Paging ? "quro-grid quro-paged" : "quro-grid")" style="@RootStyle"
-         role="grid" tabindex="0" aria-colcount="@_columns.Count"
+         role="grid" tabindex="0" aria-colcount="@Columns.Count"
          aria-rowcount="@(bodyRows + (ShowFooter ? 2 : 1))"
          data-dirty="@(DataSet.HasChanges ? "true" : null)"
          data-leave-message="@(ConfirmLeave ? Text(GridKeys.LeaveUnsaved) : null)">
@@ -27,9 +27,9 @@
         <div class="quro-notice quro-notice-lost" role="alert">@Text(GridKeys.ChangesLost)</div>
         <div class="quro-head" role="rowgroup">
             <div class="quro-row" role="row" aria-rowindex="1">
-                @for (var i = 0; i < _columns.Count; i++)
+                @for (var i = 0; i < Columns.Count; i++)
                 {
-                    var col = _columns[i];
+                    var col = Columns[i];
                     var sort = SortOf(col);
                     @* 헤더 클릭(정렬)·경계 드래그(리사이즈)는 quro-grid.js가 받는다 (R5, A-22·A-23) *@
                     <div class="@CellClass(i, "quro-header")" style="@CellStyle(i)" role="columnheader"
@@ -71,9 +71,9 @@
         {
             <div class="quro-foot" role="rowgroup">
                 <div class="quro-row quro-footer-row" role="row" aria-rowindex="@(bodyRows + 2)">
-                    @for (var i = 0; i < _columns.Count; i++)
+                    @for (var i = 0; i < Columns.Count; i++)
                     {
-                        var col = _columns[i];
+                        var col = Columns[i];
                         <div class="@CellClass(i, "quro-footer")" style="@CellStyle(i)" role="gridcell"
                              aria-colindex="@(i + 1)" data-footer-field="@col.Field">@FooterText(col)</div>
                     }

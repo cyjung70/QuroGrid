@@ -25,6 +25,7 @@ public sealed class SampleLocalizer : IStringLocalizer
         ["sample.payload"] = ("저장 payload", "Save payload"),
         ["sample.copy_rows"] = ("행 복사", "Copy rows"),
         ["sample.delete_rows"] = ("행 삭제", "Delete rows"),
+        ["sample.toggle_price"] = ("단가 숨김/표시", "Hide/show unit price"),
         ["sample.selected_row"] = ("선택 행", "Selected row"),
         ["mm.remark"] = ("비고", "Remark"),
         ["mm.spec"] = ("규격", "Spec"),
