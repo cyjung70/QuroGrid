@@ -126,6 +126,50 @@
         Assert.Equal(RowState.Updated, ds.GetState(KeyOf(ds, 1)));
     }
 
+    /// <summary>
+    /// GS-047 + 페이징: 위치 범위로 일괄 삭제 (호출 1회, R3). 적재되지 않은 범위는 조회한 뒤 삭제 (A-25).
+    /// 맨 위 추가 행은 목록에서 빠지고, 조회된 행은 삭제 표시. OnRowDeleted 1회
+    /// </summary>
+    [Fact]
+    public async Task GS_047_Paging_DeleteRowRange_LoadsAndDeletes()
+    {
+        var server = new FakeServer(250);
+        var ds = Paged();
+        var deletedEvents = new List<IReadOnlyList<int>>();
+        var cut = Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" ItemsProvider="server.Provide" PageSize="100" Culture="En"
+                                                     OnRowDeleted="(RowDeletedArgs e) => deletedEvents.Add(e.RowKeys)">
+                                               <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" />
+                                           </QuroGrid>);
+        cut.WaitForAssertion(() => Assert.NotEmpty(Rendered(cut)));
+        var added = await cut.InvokeAsync(() => cut.Instance.AddRow());          // 위치 0 = 추가 행
+
+        var count = await cut.InvokeAsync(() => cut.Instance.DeleteRowRange(0, 250));   // 추가 행 + 서버 1..250
+
+        Assert.Equal(251, count);
+        Assert.DoesNotContain(added, ds.RowKeys);
+        Assert.Equal(250, ds.GetChanges().Deleted.Count);
+        Assert.Contains(server.Requests, r => r.StartIndex == 200);                // 적재 안 됐던 페이지도 조회
+        Assert.Equal(251, Assert.Single(deletedEvents).Count);
+    }
+
+    /// <summary>GS-047: 페이징이 아니어도 위치 범위 삭제는 화면 순서 (정렬 포함)</summary>
+    [Fact]
+    public async Task GS_047_DeleteRowRange_ScreenOrder()
+    {
+        var ds = TestData.ThreeLines();
+        var (r1, r2, r3) = (ds.RowKeys[0], ds.RowKeys[1], ds.RowKeys[2]);
+        var cut = Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" Culture="En">
+                                               <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" />
+                                           </QuroGrid>);
+        await cut.InvokeAsync(() => cut.Instance.Sort("Qty", additive: false));   // 3, 2, 1
+
+        await cut.InvokeAsync(() => cut.Instance.DeleteRowRange(0, 1));
+
+        Assert.Equal(RowState.Deleted, ds.GetState(r3));
+        Assert.Equal(RowState.Deleted, ds.GetState(r2));
+        Assert.Equal(RowState.Normal, ds.GetState(r1));
+    }
+
     /// <summary>GS-052: 다시 조회(ReloadAsync) — 변경이 없는 적재 행은 놓고 처음부터 다시 부른다</summary>
     [Fact]
     public async Task GS_052_ReloadAsync_RequeriesFromStart()

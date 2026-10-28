@@ -329,7 +329,14 @@ async function handleKey(s, k) {
             return;
         case 'RowDelete':
             // 선택 범위의 행을 한 번에 (R3). 남은 행으로의 이동은 서버 렌더 뒤 ensureActive가 한다.
-            if (!s.editing) await s.dotnet.invokeMethodAsync('DeleteRows', selectedKeys(s));
+            // 페이징 중에는 화면 밖까지 이어진 범위를 위치로 보낸다 (A-25). 서버가 필요한 범위를 적재한 뒤 삭제
+            if (s.editing) return;
+            if (s.options.paging) {
+                const { topIndex, bottomIndex } = selection(s);
+                await s.dotnet.invokeMethodAsync('DeleteRowRange', topIndex, bottomIndex);
+            } else {
+                await s.dotnet.invokeMethodAsync('DeleteRows', selectedKeys(s));
+            }
             return;
         case 'ArrowUp': return moveBy(s, -1, 0, k.shift);
         case 'ArrowDown': return k.alt ? openPicker(s) : moveBy(s, 1, 0, k.shift);
@@ -485,8 +492,10 @@ async function addRow(s, afterRow) {
 
 /** 활성 셀 이동. extend면 고정 끝(anchor)을 두고 범위를 넓힌다. 아니면 범위는 한 셀로 줄어든다. */
 function activate(s, row, field, extend = false) {
-    s.active = { row, field };
-    if (!extend || !s.anchor) s.anchor = { row, field };
+    // 화면 위치(aria-rowindex)도 기억한다: 페이징 중 범위의 끝 행이 화면 밖으로 나가 그려지지 않아도 범위를 안다 (A-25)
+    const index = rowIndexOf(rowEl(s, row));
+    s.active = { row, field, index };
+    if (!extend || !s.anchor) s.anchor = { row, field, index };
 
     const sel = selection(s);
     s.root.setAttribute('data-active-row', String(row));
@@ -527,6 +536,14 @@ function selectedKeys(s) {
     const { rowEls } = selection(s);
     s.activeIndex = rows(s).indexOf(rowEls[0]);
     return rowEls.map(rowKey);
+}
+
+/** 선택 범위의 화면 위치 [위, 아래] (툴바 일괄 삭제, 페이징 중, A-25). */
+export function selectedRange(root) {
+    const s = grids.get(root);
+    if (!s || !s.active) return null;
+    const { topIndex, bottomIndex } = selection(s);
+    return [topIndex, bottomIndex];
 }
 
 export function selectedRowKeys(root) {
@@ -644,20 +661,37 @@ export function ensureActive(root) {
 // ── 선택 범위 ──
 
 /** anchor와 active를 꼭짓점으로 하는 사각형 (표시 순서 기준). top·left·bottom·right는 행 키·필드. */
+/**
+ * 선택 범위. 행은 화면 위치(aria-rowindex)로 정한다: 그려진 끝 행은 위치를 새로 읽고(정렬·추가로 바뀜),
+ * 화면 밖으로 나간 끝 행은 기억한 위치를 쓴다 (페이징, A-25). rowEls는 범위 안의 그려진 행만.
+ */
 function selection(s) {
     const all = rows(s);
+    for (const end of [s.anchor, s.active]) {
+        const el = rowEl(s, end.row);
+        if (el) end.index = rowIndexOf(el);
+    }
     const fieldsAll = cellsOf(all[0]).map(c => c.dataset.field);
-    const r1 = all.findIndex(el => rowKey(el) === s.anchor.row);
-    const r2 = all.findIndex(el => rowKey(el) === s.active.row);
+    const topIndex = Math.min(s.anchor.index, s.active.index);
+    const bottomIndex = Math.max(s.anchor.index, s.active.index);
     const c1 = fieldsAll.indexOf(s.anchor.field);
     const c2 = fieldsAll.indexOf(s.active.field);
-    const rowEls = all.slice(Math.min(r1, r2), Math.max(r1, r2) + 1);
+    const rowEls = all.filter(el => { const i = rowIndexOf(el); return i >= topIndex && i <= bottomIndex; });
     const fields = fieldsAll.slice(Math.min(c1, c2), Math.max(c1, c2) + 1);
     return {
-        rowEls, fields,
+        rowEls, fields, topIndex, bottomIndex,
         top: rowKey(rowEls[0]), bottom: rowKey(rowEls[rowEls.length - 1]),
         left: fields[0], right: fields[fields.length - 1],
     };
+}
+
+function rowEl(s, key) {
+    return s.root.querySelector(`.quro-body [role=row][data-row="${key}"]`);
+}
+
+/** 화면 위치 (0부터). 서버가 aria-rowindex = 위치 + 2 (헤더가 1)로 그린다. */
+function rowIndexOf(el) {
+    return el ? Number(el.getAttribute('aria-rowindex')) - 2 : -1;
 }
 
 // ── 클립보드 (엑셀 형식: 탭·줄바꿈, 특수 문자가 있으면 큰따옴표) ──
