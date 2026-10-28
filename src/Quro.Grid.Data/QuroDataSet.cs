@@ -238,6 +238,20 @@ public sealed class QuroDataSet<T> where T : class
         return row.Key;
     }
 
+    /// <summary>
+    /// Adds a blank row at the end to type into (screen definition <c>initRows</c>). While its values are still the
+    /// ones it was added with (from <paramref name="template"/>), it is not a change: <see cref="Validate"/>,
+    /// <see cref="GetChanges"/> and <see cref="HasChanges"/> skip it and <see cref="AcceptChanges"/> keeps it as an
+    /// added row. Not an undo step.
+    /// </summary>
+    public int AddBlankRow(T? template = null)
+    {
+        var item = template is null ? Activator.CreateInstance<T>() : Clone(template);
+        var row = new Row(_nextInsertedKey--, item, RowState.Inserted, original: null) { Blank = Snapshot(item) };
+        Append(row);
+        return row.Key;
+    }
+
     /// <summary>Inserted면 목록에서 제거, 아니면 Deleted.</summary>
     public void DeleteRow(int rowKey)
     {
@@ -265,12 +279,12 @@ public sealed class QuroDataSet<T> where T : class
         Revert(row);
     }
 
-    /// <summary>필수·범위 검증. 저장 대상인 Inserted·Updated 행만 검사한다.</summary>
+    /// <summary>필수·범위 검증. 저장 대상인 Inserted·Updated 행만 검사한다 (손대지 않은 빈 행 제외).</summary>
     public ValidationResult Validate()
     {
         var errors = new List<ValidationError>();
 
-        foreach (var row in _rows.Where(r => r.State is RowState.Inserted or RowState.Updated))
+        foreach (var row in _rows.Where(r => r.State is RowState.Inserted or RowState.Updated && !Untouched(r)))
         foreach (var (field, rule) in _rules)
         {
             var value = Fields[field].GetValue(row.Item);
@@ -293,7 +307,7 @@ public sealed class QuroDataSet<T> where T : class
     }
 
     /// <summary>미저장 변경이 있는지 (Normal이 아닌 행). 이탈 경고·연결 끊김 경고에 쓴다 (R7).</summary>
-    public bool HasChanges => _rows.Exists(r => r.State != RowState.Normal);
+    public bool HasChanges => _rows.Exists(r => r.State != RowState.Normal && !Untouched(r));
 
     /// <summary>저장용 변경분.</summary>
     public ChangeSet<T> GetChanges() => new()
@@ -318,7 +332,10 @@ public sealed class QuroDataSet<T> where T : class
                 continue;
             }
 
+            if (Untouched(row))
+                continue;   // nothing was sent for it; it stays a blank row
             row.Original = Snapshot(row.Item);
+            row.Blank = null;
             row.State = RowState.Normal;
             row.Revision++;
         }
@@ -522,6 +539,10 @@ public sealed class QuroDataSet<T> where T : class
     private static Dictionary<string, object?> Snapshot(T item) =>
         Fields.Values.ToDictionary(p => p.Name, p => p.GetValue(item));
 
+    /// <summary>A blank row (AddBlankRow) whose values are still the ones it was added with.</summary>
+    private static bool Untouched(Row row) =>
+        row.Blank is { } blank && row.State == RowState.Inserted && Fields.Values.All(p => Equals(p.GetValue(row.Item), blank[p.Name]));
+
     private static bool MatchesOriginal(Row row) =>
         Fields.Values.All(p => Equals(p.GetValue(row.Item), row.Original![p.Name]));
 
@@ -568,7 +589,7 @@ public sealed class QuroDataSet<T> where T : class
     }
 
     private List<ChangedRow<T>> ItemsIn(RowState state) =>
-        _rows.Where(r => r.State == state).Select(r => new ChangedRow<T>(r.Key, r.Item)).ToList();
+        _rows.Where(r => r.State == state && !Untouched(r)).Select(r => new ChangedRow<T>(r.Key, r.Item)).ToList();
 
     private sealed class Row(int key, T item, RowState state, Dictionary<string, object?>? original)
     {
@@ -579,6 +600,9 @@ public sealed class QuroDataSet<T> where T : class
 
         /// <summary>조회(또는 마지막 AcceptChanges) 시점 값. 추가 행은 null.</summary>
         public Dictionary<string, object?>? Original { get; set; } = original;
+
+        /// <summary>Values a blank row was added with (AddBlankRow), or null.</summary>
+        public Dictionary<string, object?>? Blank { get; set; }
 
         /// <summary>앱이 지정한 셀 표시. 행과 함께 사라진다.</summary>
         public Dictionary<string, CellMark> Marks { get; } = [];

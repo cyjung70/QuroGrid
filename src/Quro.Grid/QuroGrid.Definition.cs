@@ -11,6 +11,9 @@ public partial class QuroGrid<TItem>
     private Dictionary<string, FieldRule> _definitionRules = [];
     private GridDef? _appliedDefinition;
     private int _pendingInitRows;
+    private (GridDef? Def, object? LookupFor, object? OptionsFor) _sourcesFor;
+    private Dictionary<string, Func<string, Task<IReadOnlyList<string>>>> _definitionLookups = [];
+    private Dictionary<string, IReadOnlyList<ComboOption>?> _definitionOptions = [];
 
     /// <summary>Copy and paste allowed (G-03). Default true. A <see cref="Definition"/> sets it from <c>clipboard</c>.</summary>
     [Parameter] public bool Clipboard { get; set; } = true;
@@ -25,6 +28,20 @@ public partial class QuroGrid<TItem>
     /// </summary>
     [Parameter] public GridDef? Definition { get; set; }
 
+    /// <summary>
+    /// Code search for <see cref="Definition"/> columns with <c>lookup</c>: (lookup id, typed text) → matching codes, as
+    /// <see cref="QuroColumn.Lookup"/> (A-16). The grid builds one function per column when the definition or this
+    /// parameter changes.
+    /// </summary>
+    [Parameter] public Func<string, string, Task<IReadOnlyList<string>>>? LookupFor { get; set; }
+
+    /// <summary>
+    /// List for <see cref="Definition"/> select columns: the column's source (for example <c>code:S910</c>) → options,
+    /// as <see cref="QuroColumn.Options"/>. Asked once per column when the definition or this parameter changes; pass a
+    /// new function to reload the lists.
+    /// </summary>
+    [Parameter] public Func<string, IReadOnlyList<ComboOption>?>? OptionsFor { get; set; }
+
     private void ApplyDefinition()
     {
         if (Definition is not { } def)
@@ -36,6 +53,7 @@ public partial class QuroGrid<TItem>
         ShowFooter = ShowFooter || def.Columns.Any(c => c.Sum && !c.Hidden);
         if (def.PageSize > 0)
             PageSize = def.PageSize;
+        UpdateSources(def);
 
         if (ReferenceEquals(def, _appliedDefinition))
             return;
@@ -59,13 +77,34 @@ public partial class QuroGrid<TItem>
         try
         {
             for (var i = 0; i < count; i++)
-                await AddRowCore();
+                await AddRowCore(blank: true);
         }
         finally
         {
             _batch--;
         }
     }
+
+    /// <summary>Lookup functions and option lists per column, kept while the inputs stay the same (no column change per render, R4).</summary>
+    private void UpdateSources(GridDef def)
+    {
+        if (_sourcesFor == (def, LookupFor, OptionsFor))
+            return;
+        _sourcesFor = (def, LookupFor, OptionsFor);
+        _definitionLookups = [];
+        _definitionOptions = [];
+        foreach (var c in def.Columns.Where(c => !c.Hidden))
+        {
+            if (LookupFor is { } lookupFor && c.Lookup is { } id && DefinitionType(c) == CellType.Popup)
+                _definitionLookups[c.Id] = text => lookupFor(id, text);
+            if (OptionsFor is { } optionsFor && c.Type == ColumnType.Select && c.DataSource is { } source)
+                _definitionOptions[c.Id] = optionsFor(source);
+        }
+    }
+
+    private Func<string, Task<IReadOnlyList<string>>>? DefinitionLookup(ColumnDef c) => _definitionLookups.GetValueOrDefault(c.Id);
+
+    private IReadOnlyList<ComboOption>? DefinitionOptions(ColumnDef c) => _definitionOptions.GetValueOrDefault(c.Id);
 
     /// <summary>Column type (design 7.1): text with lookup → Popup, money with currency → Currency, select → Combo.</summary>
     private static CellType DefinitionType(ColumnDef c) => c.Type switch

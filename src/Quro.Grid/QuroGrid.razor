@@ -13,7 +13,8 @@
                         ReadOnly="c.Edit == ColumnEdit.ReadOnly" NewRowOnly="c.Edit == ColumnEdit.NewRowOnly"
                         Width="c.Width" Aggregate="c.Sum ? Aggregate.Sum : Aggregate.None" CurrencyField="@c.Currency"
                         Required="c.Req" Min="c.Min" Max="c.Max" TextKey="@(c.Type == ColumnType.Button ? c.Label : null)"
-                        Filterable="c.Filter" Sortable="c.Sort" Groupable="c.Group" />
+                        Filterable="c.Filter" Sortable="c.Sort" Groupable="c.Group"
+                        Lookup="DefinitionLookup(c)" Options="DefinitionOptions(c)" />
         }
     }
     @ChildContent
