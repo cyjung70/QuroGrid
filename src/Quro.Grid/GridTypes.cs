@@ -1,6 +1,10 @@
+using System.Text.Json.Serialization;
+
 namespace Quro.Grid;
 
 /// <summary>셀 타입 (Spec 4.6, P0).</summary>
+// JSON(저장 API 요청 등)에는 이름으로 쓴다 (GS-054)
+[JsonConverter(typeof(JsonStringEnumConverter<CellType>))]
 public enum CellType
 {
     Text,
@@ -14,6 +18,8 @@ public enum CellType
 }
 
 /// <summary>합계 행 집계 (Spec 4.5).</summary>
+// JSON(저장 API 요청 등)에는 이름으로 쓴다 (GS-054)
+[JsonConverter(typeof(JsonStringEnumConverter<Aggregate>))]
 public enum Aggregate
 {
     None,
