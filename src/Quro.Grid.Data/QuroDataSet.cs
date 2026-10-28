@@ -40,6 +40,9 @@ public sealed class QuroDataSet<T> where T : class
 
     public object? GetValue(int rowKey, string field) => Field(field).GetValue(Find(rowKey).Item);
 
+    /// <summary>행 객체. 값은 <see cref="SetValue"/>로 바꿔야 행 상태가 갱신된다.</summary>
+    public T GetItem(int rowKey) => Find(rowKey).Item;
+
     /// <summary>행의 값·상태·셀 표시가 바뀔 때마다 증가한다. 그리드가 바뀐 행만 다시 그리는 데 쓴다 (R4).</summary>
     public int GetRevision(int rowKey) => Find(rowKey).Revision;
 
@@ -52,12 +55,16 @@ public sealed class QuroDataSet<T> where T : class
     /// </summary>
     public bool TrySetText(int rowKey, string field, string? text, IFormatProvider culture)
     {
-        if (!TryParse(text, Field(field).PropertyType, culture, out var value))
+        if (!TryParseText(field, text, culture, out var value))
             return false;
 
         SetValue(rowKey, field, value);
         return true;
     }
+
+    /// <summary>값을 바꾸지 않고 해석만 한다. 그리드가 OnCellValueChanging에 새 값을 넘길 때 쓴다.</summary>
+    public bool TryParseText(string field, string? text, IFormatProvider culture, out object? value) =>
+        TryParse(text, Field(field).PropertyType, culture, out value);
 
     /// <summary>앱이 판정한 셀 표시를 지정한다. null이면 지운다 (Spec 4.9, GS-008).</summary>
     public void SetCellMark(int rowKey, string field, CellMark? mark)

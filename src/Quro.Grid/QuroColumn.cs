@@ -29,11 +29,22 @@ public sealed class QuroColumn : ComponentBase, IDisposable
     /// <summary>Currency 컬럼에서 행의 통화 코드를 읽을 필드 (Spec 4.6).</summary>
     [Parameter] public string? CurrencyField { get; set; }
 
+    private object? _rendered;
+
     protected override void OnInitialized()
     {
         if (Host is null)
             throw new InvalidOperationException($"{nameof(QuroColumn)}은 QuroGrid 안에서만 쓸 수 있습니다.");
         Host.AddColumn(this);
+    }
+
+    /// <summary>정의가 실제로 바뀐 경우에만 그리드 전체를 다시 그리게 한다 (R4).</summary>
+    protected override void OnParametersSet()
+    {
+        object now = (Field, HeaderKey, Type, Format, ReadOnly, Width, Aggregate, CurrencyField);
+        if (_rendered is not null && !Equals(now, _rendered))
+            Host?.ColumnChanged();
+        _rendered = now;
     }
 
     public void Dispose() => Host?.RemoveColumn(this);
@@ -42,5 +53,6 @@ public sealed class QuroColumn : ComponentBase, IDisposable
 internal interface IColumnHost
 {
     void AddColumn(QuroColumn column);
+    void ColumnChanged();
     void RemoveColumn(QuroColumn column);
 }

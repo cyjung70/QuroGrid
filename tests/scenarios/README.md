@@ -1,7 +1,7 @@
 # QuroGrid 시나리오 목록 (GS-xxx)
 
 - 기준: `docs/QuroGrid_FeatureMatrix_Spec_v1.pdf` (Draft v0.1, 2026-10-28)
-- 문서 상태: 정리본 v0.4 (2026-10-28, C-11~C-51 승인 → GS-021~GS-058) · 스테이블영 검토 대상
+- 문서 상태: 정리본 v0.5 (2026-10-28, Phase 2 2차 반영) · 스테이블영 검토 대상
 - 테스트 이름은 시나리오 ID로 시작한다: `GS_004_ExcelPaste_3x4` (CLAUDE.md 3장)
 
 Spec 5.1절의 목록은 **발췌 10건**이고, Phase 0 완료 기준은 **시나리오 50건 이상**(Spec 6장)입니다.
@@ -160,7 +160,7 @@ C-11~C-44는 GS-021~GS-054, C-48~C-51은 GS-055~GS-058로 확정했습니다. C-
 - **저장 API (별도 서버)**: C-45~C-47, 버전 충돌 판정, Minus 재고 최종 판정
 - **Phase 2 (Grid P0)**: 나머지 컴포넌트·E2E·성능 시나리오
   - 1차 (그리드 골격·렌더링): GS-021~GS-030, GS-036 — **완료**. 셀 단위 이벤트 없음, 행 단위 렌더(`QuroGridRow` + `ShouldRender`)
-  - 2차 (이벤트 API): GS-031~GS-035
+  - 2차 (이벤트 API): GS-031~GS-035 — **완료**. `OnPopupRequested`·`OnSelectionChanged`는 JS 층이 필요해 3차로
   - 3차 (quro-grid.js + E2E): GS-003~GS-007 흐름, GS-037~GS-049
   - 4차 (조회·성능): GS-050~GS-053, GS-055~GS-058 · GS-054(엑셀)는 생성 위치 결정 후
 
@@ -170,3 +170,10 @@ C-11~C-44는 GS-021~GS-054, C-48~C-51은 GS-055~GS-058로 확정했습니다. C-
 - Currency 합계 행: 행마다 통화가 다를 수 있어 첫 행의 통화 자릿수로 표시합니다. 혼합 통화 합계 규칙은 Spec에 없습니다.
 - 헤더·툴팁 리소스는 그리드 파라미터 `Localizer`(`IStringLocalizer`)로 받습니다. 없으면 키를 그대로 표시합니다.
 - Combo·Check·Popup·Button의 표시와 에디터는 아직 Text와 같게 그립니다 (3차에서 MudBlazor 에디터와 함께 구현).
+
+**Phase 2 2차 구현 메모 (Spec 4.10에 인자 정의가 없어 잠정으로 정한 것)**
+- 취소 가능한 이벤트(`OnCellValueChanging`·`OnRowDeleting`·`OnPasting`)는 인자의 `Cancel = true`로 막습니다. `OnRowAdding`은 취소 없이 기본값 세팅만.
+- `OnCellValueChanging` 취소·해석 실패 시 값은 그대로이고 **편집 상태를 유지**합니다. 값이 바뀌지 않은 커밋은 이벤트 없이 편집만 닫습니다.
+- `OnRowDeleting`은 **행마다** 발생하고, 취소한 행만 남습니다 (일괄 삭제도 서버 호출은 1회, R3).
+- 붙여넣기는 셀마다 `OnCellValueChanging`/`OnCellValueChanged`를 발생시킵니다 (금액 재계산이 붙여넣기에도 적용되도록). 서버 C# 안의 호출이므로 JS Interop은 1회(R3).
+- 이벤트를 부모 화면이 받아 다시 그려져도 **바뀐 행만 렌더**됩니다 (행 표시에 영향을 주는 파라미터가 바뀐 경우만 전체 렌더).
