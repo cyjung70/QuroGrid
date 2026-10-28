@@ -1,0 +1,50 @@
+@inherits GridTestContext
+
+@code {
+    // GS-037 (그리드 쪽): 키보드·포커스는 quro-grid.js가 소유한다 (R1).
+    // 그리드는 첫 렌더 후 JS를 한 번만 등록하고, 이후 렌더에서는 다시 부르지 않는다 (R5 이벤트 위임).
+
+    [Fact]
+    public async Task GS_037_Grid_RegistersJsOnce_WithOptions()
+    {
+        var module = JSInterop.SetupModule(ModulePath);
+        module.SetupVoid("init", _ => true);
+        var ds = TestData.ThreeLines();
+
+        var cut = Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" EnterDirection="EnterDirection.Down" AddRowOnLastEnter="true">
+                                               <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" />
+                                           </QuroGrid>);
+        await cut.InvokeAsync(() => cut.Instance.CommitEdit(ds.RowKeys[0], "Qty", "7"));
+
+        var init = Assert.Single(module.Invocations["init"]);
+        Assert.IsType<ElementReference>(init.Arguments[0]);
+        var options = Assert.IsType<GridJsOptions>(init.Arguments[2]);
+        Assert.Equal("down", options.EnterDirection);
+        Assert.True(options.AddRowOnLastEnter);
+    }
+
+    [Fact]
+    public void GS_037_DefaultOptions_EnterRight_NoNewRow()
+    {
+        var module = JSInterop.SetupModule(ModulePath);
+        module.SetupVoid("init", _ => true);
+        var ds = TestData.ThreeLines();
+
+        Render(@<QuroGrid DataSet="ds"><QuroColumn Field="Qty" HeaderKey="mm.qty" /></QuroGrid>);
+
+        var options = Assert.IsType<GridJsOptions>(Assert.Single(module.Invocations["init"]).Arguments[2]);
+        Assert.Equal("right", options.EnterDirection);   // O-05 결정
+        Assert.False(options.AddRowOnLastEnter);           // GS-003 결정: 옵션, 기본 끔 (잠정)
+    }
+
+    /// <summary>키보드 포커스를 받을 수 있도록 그리드 루트에 tabindex</summary>
+    [Fact]
+    public void GS_037_GridRoot_Focusable()
+    {
+        var ds = TestData.ThreeLines();
+
+        var cut = Render(@<QuroGrid DataSet="ds"><QuroColumn Field="Qty" HeaderKey="mm.qty" /></QuroGrid>);
+
+        Assert.Equal("0", cut.Find("[role=grid]").GetAttribute("tabindex"));
+    }
+}

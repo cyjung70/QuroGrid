@@ -17,6 +17,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Quro.Grid.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Quro.Grid.Data\Quro.Grid.Data.csproj" />
   </ItemGroup>
 
