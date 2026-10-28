@@ -7,5 +7,6 @@ public sealed class PoLine
     public string ItemCode { get; set; } = "";
     public decimal Qty { get; set; }
     public decimal UnitPrice { get; set; }
+    public DateOnly? DueDate { get; set; }
     public int Version { get; set; }
 }

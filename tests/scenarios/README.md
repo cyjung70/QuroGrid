@@ -1,7 +1,7 @@
 # QuroGrid 시나리오 목록 (GS-xxx)
 
 - 기준: `docs/QuroGrid_FeatureMatrix_Spec_v1.pdf` (Draft v0.1, 2026-10-28)
-- 문서 상태: 정리본 v0.1 (2026-10-28) · 스테이블영 검토 대상
+- 문서 상태: 정리본 v0.2 (2026-10-28, GS-011~020 확정) · 스테이블영 검토 대상
 - 테스트 이름은 시나리오 ID로 시작한다: `GS_004_ExcelPaste_3x4` (CLAUDE.md 3장)
 
 Spec 5.1절의 목록은 **발췌 10건**이고, Phase 0 완료 기준은 **시나리오 50건 이상**(Spec 6장)입니다.
@@ -38,26 +38,32 @@ Spec 5.1절의 목록은 **발췌 10건**이고, Phase 0 완료 기준은 **시�
 - **GS-009** — 버전 충돌 판정은 API 통합 테스트, 안내 표시는 E2E로 나눕니다. 이것도 API 통합 테스트 프로젝트가 필요합니다.
 - **GS-010** — "미저장 변경 유지"는 **같은 회로로 재연결**된 경우만 해당합니다. 회로가 소멸된 경우는 O-03(잠정: 보관 안 함, 경고만) 범위이므로 별도 시나리오로 둡니다(후보 C-38).
 
+## 1-2. 확정 시나리오 — QuroDataSet (후보 C-01~C-10, 2026-10-28 승인)
+
+모두 단위 테스트(xUnit), 우선순위 P0입니다.
+
+| ID | (후보) | 시나리오 | 기대 결과 | Spec 근거 | 테스트 이름 |
+|---|---|---|---|---|---|
+| GS-011 | C-01 | `Normal` 행의 값 변경 | `Updated`, `GetOriginal`은 원래 값 | 4.4 | `GS_011_ChangeNormalRow_BecomesUpdated_KeepsOriginal` |
+| GS-012 | C-02 | `Inserted` 행의 값 변경 | `Inserted` 유지 | 4.4 | `GS_012_ChangeInsertedRow_StaysInserted` |
+| GS-013 | C-03 | `Normal` 행 삭제 | `Deleted`, 변경분 `deleted[]`에 포함 | 4.4 | `GS_013_DeleteNormalRow_MarkedDeleted_InChanges` |
+| GS-014 | C-04 | `RevertRow` | `Updated`·`Deleted`: 모든 값이 원본으로, `Normal` / `Inserted`: 행 제거 | 4.4 | `GS_014_RevertUpdatedRow_RestoresOriginal` 외 2건 |
+| GS-015 | C-05 | 여러 행 변경 후 `RejectChanges` | 전체 원복, 추가 행 제거, 삭제 행 복귀 | 4.4 | `GS_015_RejectChanges_RestoresAll` |
+| GS-016 | C-06 | 추가·수정·삭제가 섞인 상태에서 `GetChanges` | 상태별 분류, 수정·삭제 행에 `version` 포함, 추가 행은 임시 키(음수) | 4.4 | `GS_016_GetChanges_Mixed_GroupsByState` |
+| GS-017 | C-07 | `AcceptChanges` 호출 | 모든 행 `Normal`, 원본값 갱신, `Deleted` 행 제거 | 4.4 | `GS_017_AcceptChanges_CommitsAll` |
+| GS-018 | C-08 | 필수 필드가 빈 행에 `Validate` | 해당 셀 오류, 결과 실패 | 4.4, 4.5 | `GS_018_Validate_RequiredEmpty_Fails` 외 1건 |
+| GS-019 | C-09 | `Min`·`Max` 범위 밖 숫자에 `Validate` | 해당 셀 오류 | 4.5, 4.6 | `GS_019_Validate_OutOfRange_Fails` |
+| GS-020 | C-10 | 저장 값 직렬화 | 날짜는 ISO, 소수점은 `.` (로캘 무관) | 4.8 | `GS_020_ChangeSetJson_IsCultureInvariant` |
+
+**결정 사항 (2026-10-28)**
+- 검증 규칙은 **DataSet 규칙 API**(`SetRule(field, FieldRule)`)로 등록합니다. 그리드는 `QuroColumn`의 `Required`·`Min`·`Max`를 이 API로 넘깁니다.
+- `Inserted` 행에 `RevertRow`를 호출하면 **행을 제거**합니다 (`DeleteRow`·`RejectChanges`와 같은 결과).
+
 ---
 
 ## 2. 후보 시나리오 (Spec 본문에서 도출, 미승인)
 
-ID는 임시(`C-xx`)입니다. 승인되면 GS-011부터 순서대로 번호를 매깁니다.
-
-### A. QuroDataSet — 단위 (xUnit) · Spec 4.4
-
-| ID | 시나리오 | 기대 결과 | 근거 |
-|---|---|---|---|
-| C-01 | `Normal` 행의 값 변경 | `Updated`, `GetOriginal`은 원래 값 | 4.4 |
-| C-02 | `Inserted` 행의 값 변경 | `Inserted` 유지 | 4.4 |
-| C-03 | `Normal` 행 삭제 | `Deleted`, 변경분 `deleted[]`에 포함 | 4.4 |
-| C-04 | `Updated` 행에 `RevertRow` | 모든 값이 원본으로, `Normal` | 4.4 |
-| C-05 | 여러 행 변경 후 `RejectChanges` | 전체 원복, 추가 행 제거, 삭제 행 복귀 | 4.4 |
-| C-06 | 추가·수정·삭제가 섞인 상태에서 `GetChanges` | `{ inserted[], updated[], deleted[] }`, 수정·삭제 행에 `version` 포함, 추가 행은 임시 키(음수) | 4.4 |
-| C-07 | `AcceptChanges` 호출 | 모든 행 `Normal`, 원본값 갱신, `Deleted` 행 제거 | 4.4 |
-| C-08 | 필수 컬럼이 빈 행에 `Validate` | 해당 셀 오류, 결과 실패 | 4.4, 4.5 |
-| C-09 | `Min`·`Max` 범위 밖 숫자에 `Validate` | 해당 셀 오류 | 4.5, 4.6 |
-| C-10 | 저장 값 직렬화 | 날짜는 ISO, 소수점은 `.` (로캘 무관) | 4.8 |
+ID는 임시(`C-xx`)입니다. 승인되면 다음 GS 번호부터 순서대로 매깁니다. C-01~C-10은 GS-011~GS-020으로 확정되었습니다(1-2절).
 
 ### B. QuroGrid 렌더링 — 컴포넌트 (bUnit)
 
@@ -131,8 +137,8 @@ ID는 임시(`C-xx`)입니다. 승인되면 GS-011부터 순서대로 번호를 
 
 | 구분 | 건수 |
 |---|---|
-| 확정 (GS-001~010) | 10 |
-| 후보 (C-01~C-51) | 51 |
+| 확정 (GS-001~020) | 20 |
+| 후보 (C-11~C-51) | 41 |
 | 합계 | 61 (Phase 0 기준 50건 이상) |
 
 ### 결정이 필요한 항목
@@ -141,11 +147,11 @@ ID는 임시(`C-xx`)입니다. 승인되면 GS-011부터 순서대로 번호를 
 2. GS-003 "마지막 셀 Enter 시 새 행 추가" 옵션을 Spec에 추가할지
 3. GS-006에 0건 일치(팝업)를 넣는 것 — Spec 4.6과 맞추는 보완
 4. GS-007에 날짜 붙여넣기도 포함할지
-5. 후보 C-01~C-51 승인 범위와 GS 번호 부여
+5. 후보 C-11~C-51 승인 범위와 GS 번호 부여 (C-01~C-10은 승인됨)
 6. API 통합 테스트 프로젝트(`tests/Quro.Grid.Api.Tests` 등) 추가 — GS-008, GS-009, C-44~C-47에 필요. 이 프로젝트는 CLAUDE.md 4장 폴더 구조에 없습니다.
 
 ### 착수 순서 (Spec 6장 로드맵 기준)
 
-- **Phase 1 (DataSet)**: GS-001, GS-002, C-01~C-10, GS-007(숫자 해석), GS-008(그리드 측 검증)
+- **Phase 1 (DataSet)**: GS-001, GS-002, GS-011~GS-020, GS-007(숫자 해석), GS-008(그리드 측 검증)
 - **Phase 1 (API)**: GS-009, C-45~C-47, GS-008(서버 재검사)
 - **Phase 2 (Grid P0)**: 나머지 컴포넌트·E2E·성능 시나리오

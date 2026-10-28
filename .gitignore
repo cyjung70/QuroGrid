@@ -483,3 +483,6 @@ $RECYCLE.BIN/
 
 # QuroGrid: *.e2e 규칙이 대소문자 무시로 E2E 테스트 프로젝트 폴더까지 잡으므로 예외 처리
 !tests/Quro.Grid.E2E/
+
+# Claude Code 개인 설정 (커밋하지 않음)
+.claude/settings.local.json
