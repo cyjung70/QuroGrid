@@ -1,0 +1,112 @@
+@inherits BunitContext
+
+@code {
+    // GS-021 ~ GS-025: 헤더·포맷·합계·고정 열 렌더링 (Spec 4.5·4.6·4.8)
+
+    private static readonly CultureInfo De = new("de-DE");
+    private static readonly CultureInfo En = new("en-US");
+
+    private static int Digits(string currency) => currency == "KRW" ? 0 : 2;
+
+    /// <summary>GS-021: HeaderKey → 사용자 언어의 리소스 문자열</summary>
+    [Theory]
+    [InlineData("ko-KR", "품목코드", "수량")]
+    [InlineData("en-US", "Item Code", "Quantity")]
+    public void GS_021_HeaderKey_RendersLocalizedText(string uiCulture, string itemHeader, string qtyHeader)
+    {
+        var saved = CultureInfo.CurrentUICulture;
+        try
+        {
+            CultureInfo.CurrentUICulture = new CultureInfo(uiCulture);
+            var ds = TestData.ThreeLines();
+
+            var cut = Render(@<QuroGrid DataSet="ds" Localizer="new FakeLocalizer()">
+                                 <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" />
+                                 <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" />
+                             </QuroGrid>);
+
+            var headers = cut.FindAll("[role=columnheader]").Select(h => h.TextContent.Trim()).ToArray();
+            Assert.Equal([itemHeader, qtyHeader], headers);
+        }
+        finally
+        {
+            CultureInfo.CurrentUICulture = saved;
+        }
+    }
+
+    /// <summary>GS-022: Currency 소수 자릿수는 통화 마스터를 따르고 로캘과 무관</summary>
+    [Theory]
+    [InlineData("en-US", "2,500", "1,200", "12.50")]
+    [InlineData("de-DE", "2.500", "1.200", "12,50")]
+    public void GS_022_Currency_DigitsFollowCurrencyMaster(string culture, string krw1, string krw2, string usd)
+    {
+        var ds = TestData.ThreeLines();
+
+        var cut = Render(@<QuroGrid DataSet="ds" Culture="new CultureInfo(culture)" CurrencyDigits="Digits">
+                             <QuroColumn Field="UnitPrice" HeaderKey="mm.unit_price" Type="CellType.Currency"
+                                         CurrencyField="CurrencyCode" />
+                         </QuroGrid>);
+
+        var cells = cut.FindAll("[role=gridcell]").Select(c => c.TextContent.Trim()).ToArray();
+        Assert.Equal([krw1, krw2, usd], cells);
+    }
+
+    /// <summary>GS-023: Number Format="N3", de-DE → 1.234,500</summary>
+    [Fact]
+    public void GS_023_NumberFormat_UsesUserCulture()
+    {
+        var ds = TestData.ThreeLines();
+        ds.SetValue(ds.RowKeys[0], nameof(PoLine.Qty), 1234.5m);
+
+        var cut = Render(@<QuroGrid DataSet="ds" Culture="De">
+                             <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" Format="N3" />
+                         </QuroGrid>);
+
+        Assert.Equal("1.234,500", cut.FindAll("[role=gridcell]")[0].TextContent.Trim());
+    }
+
+    /// <summary>GS-024: Aggregate.Sum + ShowFooter → 합계 표시, 값 변경 시 갱신</summary>
+    [Fact]
+    public void GS_024_FooterSum_UpdatesOnCommit()
+    {
+        var ds = TestData.ThreeLines();
+
+        var cut = Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" Culture="En" ShowFooter="true">
+                             <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" />
+                             <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" Aggregate="Aggregate.Sum" />
+                         </QuroGrid>);
+
+        string Footer() => cut.Find("[data-footer-field=Qty]").TextContent.Trim();
+        Assert.Equal("18", Footer());
+        Assert.Equal("", cut.Find("[data-footer-field=ItemCode]").TextContent.Trim());
+
+        cut.InvokeAsync(() => cut.Instance.CommitEdit(ds.RowKeys[0], "Qty", "20"));
+
+        Assert.Equal("28", Footer());
+    }
+
+    /// <summary>GS-025: FrozenColumns="2" → 앞 2개 열이 고정 영역</summary>
+    [Fact]
+    public void GS_025_FrozenColumns_FirstTwoSticky()
+    {
+        var ds = TestData.ThreeLines();
+
+        var cut = Render(@<QuroGrid DataSet="ds" FrozenColumns="2">
+                             <QuroColumn Field="LineNo" HeaderKey="mm.line_no" Width="60" />
+                             <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" Width="120" />
+                             <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" />
+                         </QuroGrid>);
+
+        var headers = cut.FindAll("[role=columnheader]");
+        Assert.True(headers[0].ClassList.Contains("quro-frozen"));
+        Assert.True(headers[1].ClassList.Contains("quro-frozen"));
+        Assert.False(headers[2].ClassList.Contains("quro-frozen"));
+        Assert.Contains("left:0px", headers[0].GetAttribute("style")!.Replace(" ", ""));
+        Assert.Contains("left:60px", headers[1].GetAttribute("style")!.Replace(" ", ""));
+
+        var firstRow = cut.FindAll("[role=row][data-row]")[0].QuerySelectorAll("[role=gridcell]");
+        Assert.True(firstRow[0].ClassList.Contains("quro-frozen"));
+        Assert.True(firstRow[1].ClassList.Contains("quro-frozen"));
+        Assert.False(firstRow[2].ClassList.Contains("quro-frozen"));
+    }
+}

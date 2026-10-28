@@ -1,0 +1,168 @@
+@inherits BunitContext
+
+@code {
+    // GS-026 ~ GS-030, GS-036: 행 단위 렌더링·마크업·에디터·셀 표시·삭제 행
+
+    private static readonly CultureInfo En = new("en-US");
+
+    private IRenderedComponent<QuroGrid<PoLine>> RenderGrid(QuroDataSet<PoLine> ds,
+        DeletedRowDisplay deleted = DeletedRowDisplay.Hide) =>
+        Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" Culture="En"
+                                            Localizer="new FakeLocalizer()" DeletedRows="deleted">
+                                     <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" />
+                                     <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" />
+                                     <QuroColumn Field="Amount" HeaderKey="mm.amount" Type="CellType.Number" ReadOnly="true" />
+                                 </QuroGrid>);
+
+    private static AngleSharp.Dom.IElement Cell(IRenderedComponent<QuroGrid<PoLine>> cut, int rowKey, string field) =>
+        cut.Find($"[role=row][data-row='{rowKey}'] [data-field='{field}']");
+
+    /// <summary>GS-026: 한 행의 값 변경 → 그 행만 다시 렌더링 (R4)</summary>
+    [Fact]
+    public void GS_026_ChangeOneRow_RerendersOnlyThatRow()
+    {
+        var ds = TestData.ThreeLines();
+        var cut = RenderGrid(ds);
+        var rows = cut.FindComponents<QuroGridRow<PoLine>>();
+        Assert.Equal(3, rows.Count);
+        var before = rows.Select(r => r.RenderCount).ToArray();
+
+        cut.InvokeAsync(() => cut.Instance.CommitEdit(ds.RowKeys[1], "Qty", "7"));
+
+        var after = rows.Select(r => r.RenderCount).ToArray();
+        Assert.Equal(before[0], after[0]);
+        Assert.True(after[1] > before[1]);
+        Assert.Equal(before[2], after[2]);
+        Assert.Equal("7", Cell(cut, ds.RowKeys[1], "Qty").TextContent.Trim());
+    }
+
+    /// <summary>GS-027: ARIA grid 역할, 셀 단위 이벤트 핸들러 없음 (R5)</summary>
+    [Fact]
+    public void GS_027_Markup_AriaGrid_NoCellHandlers()
+    {
+        var cut = RenderGrid(TestData.ThreeLines());
+
+        Assert.Single(cut.FindAll("[role=grid]"));
+        Assert.Equal(3, cut.FindAll("[role=columnheader]").Count);
+        Assert.Equal(9, cut.FindAll("[role=gridcell]").Count);
+
+        var handlers = cut.FindAll("*")
+            .Where(e => e.Attributes.Any(a => a.Name.StartsWith("blazor:on", StringComparison.Ordinal)))
+            .ToList();
+        Assert.Empty(handlers);
+
+        // JS가 좌표를 해석할 수 있도록 행 키·필드를 마크업에 둔다
+        Assert.All(cut.FindAll("[role=gridcell]"), c => Assert.False(string.IsNullOrEmpty(c.GetAttribute("data-field"))));
+    }
+
+    /// <summary>GS-028: 에디터는 편집 중인 셀 하나에만</summary>
+    [Fact]
+    public void GS_028_BeginEdit_SingleEditorInThatCell()
+    {
+        var ds = TestData.ThreeLines();
+        var cut = RenderGrid(ds);
+        Assert.Empty(cut.FindAll(".quro-editor"));
+
+        cut.InvokeAsync(() => cut.Instance.BeginEdit(ds.RowKeys[0], "ItemCode"));
+        var editor = Assert.Single(cut.FindAll(".quro-editor"));
+        Assert.Equal("A1001", editor.GetAttribute("value"));
+        Assert.Single(Cell(cut, ds.RowKeys[0], "ItemCode").QuerySelectorAll(".quro-editor"));
+
+        cut.InvokeAsync(() => cut.Instance.BeginEdit(ds.RowKeys[2], "Qty"));
+        Assert.Single(cut.FindAll(".quro-editor"));
+        Assert.Single(Cell(cut, ds.RowKeys[2], "Qty").QuerySelectorAll(".quro-editor"));
+
+        cut.InvokeAsync(() => cut.Instance.CancelEdit());
+        Assert.Empty(cut.FindAll(".quro-editor"));
+    }
+
+    /// <summary>GS-028: 에디터에 키 입력마다 서버로 보내는 핸들러가 없다 (R2)</summary>
+    [Fact]
+    public void GS_028_Editor_HasNoInputHandlers()
+    {
+        var ds = TestData.ThreeLines();
+        var cut = RenderGrid(ds);
+
+        cut.InvokeAsync(() => cut.Instance.BeginEdit(ds.RowKeys[0], "Qty"));
+
+        var editor = cut.Find(".quro-editor");
+        Assert.DoesNotContain(editor.Attributes, a => a.Name.StartsWith("blazor:on", StringComparison.Ordinal));
+    }
+
+    /// <summary>GS-029: ReadOnly 컬럼은 에디터가 열리지 않음</summary>
+    [Fact]
+    public void GS_029_ReadOnlyColumn_NoEditor()
+    {
+        var ds = TestData.ThreeLines();
+        var cut = RenderGrid(ds);
+
+        var opened = true;
+        cut.InvokeAsync(() => opened = cut.Instance.BeginEdit(ds.RowKeys[0], "Amount"));
+
+        Assert.False(opened);
+        Assert.Empty(cut.FindAll(".quro-editor"));
+    }
+
+    /// <summary>GS-030 (GS-008 그리드 쪽): 앱이 지정한 셀 표시를 색·툴팁으로 그림</summary>
+    [Fact]
+    public void GS_030_CellMark_RendersErrorAndWarning()
+    {
+        var saved = CultureInfo.CurrentUICulture;
+        try
+        {
+            CultureInfo.CurrentUICulture = new CultureInfo("ko-KR");
+            var ds = TestData.ThreeLines();
+            var cut = RenderGrid(ds);
+
+            ds.SetCellMark(ds.RowKeys[0], "Qty", new CellMark(CellMarkLevel.Error, "app.stock.minus"));
+            ds.SetCellMark(ds.RowKeys[1], "Qty", new CellMark(CellMarkLevel.Warning, "app.stock.minus"));
+            cut.InvokeAsync(() => cut.Instance.Refresh());
+
+            var error = Cell(cut, ds.RowKeys[0], "Qty");
+            Assert.True(error.ClassList.Contains("quro-mark-error"));
+            Assert.Equal("true", error.GetAttribute("aria-invalid"));
+            Assert.Equal("가용 재고를 초과했습니다", error.GetAttribute("title"));
+
+            var warning = Cell(cut, ds.RowKeys[1], "Qty");
+            Assert.True(warning.ClassList.Contains("quro-mark-warning"));
+            Assert.Null(warning.GetAttribute("aria-invalid"));
+            Assert.Equal("가용 재고를 초과했습니다", warning.GetAttribute("title"));
+
+            var plain = Cell(cut, ds.RowKeys[2], "Qty");
+            Assert.False(plain.ClassList.Contains("quro-mark-error"));
+            Assert.Null(plain.GetAttribute("title"));
+        }
+        finally
+        {
+            CultureInfo.CurrentUICulture = saved;
+        }
+    }
+
+    /// <summary>GS-036: 삭제 표시 행 — 기본 숨김 (O-02 잠정안)</summary>
+    [Fact]
+    public void GS_036_DeletedRow_HiddenByDefault()
+    {
+        var ds = TestData.ThreeLines();
+        ds.DeleteRow(ds.RowKeys[1]);
+
+        var cut = RenderGrid(ds);
+
+        var rows = cut.FindAll("[role=row][data-row]");
+        Assert.Equal(2, rows.Count);
+        Assert.DoesNotContain(rows, r => r.GetAttribute("data-row") == ds.RowKeys[1].ToString());
+    }
+
+    /// <summary>GS-036: 옵션으로 취소선 표시</summary>
+    [Fact]
+    public void GS_036_DeletedRow_StrikethroughOption()
+    {
+        var ds = TestData.ThreeLines();
+        ds.DeleteRow(ds.RowKeys[1]);
+
+        var cut = RenderGrid(ds, DeletedRowDisplay.Strikethrough);
+
+        var row = cut.Find($"[role=row][data-row='{ds.RowKeys[1]}']");
+        Assert.True(row.ClassList.Contains("quro-deleted"));
+        Assert.Equal(3, cut.FindAll("[role=row][data-row]").Count);
+    }
+}
