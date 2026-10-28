@@ -26,3 +26,10 @@ public enum DeletedRowDisplay
     Hide,
     Strikethrough,
 }
+
+/// <summary>Enter 확정 후 이동 방향 (O-05 결정: 기본 오른쪽).</summary>
+public enum EnterDirection
+{
+    Right,
+    Down,
+}

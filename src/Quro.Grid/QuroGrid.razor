@@ -1,12 +1,13 @@
 @typeparam TItem where TItem : class
 @attribute [CascadingTypeParameter(nameof(TItem))]
 @implements IColumnHost
+@implements IAsyncDisposable
 
 <CascadingValue TValue="IColumnHost" Value="this" IsFixed="true">@ChildContent</CascadingValue>
 
 @* 컬럼 정의가 등록된 뒤에 그린다. 셀 단위 이벤트 핸들러를 두지 않는다 (R5): 클릭·키는 quro-grid.js가 좌표로 해석한다. *@
 <Deferred>
-    <div class="quro-grid" role="grid" aria-colcount="@_columns.Count">
+    <div @ref="_root" class="quro-grid" role="grid" tabindex="0" aria-colcount="@_columns.Count">
         <div class="quro-head" role="rowgroup">
             <div class="quro-row" role="row" aria-rowindex="1">
                 @for (var i = 0; i < _columns.Count; i++)

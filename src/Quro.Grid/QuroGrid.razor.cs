@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Localization;
+using Microsoft.JSInterop;
 using Quro.Grid.Data;
 
 namespace Quro.Grid;
@@ -17,6 +18,13 @@ public partial class QuroGrid<TItem> where TItem : class
     private readonly List<QuroColumn> _columns = [];
     private (int RowKey, string Field)? _editing;
     private int _epoch;   // 그리드 전체를 다시 그려야 할 때 증가 (파라미터·컬럼 변경)
+
+    private const string ModulePath = "./_content/Quro.Grid/quro-grid.js";
+    private ElementReference _root;
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<QuroGrid<TItem>>? _self;
+
+    [Inject] private IJSRuntime JS { get; set; } = default!;
 
     [Parameter, EditorRequired] public QuroDataSet<TItem> DataSet { get; set; } = default!;
     [Parameter] public RenderFragment? ChildContent { get; set; }
@@ -35,6 +43,12 @@ public partial class QuroGrid<TItem> where TItem : class
 
     /// <summary>삭제 표시 행의 화면 처리 (O-02 잠정안: 숨김).</summary>
     [Parameter] public DeletedRowDisplay DeletedRows { get; set; }
+
+    /// <summary>Enter 확정 후 이동 방향 (O-05 결정: 기본 오른쪽).</summary>
+    [Parameter] public EnterDirection EnterDirection { get; set; }
+
+    /// <summary>마지막 편집 가능 셀에서 Enter 시 새 행 추가 (2026-10-28 결정: 옵션, 기본 끔 잠정).</summary>
+    [Parameter] public bool AddRowOnLastEnter { get; set; }
 
     // ── 이벤트 (Spec 4.10). OnPopupRequested·OnSelectionChanged는 JS 층과 함께 추가한다. ──
 
@@ -64,9 +78,40 @@ public partial class QuroGrid<TItem> where TItem : class
         }
     }
 
+    // ── JS 층 등록 (R1·R5): 키보드·포커스·클릭은 quro-grid.js가 그리드 루트 하나에서 받는다 ──
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        _self = DotNetObjectReference.Create(this);
+        _module = await JS.InvokeAsync<IJSObjectReference>("import", ModulePath);
+        var options = new GridJsOptions(EnterDirection == EnterDirection.Down ? "down" : "right", AddRowOnLastEnter);
+        await _module.InvokeVoidAsync("init", _root, _self, options);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_module is not null)
+            {
+                await _module.InvokeVoidAsync("dispose", _root);
+                await _module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+            // 회로가 이미 끊긴 경우 (R7): 브라우저 쪽 정리는 필요 없다
+        }
+        _self?.Dispose();
+    }
+
     // ── 편집 (quro-grid.js가 호출) ──
 
     /// <summary>편집 시작. 읽기 전용 컬럼이나 삭제 표시 행이면 false.</summary>
+    [JSInvokable]
     public bool BeginEdit(int rowKey, string field)
     {
         var col = Column(field);
@@ -83,6 +128,7 @@ public partial class QuroGrid<TItem> where TItem : class
     /// 해석에 실패하면 값을 바꾸지 않고 편집 상태를 유지한 채 false.
     /// 값이 그대로면 이벤트 없이 편집만 닫는다. OnCellValueChanging에서 취소해도 false.
     /// </summary>
+    [JSInvokable]
     public async Task<bool> CommitEdit(int rowKey, string field, string? text)
     {
         var col = Column(field);
@@ -99,6 +145,7 @@ public partial class QuroGrid<TItem> where TItem : class
     // ── 행 추가·삭제·붙여넣기 (단축키·메뉴에서 호출, 일괄 처리는 호출 1회: R3) ──
 
     /// <summary>행 추가. OnRowAdding에서 기본값을 넣고, 추가 후 OnRowAdded.</summary>
+    [JSInvokable]
     public async Task<int> AddRow()
     {
         var item = Activator.CreateInstance<TItem>();
@@ -182,6 +229,7 @@ public partial class QuroGrid<TItem> where TItem : class
         return true;
     }
 
+    [JSInvokable]
     public void CancelEdit()
     {
         _editing = null;

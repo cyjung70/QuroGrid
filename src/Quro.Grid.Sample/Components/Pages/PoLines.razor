@@ -1,0 +1,62 @@
+@page "/po-lines"
+@rendermode InteractiveServer
+@using Quro.Grid.Data
+@using Quro.Grid.Sample.Data
+
+<PageTitle>@L["sample.po_lines.title"]</PageTitle>
+
+<h1>@L["sample.po_lines.title"]</h1>
+
+<QuroGrid TItem="PoLine" DataSet="_lines" Localizer="L" Culture="Culture" ShowFooter="true" FrozenColumns="1"
+          EnterDirection="@(Enter == "down" ? EnterDirection.Down : EnterDirection.Right)"
+          AddRowOnLastEnter="@(NewRow == 1)"
+          OnCellValueChanged="RecalcAmount">
+    <QuroColumn Field="LineNo" HeaderKey="mm.line_no" Type="CellType.Number" ReadOnly="true" Width="60" />
+    <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" />
+    <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" Aggregate="Aggregate.Sum" />
+    <QuroColumn Field="UnitPrice" HeaderKey="mm.unit_price" Type="CellType.Number" />
+    <QuroColumn Field="Amount" HeaderKey="mm.amount" Type="CellType.Number" ReadOnly="true" Aggregate="Aggregate.Sum" />
+</QuroGrid>
+
+<p>@L["sample.changes"]: <span data-testid="changes">@ChangedRows</span></p>
+
+@code {
+    private static readonly SampleLocalizer L = new();
+    private static readonly System.Globalization.CultureInfo Culture = new("en-US");
+    private readonly QuroDataSet<PoLine> _lines = new();
+
+    /// <summary>Enter 이동 방향 (right | down). E2E에서 옵션 확인용.</summary>
+    [SupplyParameterFromQuery] public string? Enter { get; set; }
+
+    /// <summary>1이면 마지막 셀 Enter 시 새 행 추가.</summary>
+    [SupplyParameterFromQuery] public int? NewRow { get; set; }
+
+    private int ChangedRows
+    {
+        get
+        {
+            var c = _lines.GetChanges();
+            return c.Inserted.Count + c.Updated.Count + c.Deleted.Count;
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        PoLine[] rows =
+        [
+            new() { LineNo = 1, ItemCode = "A1001", Qty = 10m, UnitPrice = 2500m, Version = 7 },
+            new() { LineNo = 2, ItemCode = "A1002", Qty = 5m, UnitPrice = 1200m, Version = 4 },
+            new() { LineNo = 3, ItemCode = "A1003", Qty = 3m, UnitPrice = 800m, Version = 1 },
+        ];
+        foreach (var r in rows)
+            r.Amount = r.Qty * r.UnitPrice;
+        _lines.Load(rows);
+    }
+
+    /// <summary>금액 = 수량 × 단가 (Spec 4.10 OnCellValueChanged)</summary>
+    private void RecalcAmount(CellValueChangedArgs<PoLine> e)
+    {
+        if (e.Field is nameof(PoLine.Qty) or nameof(PoLine.UnitPrice))
+            _lines.SetValue(e.RowKey, nameof(PoLine.Amount), e.Item.Qty * e.Item.UnitPrice);
+    }
+}

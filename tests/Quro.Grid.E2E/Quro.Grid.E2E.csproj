@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -17,6 +17,11 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+  </ItemGroup>
+
+  <!-- 샘플 앱을 먼저 빌드하기 위한 참조 (어셈블리는 참조하지 않고 별도 프로세스로 띄운다) -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Quro.Grid.Sample\Quro.Grid.Sample.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>
