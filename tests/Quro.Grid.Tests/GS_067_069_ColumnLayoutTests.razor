@@ -1,0 +1,139 @@
+@inherits GridTestContext
+
+@code {
+    // GS-067 컬럼 숨김 · GS-068 컬럼 이동(그리드 쪽) · GS-069 레이아웃 꺼내기·적용 (P1 5-2)
+    // 헤더 드래그는 quro-grid.js가 받아 놓을 때 MoveColumn을 1회 부른다 (E2E에서 확인).
+
+    private static readonly CultureInfo En = new("en-US");
+
+    private IRenderedComponent<QuroGrid<PoLine>> RenderGrid(QuroDataSet<PoLine> ds, int frozen = 0,
+        EventCallback<ColumnMovedArgs> onMoved = default) =>
+        Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" Culture="En" FrozenColumns="frozen" ShowFooter="true" OnColumnMoved="onMoved">
+                                     <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" Width="100" />
+                                     <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" Width="80" Aggregate="Aggregate.Sum" />
+                                     <QuroColumn Field="UnitPrice" HeaderKey="mm.unit_price" Type="CellType.Number" />
+                                 </QuroGrid>);
+
+    private static string[] Headers(IRenderedComponent<QuroGrid<PoLine>> cut) =>
+        cut.FindAll("[role=columnheader]").Select(h => h.GetAttribute("data-field")!).ToArray();
+
+    private static string[] RowFields(IRenderedComponent<QuroGrid<PoLine>> cut, int rowKey) =>
+        cut.FindAll($"[role=row][data-row='{rowKey}'] [role=gridcell]").Select(c => c.GetAttribute("data-field")!).ToArray();
+
+    /// <summary>GS-067: 숨긴 컬럼은 헤더·셀·합계·aria-colcount·붙여넣기·내보내기에서 빠지고, 값은 그대로. 다시 보이면 제자리</summary>
+    [Fact]
+    public async Task GS_067_HiddenColumn_LeavesScreen_KeepsValues()
+    {
+        var ds = TestData.ThreeLines();
+        var cut = RenderGrid(ds);
+        var row = ds.RowKeys[0];
+
+        await cut.InvokeAsync(() => cut.Instance.SetColumnVisible("Qty", false));
+
+        Assert.Equal(["ItemCode", "UnitPrice"], Headers(cut));
+        Assert.Equal(["ItemCode", "UnitPrice"], RowFields(cut, row));
+        Assert.Empty(cut.FindAll("[data-footer-field=Qty]"));
+        Assert.Equal("2", cut.Find("[role=grid]").GetAttribute("aria-colcount"));
+        Assert.Equal(["ItemCode", "UnitPrice"], cut.Instance.GetExportRequest().Columns.Select(c => c.Field));
+
+        await cut.InvokeAsync(() => cut.Instance.Paste(row, "ItemCode", [["B1", "7"]]));   // 화면 순서: Qty를 건너뛴다
+        Assert.Equal(7m, ds.GetItem(row).UnitPrice);
+        Assert.Equal(10m, ds.GetItem(row).Qty);
+        Assert.Equal(RowState.Updated, ds.GetState(row));
+
+        await cut.InvokeAsync(() => cut.Instance.SetColumnVisible("Qty", true));
+        Assert.Equal(["ItemCode", "Qty", "UnitPrice"], Headers(cut));
+        Assert.Equal("10", cut.Find($"[role=row][data-row='{row}'] [data-field=Qty]").TextContent.Trim());
+    }
+
+    /// <summary>GS-068: 이동은 화면 순서·붙여넣기 순서를 바꾸고 OnColumnMoved 1회. 숨긴 컬럼은 제자리를 지킨다</summary>
+    [Fact]
+    public async Task GS_068_MoveColumn_ChangesScreenAndPasteOrder()
+    {
+        var ds = TestData.ThreeLines();
+        var moves = new List<(string, int)>();
+        var cut = RenderGrid(ds, onMoved: EventCallback.Factory.Create<ColumnMovedArgs>(this, e => moves.Add((e.Field, e.Index))));
+        var row = ds.RowKeys[0];
+
+        await cut.InvokeAsync(() => cut.Instance.MoveColumn("UnitPrice", 0));
+
+        Assert.Equal(["UnitPrice", "ItemCode", "Qty"], Headers(cut));
+        Assert.Equal(["UnitPrice", "ItemCode", "Qty"], RowFields(cut, row));
+        Assert.Equal([("UnitPrice", 0)], moves);
+        Assert.Equal(["UnitPrice", "ItemCode", "Qty"], cut.Instance.GetExportRequest().Columns.Select(c => c.Field));
+
+        await cut.InvokeAsync(() => cut.Instance.Paste(row, "UnitPrice", [["9", "B1"]]));
+        Assert.Equal((9m, "B1"), (ds.GetItem(row).UnitPrice, ds.GetItem(row).ItemCode));
+
+        await cut.InvokeAsync(() => cut.Instance.SetColumnVisible("ItemCode", false));
+        await cut.InvokeAsync(() => cut.Instance.MoveColumn("Qty", 0));            // [Qty, UnitPrice] 화면
+        await cut.InvokeAsync(() => cut.Instance.SetColumnVisible("ItemCode", true));
+        Assert.Equal(["Qty", "UnitPrice", "ItemCode"], Headers(cut));              // ItemCode는 UnitPrice 뒤 자리 그대로
+    }
+
+    /// <summary>GS-068: 고정 열 영역과 일반 영역 사이는 넘지 않는다 (영역 끝으로 맞춤, 제자리면 이벤트 없음)</summary>
+    [Fact]
+    public async Task GS_068_MoveColumn_StaysInFrozenRegion()
+    {
+        var ds = TestData.ThreeLines();
+        var moves = new List<(string, int)>();
+        var cut = RenderGrid(ds, frozen: 1, onMoved: EventCallback.Factory.Create<ColumnMovedArgs>(this, e => moves.Add((e.Field, e.Index))));
+
+        await cut.InvokeAsync(() => cut.Instance.MoveColumn("UnitPrice", 0));     // 고정 영역으로 못 감 → 일반 영역 맨 앞
+        Assert.Equal(["ItemCode", "UnitPrice", "Qty"], Headers(cut));
+        Assert.Equal([("UnitPrice", 1)], moves);
+
+        await cut.InvokeAsync(() => cut.Instance.MoveColumn("ItemCode", 2));      // 고정 열은 고정 영역 안에서만 → 제자리
+        Assert.Equal(["ItemCode", "UnitPrice", "Qty"], Headers(cut));
+        Assert.Single(moves);
+        Assert.Contains("quro-frozen", cut.Find("[role=columnheader][data-field=ItemCode]").ClassList);
+        Assert.DoesNotContain("quro-frozen", cut.Find("[role=columnheader][data-field=UnitPrice]").ClassList);
+    }
+
+    /// <summary>GS-069: 순서·너비(리사이즈한 것만)·숨김·정렬을 꺼내 JSON으로 저장하고, 다른 그리드에 적용</summary>
+    [Fact]
+    public async Task GS_069_GetLayout_ApplyLayout_RoundTrip()
+    {
+        var cut = RenderGrid(TestData.ThreeLines());
+        await cut.InvokeAsync(() => cut.Instance.ColumnResized("ItemCode", 150));
+        await cut.InvokeAsync(() => cut.Instance.MoveColumn("UnitPrice", 0));
+        await cut.InvokeAsync(() => cut.Instance.SetColumnVisible("Qty", false));
+        await cut.InvokeAsync(() => cut.Instance.Sort("UnitPrice", additive: false));
+
+        var layout = cut.Instance.GetLayout();
+        Assert.Equal(
+            [new LayoutColumn("UnitPrice", null, false), new LayoutColumn("ItemCode", 150, false), new LayoutColumn("Qty", null, true)],
+            layout.Columns);
+        Assert.Equal([new SortColumn("UnitPrice", SortDirection.Ascending)], layout.Sort);
+
+        var json = System.Text.Json.JsonSerializer.Serialize(layout, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        Assert.Contains("\"direction\":\"Ascending\"", json);
+        var restored = System.Text.Json.JsonSerializer.Deserialize<GridLayout>(json, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;
+
+        var ds = TestData.ThreeLines();
+        var other = RenderGrid(ds);
+        await other.InvokeAsync(() => other.Instance.ApplyLayout(restored));
+
+        Assert.Equal(["UnitPrice", "ItemCode"], Headers(other));
+        Assert.Equal("width:150px", other.Find("[role=columnheader][data-field=ItemCode]").GetAttribute("style"));
+        Assert.Equal("ascending", other.Find("[role=columnheader][data-field=UnitPrice]").GetAttribute("aria-sort"));
+        Assert.Equal(ds.RowKeys.Reverse(), other.FindAll("[role=row][data-row]").Select(r => int.Parse(r.GetAttribute("data-row")!)));
+        Assert.Equal(layout.Columns, other.Instance.GetLayout().Columns);
+    }
+
+    /// <summary>GS-069: 저장된 레이아웃에 없는 새 컬럼은 정의상 앞 컬럼 뒤에, 없어진 필드는 무시</summary>
+    [Fact]
+    public async Task GS_069_ApplyLayout_NewColumnAtDefinitionPlace_UnknownIgnored()
+    {
+        var cut = RenderGrid(TestData.ThreeLines());
+        var layout = new GridLayout(
+            [new LayoutColumn("Removed", 90, false), new LayoutColumn("UnitPrice", null, false), new LayoutColumn("ItemCode", 300, false)],
+            [new SortColumn("Removed", SortDirection.Descending)]);
+
+        await cut.InvokeAsync(() => cut.Instance.ApplyLayout(layout));
+
+        Assert.Equal(["UnitPrice", "ItemCode", "Qty"], Headers(cut));              // Qty는 정의상 ItemCode 뒤
+        Assert.Empty(cut.Instance.SortColumns);
+        Assert.Equal(["UnitPrice", "ItemCode", "Qty"], cut.Instance.GetLayout().Columns.Select(c => c.Field));
+    }
+}

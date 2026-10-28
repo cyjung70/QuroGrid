@@ -18,6 +18,7 @@
     <a href="/" data-testid="home-link">@L["sample.home"]</a>
     <button type="button" data-testid="copy-rows" @onclick="() => _grid.CopySelectedRows()">@L["sample.copy_rows"]</button>
     <button type="button" data-testid="delete-rows" @onclick="() => _grid.DeleteSelectedRows()">@L["sample.delete_rows"]</button>
+    <button type="button" data-testid="toggle-price" @onclick="TogglePrice">@L["sample.toggle_price"]</button>
     <button type="button" data-testid="refresh-status" @onclick="() => _refreshes++">@L["sample.refresh_status"]</button>
 </div>
 
@@ -96,6 +97,14 @@
     private static readonly SampleLocalizer L = new();
     private readonly QuroDataSet<PoLine> _lines = new(line => line.LineNo);   // 행 ID (서버측 페이징에 필요)
     private int _providerCalls;
+    private bool _priceHidden;   // 컬럼 숨김 (GS-067)
+
+    private void TogglePrice()
+    {
+        _priceHidden = !_priceHidden;
+        _grid.SetColumnVisible("UnitPrice", !_priceHidden);
+    }
+
     private int _refreshes;   // 상태 갱신 버튼 (E2E가 다시 그려진 것을 확인)
     private QuroGrid<PoLine> _grid = default!;
     private string _popupText = "";

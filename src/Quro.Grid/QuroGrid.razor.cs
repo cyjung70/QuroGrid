@@ -22,6 +22,13 @@ public partial class QuroGrid<TItem> where TItem : class
     private (int RowKey, string Field)? _editing;
     private int _epoch;   // 그리드 전체를 다시 그려야 할 때 증가 (파라미터·컬럼 변경)
 
+    /// <summary>모든 행을 다시 그리게 하고, 화면 컬럼 구성을 다시 계산하게 한다.</summary>
+    private void Relayout()
+    {
+        _epoch++;
+        _shown = null;
+    }
+
     private const string ModulePath = "./_content/Quro.Grid/quro-grid.js";
     private ElementReference _root;
     private IJSObjectReference? _module;
@@ -36,6 +43,10 @@ public partial class QuroGrid<TItem> where TItem : class
     private List<int>? _order;           // 정렬한 화면 순서 (null = 조회 순서). 편집·추가해도 다시 정렬하지 않는다 (A-22)
     private int _orderGeneration;        // 정렬한 시점의 DataSet.Generation. 다시 조회되면 정렬을 다시 적용한다
     private readonly Dictionary<string, int> _widths = [];   // 사용자가 리사이즈한 너비 (A-23)
+    private List<string>? _columnOrder;                       // 사용자가 옮긴 컬럼 순서 (필드, 숨긴 컬럼 포함). null = 정의 순서 (GS-068)
+    private readonly HashSet<string> _hidden = [];            // 숨긴 컬럼 (GS-067)
+    private List<QuroColumn>? _shown;                         // 화면에 보이는 컬럼 (화면 순서). 컬럼 구성이 바뀌면 null
+    private int _frozenShown;                                 // 그중 앞쪽 고정 열 수
     private const int MinColumnWidth = 40;
 
     // 서버측 페이징 (R6, A-24): 화면 위치 = [추가 행(맨 위)] + [서버 조회 순서]. 보이는 범위의 페이지만 적재한다.
@@ -153,14 +164,26 @@ public partial class QuroGrid<TItem> where TItem : class
     /// 컬럼(화면 순서, 사용자 언어 헤더, 너비)과 정렬만 준다. Button 셀은 값이 없어 뺀다.
     /// </summary>
     public GridExportRequest GetExportRequest() => new(
-        _columns.Where(c => c.Type != CellType.Button)
+        Columns.Where(c => c.Type != CellType.Button)
             .Select(c => new ExportColumn(c.Field, c.HeaderKey, Text(c.HeaderKey), c.Type, c.Format, WidthOf(c),
                 c.CurrencyField, c.Aggregate, c.Options))
             .ToList(),
         SortColumns,
         EffectiveCulture.Name);
 
-    internal IReadOnlyList<QuroColumn> Columns => _columns;
+    /// <summary>화면에 보이는 컬럼 (화면 순서: 고정 열 → 일반 열, 숨긴 컬럼 제외). 렌더·붙여넣기·내보내기가 쓴다.</summary>
+    internal IReadOnlyList<QuroColumn> Columns
+    {
+        get
+        {
+            if (_shown is null)
+            {
+                _shown = OrderedColumns().Where(c => !_hidden.Contains(c.Field)).ToList();
+                _frozenShown = _shown.Count(IsFrozen);
+            }
+            return _shown;
+        }
+    }
     internal CultureInfo EffectiveCulture => Culture ?? CultureInfo.CurrentCulture;
 
     private object? _layoutParameters;
@@ -175,7 +198,7 @@ public partial class QuroGrid<TItem> where TItem : class
         if (!Equals(layout, _layoutParameters))
         {
             _layoutParameters = layout;
-            _epoch++;
+            Relayout();
         }
     }
 
@@ -588,7 +611,8 @@ public partial class QuroGrid<TItem> where TItem : class
 
         var rows = Paging ? await PagedRowsFrom(startRowKey, cells.Length) : VisibleRowKeys().ToList();
         var firstRow = rows.IndexOf(startRowKey);
-        var firstCol = _columns.IndexOf(Column(startField));
+        var columns = Columns;
+        var firstCol = columns.ToList().IndexOf(Column(startField));
         if (firstRow < 0)
             throw new ArgumentException($"행 키 {startRowKey}가 화면에 없습니다.", nameof(startRowKey));
 
@@ -607,10 +631,10 @@ public partial class QuroGrid<TItem> where TItem : class
                 else
                     break;
 
-                for (var c = 0; c < cells[r].Length && firstCol + c < _columns.Count; c++)
+                for (var c = 0; c < cells[r].Length && firstCol + c < columns.Count; c++)
                 {
-                    var field = _columns[firstCol + c].Field;
-                    var reason = await PasteCell(rowKey, _columns[firstCol + c], cells[r][c]);
+                    var field = columns[firstCol + c].Field;
+                    var reason = await PasteCell(rowKey, columns[firstCol + c], cells[r][c]);
                     if (reason is not null)
                         skipped.Add(new PasteSkip(rowKey, field, reason));
                 }
@@ -963,10 +987,111 @@ public partial class QuroGrid<TItem> where TItem : class
         var col = Column(field);
         width = Math.Max(MinColumnWidth, width);
         _widths[col.Field] = width;
-        _epoch++;   // 모든 행의 셀 너비가 바뀐다
+        Relayout();   // 모든 행의 셀 너비가 바뀐다
         await OnColumnResized.InvokeAsync(new ColumnResizedArgs(col.Field, width));
         StateHasChanged();
     }
+
+    // ── 컬럼 숨김·이동·레이아웃 (GS-067~GS-069, P1) ──
+
+    /// <summary>헤더 드래그로 컬럼을 옮긴 뒤 (GS-068).</summary>
+    [Parameter] public EventCallback<ColumnMovedArgs> OnColumnMoved { get; set; }
+
+    /// <summary>
+    /// 컬럼을 숨기거나 다시 보인다 (GS-067). 숨긴 컬럼은 화면·합계·키보드 이동·붙여넣기·내보내기에서 빠지고,
+    /// 값과 행 상태는 그대로다. 다시 보이면 제자리에 나온다.
+    /// </summary>
+    public void SetColumnVisible(string field, bool visible)
+    {
+        var col = Column(field);
+        if (visible ? !_hidden.Remove(col.Field) : !_hidden.Add(col.Field))
+            return;
+        _ensureActive = !visible;   // 활성 셀이 숨긴 컬럼에 있었으면 같은 행의 다른 셀로 (렌더 반영 뒤)
+        Relayout();
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// 헤더 드래그를 놓았을 때 JS가 호출한다 (GS-068, 호출 1회). <paramref name="toIndex"/>는 옮긴 뒤 화면 위치(보이는 컬럼 중).
+    /// 고정 열 영역과 일반 영역 사이는 넘지 않는다: 영역 끝으로 맞추고, 제자리면 아무 것도 하지 않는다.
+    /// </summary>
+    [JSInvokable]
+    public async Task MoveColumn(string field, int toIndex)
+    {
+        var col = Column(field);
+        var shown = Columns.ToList();
+        var from = shown.IndexOf(col);
+        if (from < 0)
+            return;
+        var (first, last) = IsFrozen(col) ? (0, _frozenShown - 1) : (_frozenShown, shown.Count - 1);
+        toIndex = Math.Clamp(toIndex, first, last);
+        if (toIndex == from)
+            return;
+
+        // 숨긴 컬럼은 제자리를 지키도록 전체 순서(숨김 포함)에서 보이는 이웃 기준으로 넣는다
+        var order = OrderedColumns().ToList();
+        order.Remove(col);
+        shown.RemoveAt(from);
+        var at = toIndex < shown.Count ? order.IndexOf(shown[toIndex]) : order.IndexOf(shown[^1]) + 1;
+        order.Insert(at, col);
+        _columnOrder = order.Select(c => c.Field).ToList();
+
+        Relayout();
+        await OnColumnMoved.InvokeAsync(new ColumnMovedArgs(col.Field, toIndex));
+        StateHasChanged();
+    }
+
+    /// <summary>현재 레이아웃 (GS-069): 컬럼 순서(숨김 포함)·리사이즈한 너비·숨김·정렬. 앱이 JSON으로 저장한다.</summary>
+    public GridLayout GetLayout() => new(
+        OrderedColumns()
+            .Select(c => new LayoutColumn(c.Field, _widths.TryGetValue(c.Field, out var w) ? w : null, _hidden.Contains(c.Field)))
+            .ToList(),
+        SortColumns);
+
+    /// <summary>
+    /// 저장해 둔 레이아웃을 적용한다 (GS-069, 이벤트 없음). 없어진 필드는 무시하고, 레이아웃에 없는 새 컬럼은
+    /// 정의상 앞 컬럼 뒤에 둔다. 고정 열은 고정 영역에 남는다.
+    /// </summary>
+    public void ApplyLayout(GridLayout layout)
+    {
+        var known = _columns.Select(c => c.Field).ToHashSet();
+        var columns = layout.Columns.Where(c => known.Contains(c.Field)).ToList();
+
+        _columnOrder = columns.Select(c => c.Field).Distinct().ToList();
+        _widths.Clear();
+        foreach (var c in columns.Where(c => c.Width is not null))
+            _widths[c.Field] = Math.Max(MinColumnWidth, c.Width!.Value);
+        _hidden.Clear();
+        _hidden.UnionWith(columns.Where(c => c.Hidden).Select(c => c.Field));
+
+        _sort.Clear();
+        _sort.AddRange(layout.Sort.Where(s => known.Contains(s.Field) && Column(s.Field).Type != CellType.Button));
+        SortChanged();
+
+        Relayout();
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// 전체 컬럼 순서 (숨김 포함): 사용자가 옮긴 순서, 그 순서에 없는 컬럼은 정의상 앞 컬럼 뒤.
+    /// 고정 열(정의상 앞 FrozenColumns개)은 항상 앞에 둔다.
+    /// </summary>
+    private IEnumerable<QuroColumn> OrderedColumns()
+    {
+        List<QuroColumn> result;
+        if (_columnOrder is null)
+            result = _columns;
+        else
+        {
+            result = _columnOrder.Select(f => _columns.FirstOrDefault(c => c.Field == f)).OfType<QuroColumn>().Distinct().ToList();
+            for (var i = 0; i < _columns.Count; i++)
+                if (!result.Contains(_columns[i]))
+                    result.Insert(i == 0 ? 0 : result.IndexOf(_columns[i - 1]) + 1, _columns[i]);
+        }
+        return result.Where(IsFrozen).Concat(result.Where(c => !IsFrozen(c)));
+    }
+
+    private bool IsFrozen(QuroColumn col) => _columns.IndexOf(col) is var i && i >= 0 && i < FrozenColumns;
 
     internal int WidthOf(QuroColumn col) => _widths.TryGetValue(col.Field, out var width) ? width : col.Width;
 
@@ -1008,13 +1133,13 @@ public partial class QuroGrid<TItem> where TItem : class
     {
         _columns.Add(column);
         RegisterRule(column);
-        _epoch++;
+        Relayout();
     }
 
     void IColumnHost.ColumnChanged(QuroColumn column)
     {
         RegisterRule(column);
-        _epoch++;
+        Relayout();
     }
 
     /// <summary>컬럼의 Required·Min·Max를 DataSet 규칙 API로 넘긴다 (Addendum A-10).</summary>
@@ -1029,7 +1154,7 @@ public partial class QuroGrid<TItem> where TItem : class
     {
         if (_columns.Remove(column))
         {
-            _epoch++;
+            Relayout();
             StateHasChanged();
         }
     }
@@ -1047,15 +1172,19 @@ public partial class QuroGrid<TItem> where TItem : class
 
     internal string Text(string key) => Localizer is null ? key : Localizer[key].Value;
 
-    internal string CellClass(int index, string kind) =>
-        index < FrozenColumns ? $"quro-cell {kind} quro-frozen" : $"quro-cell {kind}";
+    internal string CellClass(int index, string kind)
+    {
+        _ = Columns;   // _frozenShown 계산
+        return index < _frozenShown ? $"quro-cell {kind} quro-frozen" : $"quro-cell {kind}";
+    }
 
     internal string CellStyle(int index)
     {
-        var width = $"width:{WidthOf(_columns[index])}px";
-        if (index >= FrozenColumns)
+        var columns = Columns;
+        var width = $"width:{WidthOf(columns[index])}px";
+        if (index >= _frozenShown)
             return width;
-        var left = _columns.Take(index).Sum(WidthOf);
+        var left = columns.Take(index).Sum(WidthOf);
         return $"{width};left:{left}px";
     }
 

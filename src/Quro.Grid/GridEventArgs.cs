@@ -188,3 +188,12 @@ public sealed class ColumnResizedArgs(string field, int width)
     /// <summary>새 너비 (px, 최소 40)</summary>
     public int Width { get; } = width;
 }
+
+/// <summary>헤더 드래그로 컬럼을 옮긴 뒤 (OnColumnMoved, GS-068). 레이아웃 저장에 쓴다.</summary>
+public sealed class ColumnMovedArgs(string field, int index)
+{
+    public string Field { get; } = field;
+
+    /// <summary>옮긴 뒤 화면 위치 (보이는 컬럼 중 0부터)</summary>
+    public int Index { get; } = index;
+}
