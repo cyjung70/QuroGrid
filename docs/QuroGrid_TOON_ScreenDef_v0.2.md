@@ -457,6 +457,6 @@ public sealed class LockExpression { public static LockExpression Parse(string t
 | D-3 | 카탈로그 검증 V-19~V-32 | GS-D03, GS-D06 |
 | D-4 | `RuleExpression`·`LockExpression` | GS-D08~GS-D10 |
 | D-5 | 그리드 연결 `<QuroGrid Definition>` (T-11) + 갭 G-01~G-04 | GS-D11~GS-D15 |
-| D-6 | 검증 CLI (T-12), 패키지 배포 | GS-D16 |
+| D-6 | 검증 CLI `quro-deflint` (T-12, `Quro.Grid.DefLint` .NET 도구), 패키지 배포 | GS-D16 ✅ |
 
 각 묶음은 브랜치·PR 1개, 테스트 먼저 (CLAUDE.md 3장). 공개 API가 생기므로 묶음마다 consumer-contract.md 6장과 CHANGELOG를 고친다.
