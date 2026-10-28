@@ -31,6 +31,7 @@ public sealed class QuroDataSet<T> where T : class
     private Step? _step;      // 열린 단계
     private int _stepDepth;   // BeginUndoStep 중첩 깊이
 
+    /// <summary>Creates an empty data set.</summary>
     public QuroDataSet()
     {
     }
@@ -108,6 +109,7 @@ public sealed class QuroDataSet<T> where T : class
     /// <summary>현재 목록에 있는 행 키 (표시 순서). Deleted 행도 포함한다 (화면 처리는 O-02).</summary>
     public IReadOnlyList<int> RowKeys => _rows.Select(r => r.Key).ToList();
 
+    /// <summary>Current value of a field in a row.</summary>
     public object? GetValue(int rowKey, string field) => Field(field).GetValue(Find(rowKey).Item);
 
     /// <summary>행의 현재 값을 복사한 새 객체 (행 복사용, 목록에는 넣지 않는다).</summary>
@@ -151,6 +153,7 @@ public sealed class QuroDataSet<T> where T : class
         row.Revision++;
     }
 
+    /// <summary>Mark on a cell, or null when the cell has none.</summary>
     public CellMark? GetCellMark(int rowKey, string field)
     {
         var name = Field(field).Name;
@@ -183,6 +186,7 @@ public sealed class QuroDataSet<T> where T : class
 
     // ── Spec 4.4 API ──
 
+    /// <summary>Row state (Spec 4.4).</summary>
     public RowState GetState(int rowKey) => Find(rowKey).State;
 
     /// <summary>원본값. 추가 행은 원본이 없으므로 null.</summary>
@@ -193,6 +197,7 @@ public sealed class QuroDataSet<T> where T : class
         return row.Original is null ? null : row.Original[prop.Name];
     }
 
+    /// <summary>Sets a field value, updates the row state and records the change for undo.</summary>
     public void SetValue(int rowKey, string field, object? value)
     {
         var prop = Field(field);
@@ -322,8 +327,10 @@ public sealed class QuroDataSet<T> where T : class
 
     // ── Undo / Redo (P1, GS-076~GS-078, Addendum A-33) ──
 
+    /// <summary>True when there is a step to undo.</summary>
     public bool CanUndo => _undo.Count > 0;
 
+    /// <summary>True when there is a step to redo.</summary>
     public bool CanRedo => _redo.Count > 0;
 
     /// <summary>

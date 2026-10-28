@@ -6,7 +6,9 @@ namespace Quro.Grid;
 public sealed class GridItemsRequest(int startIndex, int count, IReadOnlyList<SortColumn> sort,
     CancellationToken cancellationToken = default, IReadOnlyList<ColumnFilter>? filters = null)
 {
+    /// <summary>Index of the first row to load.</summary>
     public int StartIndex { get; } = startIndex;
+    /// <summary>Number of rows to load.</summary>
     public int Count { get; } = count;
 
     /// <summary>정렬 조건 (비어 있으면 기본 순서). 페이징 중 정렬은 서버가 한다.</summary>
@@ -15,6 +17,7 @@ public sealed class GridItemsRequest(int startIndex, int count, IReadOnlyList<So
     /// <summary>필터 조건 (GS-073, A-31). 페이징 중 필터는 서버가 한다. 비어 있으면 전체</summary>
     public IReadOnlyList<ColumnFilter> Filters { get; } = filters ?? [];
 
+    /// <summary>Cancelled when the request is no longer needed (for example, after scrolling away).</summary>
     public CancellationToken CancellationToken { get; } = cancellationToken;
 }
 
@@ -25,7 +28,10 @@ public sealed class GridItemsRequest(int startIndex, int count, IReadOnlyList<So
 public sealed class GridItemsResult<TItem>(IReadOnlyList<TItem> items, int totalCount,
     IReadOnlyDictionary<string, decimal>? totals = null)
 {
+    /// <summary>Rows in the requested range.</summary>
     public IReadOnlyList<TItem> Items { get; } = items;
+    /// <summary>Total number of rows.</summary>
     public int TotalCount { get; } = totalCount;
+    /// <summary>Totals for the footer row (field to value), or null.</summary>
     public IReadOnlyDictionary<string, decimal>? Totals { get; } = totals;
 }

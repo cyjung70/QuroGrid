@@ -1,0 +1,25 @@
+<Project>
+  <!-- Package metadata shared by Quro.Grid.Data, Quro.Grid.Definition, Quro.Grid.
+       Version is overridden by scripts/pack-local.ps1 (-p:Version=...). -->
+  <PropertyGroup>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionSuffix>alpha.1</VersionSuffix>
+    <Authors>QuroERP Community</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <!-- TODO: PackageProjectUrl / RepositoryUrl when the public repository exists -->
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>blazor;grid;erp;quroerp</PackageTags>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <!-- Only library projects are packable; samples and tests are not. -->
+  <PropertyGroup Condition="$(MSBuildProjectName.EndsWith('.Tests')) Or $(MSBuildProjectName.EndsWith('.E2E')) Or $(MSBuildProjectName.EndsWith('.Sample'))">
+    <IsPackable>false</IsPackable>
+    <!-- XML docs (CS1591) are required for the shipped libraries only. -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+</Project>

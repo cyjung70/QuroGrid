@@ -12,21 +12,25 @@ public sealed class QuroColumn : ComponentBase, IDisposable
     /// <summary>이 컬럼을 묶은 다단 헤더 그룹 (GS-070). 없으면 null</summary>
     [CascadingParameter] internal QuroColumnGroup? Group { get; set; }
 
+    /// <summary>Property name of the row item bound to this column.</summary>
     [Parameter, EditorRequired] public string Field { get; set; } = "";
 
     /// <summary>헤더 리소스 키 (Spec 4.8). 문자열을 하드코딩하지 않는다.</summary>
     [Parameter, EditorRequired] public string HeaderKey { get; set; } = "";
 
+    /// <summary>Cell type (Spec 4.6).</summary>
     [Parameter] public CellType Type { get; set; } = CellType.Text;
 
     /// <summary>.NET 서식 문자열 (예: N3). 표시는 그리드의 Culture를 따른다.</summary>
     [Parameter] public string? Format { get; set; }
 
+    /// <summary>True when the cells cannot be edited.</summary>
     [Parameter] public bool ReadOnly { get; set; }
 
     /// <summary>열 너비 (px).</summary>
     [Parameter] public int Width { get; set; } = 120;
 
+    /// <summary>Footer aggregate.</summary>
     [Parameter] public Aggregate Aggregate { get; set; }
 
     /// <summary>Currency 컬럼에서 행의 통화 코드를 읽을 필드 (Spec 4.6).</summary>
@@ -35,7 +39,9 @@ public sealed class QuroColumn : ComponentBase, IDisposable
     /// <summary>필수 입력 (DataSet 규칙으로 등록, Addendum A-10).</summary>
     [Parameter] public bool Required { get; set; }
 
+    /// <summary>Smallest allowed number (registered as a data set rule).</summary>
     [Parameter] public decimal? Min { get; set; }
+    /// <summary>Largest allowed number (registered as a data set rule).</summary>
     [Parameter] public decimal? Max { get; set; }
 
     /// <summary>
@@ -58,6 +64,7 @@ public sealed class QuroColumn : ComponentBase, IDisposable
 
     private object? _rendered;
 
+    /// <inheritdoc />
     protected override void OnInitialized()
     {
         if (Host is null)
@@ -75,6 +82,7 @@ public sealed class QuroColumn : ComponentBase, IDisposable
         _rendered = now;
     }
 
+    /// <summary>Removes the column from the grid.</summary>
     public void Dispose() => Host?.RemoveColumn(this);
 }
 

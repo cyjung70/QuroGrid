@@ -11,7 +11,9 @@ namespace Quro.Grid;
 [EditorBrowsable(EditorBrowsableState.Never)]
 public sealed class Deferred : ComponentBase
 {
+    /// <summary>Content rendered after the preceding siblings.</summary>
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
+    /// <inheritdoc />
     protected override void BuildRenderTree(RenderTreeBuilder builder) => builder.AddContent(0, ChildContent);
 }

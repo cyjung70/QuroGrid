@@ -9,6 +9,8 @@ public sealed class FieldRule
     /// <summary>null 또는 공백 문자열이면 오류.</summary>
     public bool Required { get; init; }
 
+    /// <summary>Smallest allowed number (inclusive).</summary>
     public decimal? Min { get; init; }
+    /// <summary>Largest allowed number (inclusive).</summary>
     public decimal? Max { get; init; }
 }
