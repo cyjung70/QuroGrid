@@ -1,0 +1,118 @@
+@inherits GridTestContext
+
+@code {
+    // GS-004 · GS-005 (그리드 쪽): 붙여넣기 규칙 (Spec 4.7, Addendum A-03·A-04)
+
+    private static readonly CultureInfo En = new("en-US");
+    private PastedArgs? _pasted;
+    private int _adding;
+
+    private IRenderedComponent<QuroGrid<PoLine>> RenderGrid(QuroDataSet<PoLine> ds, bool addRows = true) =>
+        Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" Culture="En" AddRowsOnPaste="addRows"
+                                            OnRowAdding="(RowAddingArgs<PoLine> e) => _adding++"
+                                            OnPasted="(PastedArgs e) => _pasted = e">
+                                     <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" />
+                                     <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" />
+                                     <QuroColumn Field="Amount" HeaderKey="mm.amount" Type="CellType.Number" ReadOnly="true" />
+                                     <QuroColumn Field="UnitPrice" HeaderKey="mm.unit_price" Type="CellType.Number" />
+                                 </QuroGrid>);
+
+    /// <summary>GS-004: 부족 행 자동 추가 — 기본 켬 (A-03)</summary>
+    [Fact]
+    public async Task GS_004_Paste_AddsMissingRows_ByDefault()
+    {
+        var ds = TestData.ThreeLines();
+        var cut = Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" Culture="En" OnPasted="(PastedArgs e) => _pasted = e">
+                                               <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" />
+                                               <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" />
+                                           </QuroGrid>);
+        string[][] cells = [["B2", "20"], ["B3", "30"], ["B4", "40"]];
+
+        await cut.InvokeAsync(() => cut.Instance.Paste(ds.RowKeys[1], "ItemCode", cells));
+
+        Assert.Equal(4, cut.FindAll("[role=row][data-row]").Count);
+        var added = Assert.Single(_pasted!.AddedRowKeys);
+        Assert.Equal(RowState.Inserted, ds.GetState(added));
+        Assert.Equal("B4", ds.GetValue(added, "ItemCode"));
+        Assert.Equal(40m, ds.GetValue(added, "Qty"));
+        Assert.Equal("B2", ds.GetValue(ds.RowKeys[1], "ItemCode"));
+        Assert.Empty(_pasted.Skipped);
+    }
+
+    /// <summary>GS-004: 추가 행도 OnRowAdding을 거친다 (기본값 세팅)</summary>
+    [Fact]
+    public async Task GS_004_Paste_AddedRowsRaiseRowAdding()
+    {
+        var ds = TestData.ThreeLines();
+        var cut = RenderGrid(ds);
+
+        await cut.InvokeAsync(() => cut.Instance.Paste(ds.RowKeys[2], "ItemCode", [["X"], ["Y"], ["Z"]]));
+
+        Assert.Equal(2, _adding);
+        Assert.Equal(2, _pasted!.AddedRowKeys.Count);
+    }
+
+    /// <summary>GS-004: 옵션 끔 → 넘치는 행은 버린다</summary>
+    [Fact]
+    public async Task GS_004_Paste_AddRowsOff_IgnoresExtraRows()
+    {
+        var ds = TestData.ThreeLines();
+        var cut = RenderGrid(ds, addRows: false);
+
+        await cut.InvokeAsync(() => cut.Instance.Paste(ds.RowKeys[2], "ItemCode", [["X"], ["Y"]]));
+
+        Assert.Equal(3, cut.FindAll("[role=row][data-row]").Count);
+        Assert.Equal("X", ds.GetValue(ds.RowKeys[2], "ItemCode"));
+        Assert.Empty(_pasted!.AddedRowKeys);
+    }
+
+    /// <summary>GS-005: 읽기 전용 셀은 건너뛰고, 건너뛴 셀과 사유 키를 OnPasted로 앱에 넘긴다 (A-04)</summary>
+    [Fact]
+    public async Task GS_005_PasteOverReadOnly_SkipsAndNotifies()
+    {
+        var ds = TestData.ThreeLines();
+        var row = ds.RowKeys[0];
+        var cut = RenderGrid(ds);
+
+        await cut.InvokeAsync(() => cut.Instance.Paste(row, "Qty", [["7", "999", "100"]]));
+
+        Assert.Equal(7m, ds.GetValue(row, "Qty"));
+        Assert.Equal(0m, ds.GetValue(row, "Amount"));        // 읽기 전용: 그대로
+        Assert.Equal(100m, ds.GetValue(row, "UnitPrice"));   // 그 다음 열은 계속 반영
+        var skip = Assert.Single(_pasted!.Skipped);
+        Assert.Equal(new PasteSkip(row, "Amount", PasteKeys.ReadOnly), skip);
+    }
+
+    /// <summary>GS-005: 해석 실패 셀도 건너뛰고 사유 키로 알린다</summary>
+    [Fact]
+    public async Task GS_005_PasteInvalidNumber_SkipsWithInvalidKey()
+    {
+        var ds = TestData.ThreeLines();
+        var row = ds.RowKeys[0];
+        var cut = RenderGrid(ds);
+
+        await cut.InvokeAsync(() => cut.Instance.Paste(row, "ItemCode", [["B1", "abc"]]));
+
+        Assert.Equal("B1", ds.GetValue(row, "ItemCode"));
+        Assert.Equal(10m, ds.GetValue(row, "Qty"));
+        Assert.Equal(new PasteSkip(row, "Qty", PasteKeys.Invalid), Assert.Single(_pasted!.Skipped));
+    }
+
+    /// <summary>GS-005: OnCellValueChanging에서 취소한 셀은 cancelled 사유</summary>
+    [Fact]
+    public async Task GS_005_PasteChangingCancelled_SkipsWithCancelledKey()
+    {
+        var ds = TestData.ThreeLines();
+        var row = ds.RowKeys[0];
+        var cut = Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" Culture="En"
+                                                     OnCellValueChanging="(CellValueChangingArgs<PoLine> e) => e.Cancel = true"
+                                                     OnPasted="(PastedArgs e) => _pasted = e">
+                                               <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" />
+                                           </QuroGrid>);
+
+        await cut.InvokeAsync(() => cut.Instance.Paste(row, "Qty", [["7"]]));
+
+        Assert.Equal(10m, ds.GetValue(row, "Qty"));
+        Assert.Equal(new PasteSkip(row, "Qty", PasteKeys.Cancelled), Assert.Single(_pasted!.Skipped));
+    }
+}

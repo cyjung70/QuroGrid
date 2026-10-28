@@ -60,3 +60,27 @@ public sealed class PastingArgs(int startRowKey, string startField, string[][] c
 
     public bool Cancel { get; set; }
 }
+
+/// <summary>붙여넣기 후 (OnPasted, Addendum A-04). 안내 표시는 앱이 정한다.</summary>
+public sealed class PastedArgs(int startRowKey, string startField, IReadOnlyList<int> addedRowKeys, IReadOnlyList<PasteSkip> skipped)
+{
+    public int StartRowKey { get; } = startRowKey;
+    public string StartField { get; } = startField;
+
+    /// <summary>부족 행 자동 추가로 생긴 행 (AddRowsOnPaste).</summary>
+    public IReadOnlyList<int> AddedRowKeys { get; } = addedRowKeys;
+
+    /// <summary>반영하지 않은 셀과 사유 리소스 키 (<see cref="PasteKeys"/>).</summary>
+    public IReadOnlyList<PasteSkip> Skipped { get; } = skipped;
+}
+
+/// <summary>붙여넣기에서 건너뛴 셀.</summary>
+public sealed record PasteSkip(int RowKey, string Field, string MessageKey);
+
+/// <summary>붙여넣기 건너뜀 사유 리소스 키 (Addendum 2절).</summary>
+public static class PasteKeys
+{
+    public const string ReadOnly = "quro.paste.readonly";
+    public const string Invalid = "quro.paste.invalid";
+    public const string Cancelled = "quro.paste.cancelled";
+}

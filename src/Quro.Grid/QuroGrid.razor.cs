@@ -50,6 +50,9 @@ public partial class QuroGrid<TItem> where TItem : class
     /// <summary>마지막 편집 가능 셀에서 Enter 시 새 행 추가 (2026-10-28 결정: 옵션, 기본 끔 잠정).</summary>
     [Parameter] public bool AddRowOnLastEnter { get; set; }
 
+    /// <summary>붙여넣기 행이 모자라면 자동 추가 (Spec 4.7, Addendum A-03: 기본 켬).</summary>
+    [Parameter] public bool AddRowsOnPaste { get; set; } = true;
+
     // ── 이벤트 (Spec 4.10). OnPopupRequested·OnSelectionChanged는 JS 층과 함께 추가한다. ──
 
     [Parameter] public EventCallback<CellValueChangingArgs<TItem>> OnCellValueChanging { get; set; }
@@ -58,6 +61,9 @@ public partial class QuroGrid<TItem> where TItem : class
     [Parameter] public EventCallback<RowAddedArgs<TItem>> OnRowAdded { get; set; }
     [Parameter] public EventCallback<RowDeletingArgs<TItem>> OnRowDeleting { get; set; }
     [Parameter] public EventCallback<PastingArgs> OnPasting { get; set; }
+
+    /// <summary>붙여넣기 후: 추가된 행, 건너뛴 셀과 사유 (Addendum A-04).</summary>
+    [Parameter] public EventCallback<PastedArgs> OnPasted { get; set; }
 
     internal IReadOnlyList<QuroColumn> Columns => _columns;
     internal CultureInfo EffectiveCulture => Culture ?? CultureInfo.CurrentCulture;
@@ -148,12 +154,18 @@ public partial class QuroGrid<TItem> where TItem : class
     [JSInvokable]
     public async Task<int> AddRow()
     {
+        var key = await AddRowCore();
+        StateHasChanged();
+        return key;
+    }
+
+    private async Task<int> AddRowCore()
+    {
         var item = Activator.CreateInstance<TItem>();
         await OnRowAdding.InvokeAsync(new RowAddingArgs<TItem>(item));
 
         var key = DataSet.AddRow(item);
         await OnRowAdded.InvokeAsync(new RowAddedArgs<TItem>(key, DataSet.GetItem(key)));
-        StateHasChanged();
         return key;
     }
 
@@ -182,10 +194,12 @@ public partial class QuroGrid<TItem> where TItem : class
     }
 
     /// <summary>
-    /// 붙여넣기 (엑셀 형식을 행 × 열로 나눈 값). OnPasting에서 취소하면 false.
-    /// 시작 셀부터 표시 순서대로 채우고, 읽기 전용·해석 실패 셀은 건너뛴다. 셀마다 값 변경 이벤트가 발생한다.
-    /// 부족 행 자동 추가와 안내는 GS-004·GS-005에서 정한다.
+    /// 붙여넣기 (엑셀 형식을 행 × 열로 나눈 값, quro-grid.js가 1회 호출: R3). OnPasting에서 취소하면 false.
+    /// 시작 셀부터 표시 순서대로 채우고, 셀마다 값 변경 이벤트가 발생한다 (Spec 4.7, Addendum A-03·A-04).
+    /// 행이 모자라면 <see cref="AddRowsOnPaste"/>에 따라 추가하고, 열이 넘치면 버린다.
+    /// 읽기 전용·해석 실패·변경 취소 셀은 건너뛰고 OnPasted로 사유 키를 넘긴다.
     /// </summary>
+    [JSInvokable]
     public async Task<bool> Paste(int startRowKey, string startField, string[][] cells)
     {
         var args = new PastingArgs(startRowKey, startField, cells);
@@ -199,16 +213,40 @@ public partial class QuroGrid<TItem> where TItem : class
         if (firstRow < 0)
             throw new ArgumentException($"행 키 {startRowKey}가 화면에 없습니다.", nameof(startRowKey));
 
-        for (var r = 0; r < cells.Length && firstRow + r < rows.Count; r++)
-        for (var c = 0; c < cells[r].Length && firstCol + c < _columns.Count; c++)
+        var added = new List<int>();
+        var skipped = new List<PasteSkip>();
+        for (var r = 0; r < cells.Length; r++)
         {
-            var col = _columns[firstCol + c];
-            if (!col.ReadOnly && DataSet.TryParseText(col.Field, cells[r][c], EffectiveCulture, out var value))
-                await ApplyValue(rows[firstRow + r], col.Field, value);
+            int rowKey;
+            if (firstRow + r < rows.Count)
+                rowKey = rows[firstRow + r];
+            else if (AddRowsOnPaste)
+                added.Add(rowKey = await AddRowCore());
+            else
+                break;
+
+            for (var c = 0; c < cells[r].Length && firstCol + c < _columns.Count; c++)
+            {
+                var field = _columns[firstCol + c].Field;
+                var reason = await PasteCell(rowKey, _columns[firstCol + c], cells[r][c]);
+                if (reason is not null)
+                    skipped.Add(new PasteSkip(rowKey, field, reason));
+            }
         }
 
+        await OnPasted.InvokeAsync(new PastedArgs(startRowKey, startField, added, skipped));
         StateHasChanged();
         return true;
+    }
+
+    /// <summary>셀 하나를 붙여넣는다. 건너뛰면 사유 리소스 키, 반영했으면 null.</summary>
+    private async Task<string?> PasteCell(int rowKey, QuroColumn col, string text)
+    {
+        if (col.ReadOnly || DataSet.GetState(rowKey) == RowState.Deleted)
+            return PasteKeys.ReadOnly;
+        if (!DataSet.TryParseText(col.Field, text, EffectiveCulture, out var value))
+            return PasteKeys.Invalid;
+        return await ApplyValue(rowKey, col.Field, value) ? null : PasteKeys.Cancelled;
     }
 
     /// <summary>OnCellValueChanging → SetValue → OnCellValueChanged. 값이 같으면 아무것도 하지 않는다.</summary>
