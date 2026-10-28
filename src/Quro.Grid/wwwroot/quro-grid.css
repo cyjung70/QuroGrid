@@ -1,0 +1,79 @@
+/* QuroGrid 기본 스타일. 색은 CSS 변수로 열어 두고 테마(MudBlazor 토큰)와 연결한다. */
+.quro-grid {
+    --quro-border: #d0d5dd;
+    --quro-head-bg: #f2f4f7;
+    --quro-bg: #fff;
+    --quro-error: #fdecea;
+    --quro-error-line: #d92d20;
+    --quro-warning: #fff4e5;
+    --quro-warning-line: #f79009;
+
+    display: inline-block;
+    overflow: auto;
+    max-width: 100%;
+    border: 1px solid var(--quro-border);
+    background: var(--quro-bg);
+}
+
+.quro-row {
+    display: flex;
+}
+
+.quro-cell {
+    box-sizing: border-box;
+    flex: none;
+    padding: 2px 6px;
+    border-right: 1px solid var(--quro-border);
+    border-bottom: 1px solid var(--quro-border);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    background: inherit;
+}
+
+.quro-header,
+.quro-footer {
+    background: var(--quro-head-bg);
+    font-weight: 600;
+}
+
+.quro-head {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+.quro-frozen {
+    position: sticky;
+    z-index: 1;
+    background: var(--quro-bg);
+}
+
+.quro-header.quro-frozen,
+.quro-footer.quro-frozen {
+    background: var(--quro-head-bg);
+}
+
+.quro-mark-error {
+    background: var(--quro-error);
+    box-shadow: inset 0 0 0 1px var(--quro-error-line);
+}
+
+.quro-mark-warning {
+    background: var(--quro-warning);
+    box-shadow: inset 0 0 0 1px var(--quro-warning-line);
+}
+
+.quro-deleted .quro-cell {
+    text-decoration: line-through;
+    opacity: 0.6;
+}
+
+.quro-editor {
+    box-sizing: border-box;
+    width: 100%;
+    border: 0;
+    padding: 0;
+    font: inherit;
+    outline: none;
+}

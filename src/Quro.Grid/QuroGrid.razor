@@ -1,0 +1,45 @@
+@typeparam TItem where TItem : class
+@attribute [CascadingTypeParameter(nameof(TItem))]
+@implements IColumnHost
+
+<CascadingValue TValue="IColumnHost" Value="this" IsFixed="true">@ChildContent</CascadingValue>
+
+@* 컬럼 정의가 등록된 뒤에 그린다. 셀 단위 이벤트 핸들러를 두지 않는다 (R5): 클릭·키는 quro-grid.js가 좌표로 해석한다. *@
+<Deferred>
+    <div class="quro-grid" role="grid" aria-colcount="@_columns.Count">
+        <div class="quro-head" role="rowgroup">
+            <div class="quro-row" role="row" aria-rowindex="1">
+                @for (var i = 0; i < _columns.Count; i++)
+                {
+                    var col = _columns[i];
+                    <div class="@CellClass(i, "quro-header")" style="@CellStyle(i)" role="columnheader"
+                         aria-colindex="@(i + 1)" data-field="@col.Field">@Text(col.HeaderKey)</div>
+                }
+            </div>
+        </div>
+
+        <div class="quro-body" role="rowgroup">
+            @{ var index = 0; }
+            @foreach (var key in VisibleRowKeys())
+            {
+                <QuroGridRow @key="key" TItem="TItem" Grid="this" RowKey="key" RowIndex="index++"
+                             Revision="DataSet.GetRevision(key)" Epoch="_epoch"
+                             EditingField="@(_editing?.RowKey == key ? _editing.Value.Field : null)" />
+            }
+        </div>
+
+        @if (ShowFooter)
+        {
+            <div class="quro-foot" role="rowgroup">
+                <div class="quro-row quro-footer-row" role="row">
+                    @for (var i = 0; i < _columns.Count; i++)
+                    {
+                        var col = _columns[i];
+                        <div class="@CellClass(i, "quro-footer")" style="@CellStyle(i)" role="gridcell"
+                             aria-colindex="@(i + 1)" data-footer-field="@col.Field">@FooterText(col)</div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</Deferred>

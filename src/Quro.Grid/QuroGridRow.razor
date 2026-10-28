@@ -1,0 +1,58 @@
+@typeparam TItem where TItem : class
+
+@{
+    var deleted = Grid.DataSet.GetState(RowKey) == RowState.Deleted;
+}
+<div class="@(deleted ? "quro-row quro-deleted" : "quro-row")" role="row" data-row="@RowKey" aria-rowindex="@(RowIndex + 2)">
+    @for (var i = 0; i < Grid.Columns.Count; i++)
+    {
+        var col = Grid.Columns[i];
+        var mark = Grid.DataSet.GetCellMark(RowKey, col.Field);
+        <div class="@MarkClass(Grid.CellClass(i, "quro-body-cell"), mark)" style="@Grid.CellStyle(i)" role="gridcell"
+             aria-colindex="@(i + 1)" data-field="@col.Field"
+             aria-readonly="@(col.ReadOnly ? "true" : null)"
+             aria-invalid="@(mark?.Level == CellMarkLevel.Error ? "true" : null)"
+             title="@(mark is null ? null : Grid.Text(mark.MessageKey))">
+            @if (EditingField == col.Field)
+            {
+                @* 키 입력은 브라우저에서만 처리한다 (R2). 값은 quro-grid.js가 셀 이탈 시 CommitEdit로 1회 보낸다. *@
+                <input class="quro-editor" value="@Grid.EditText(RowKey, col)" />
+            }
+            else
+            {
+                @Grid.DisplayText(RowKey, col)
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private (int Revision, int Epoch, int RowIndex, string? EditingField)? _rendered;
+
+    [Parameter, EditorRequired] public QuroGrid<TItem> Grid { get; set; } = default!;
+    [Parameter, EditorRequired] public int RowKey { get; set; }
+    [Parameter] public int RowIndex { get; set; }
+    [Parameter] public int Revision { get; set; }
+    [Parameter] public int Epoch { get; set; }
+    [Parameter] public string? EditingField { get; set; }
+
+    /// <summary>행 단위 렌더 (R4): 행 리비전·편집 셀·위치·그리드 epoch가 바뀐 행만 다시 그린다.</summary>
+    protected override bool ShouldRender()
+    {
+        var now = (Revision, Epoch, RowIndex, EditingField);
+        if (_rendered == now)
+            return false;
+        _rendered = now;
+        return true;
+    }
+
+    // 첫 렌더는 ShouldRender를 거치지 않으므로 여기서 기록한다.
+    protected override void OnInitialized() => _rendered = (Revision, Epoch, RowIndex, EditingField);
+
+    private static string MarkClass(string cls, CellMark? mark) => mark?.Level switch
+    {
+        CellMarkLevel.Error => cls + " quro-mark-error",
+        CellMarkLevel.Warning => cls + " quro-mark-warning",
+        _ => cls,
+    };
+}

@@ -40,6 +40,9 @@ public sealed class QuroDataSet<T> where T : class
 
     public object? GetValue(int rowKey, string field) => Field(field).GetValue(Find(rowKey).Item);
 
+    /// <summary>행의 값·상태·셀 표시가 바뀔 때마다 증가한다. 그리드가 바뀐 행만 다시 그리는 데 쓴다 (R4).</summary>
+    public int GetRevision(int rowKey) => Find(rowKey).Revision;
+
     /// <summary>필드 검증 규칙 등록. 같은 필드에 다시 등록하면 교체한다.</summary>
     public void SetRule(string field, FieldRule rule) => _rules[Field(field).Name] = rule;
 
@@ -65,6 +68,7 @@ public sealed class QuroDataSet<T> where T : class
             row.Marks.Remove(name);
         else
             row.Marks[name] = mark;
+        row.Revision++;
     }
 
     public CellMark? GetCellMark(int rowKey, string field)
@@ -117,6 +121,7 @@ public sealed class QuroDataSet<T> where T : class
             throw new InvalidOperationException($"삭제 표시된 행({rowKey})은 수정할 수 없습니다.");
 
         prop.SetValue(row.Item, value);
+        row.Revision++;
 
         if (row.State is RowState.Normal or RowState.Updated)
             row.State = MatchesOriginal(row) ? RowState.Normal : RowState.Updated;
@@ -142,7 +147,10 @@ public sealed class QuroDataSet<T> where T : class
         if (row.State == RowState.Inserted)
             Remove(row);
         else
+        {
             row.State = RowState.Deleted;
+            row.Revision++;
+        }
     }
 
     /// <summary>
@@ -200,6 +208,7 @@ public sealed class QuroDataSet<T> where T : class
 
             row.Original = Snapshot(row.Item);
             row.State = RowState.Normal;
+            row.Revision++;
         }
     }
 
@@ -235,6 +244,7 @@ public sealed class QuroDataSet<T> where T : class
         foreach (var (field, value) in row.Original!)
             Fields[field].SetValue(row.Item, value);
         row.State = RowState.Normal;
+        row.Revision++;
     }
 
     private Row Find(int rowKey) =>
@@ -303,6 +313,7 @@ public sealed class QuroDataSet<T> where T : class
         public int Key { get; } = key;
         public T Item { get; } = item;
         public RowState State { get; set; } = state;
+        public int Revision { get; set; }
 
         /// <summary>조회(또는 마지막 AcceptChanges) 시점 값. 추가 행은 null.</summary>
         public Dictionary<string, object?>? Original { get; set; } = original;
