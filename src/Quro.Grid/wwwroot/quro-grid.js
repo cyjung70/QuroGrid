@@ -1,7 +1,7 @@
 // quro-grid.js — QuroGrid의 얇은 JS 층 (Spec 4.2).
 // 소유: 활성 셀(포커스)·활성 헤더·범위 선택·키보드 이동·편집 중 키 입력·클립보드 (R1).
 // 서버 호출은 편집 시작·커밋·취소·행 추가·행 삭제·붙여넣기(1회, R3)·활성 행 변경(구독 시)·정렬·컬럼 너비·이동(놓을 때)·Undo/Redo·
-// 코드도움(F4)·선택 목록 열기(Alt+↓)·체크 토글·버튼 클릭 때만 (R2).
+// 코드도움(F4)·선택 목록 열기(Alt+↓)·체크 토글·버튼 클릭·필터 패널 열기·적용·닫기 때만 (R2).
 // 셀마다 핸들러를 달지 않고 그리드 루트 하나에서 이벤트를 받아 data-row / data-field로 좌표를 해석한다 (R5).
 
 const grids = new Map();
@@ -32,7 +32,8 @@ export function init(root, dotnet, options) {
     s.onMouseMove = e => onMouseMove(s, e);
     s.onMouseUp = () => { s.dragging = false; };
     s.onCopy = e => onCopy(s, e);
-    s.onScroll = () => placePicker(s);
+    s.onScroll = () => { placePicker(s); placeFilter(s); };
+    s.onDocMouseDown = e => onDocMouseDown(s, e);
     s.onReconnect = e => onReconnectState(s, e.detail?.state);
     s.onLinkClick = e => onLinkClick(s, e);
     s.onPaste = e => onPaste(s, e);
@@ -43,6 +44,7 @@ export function init(root, dotnet, options) {
     root.addEventListener('focusout', s.onFocusOut);
     // 포커스된 div에는 copy·paste 이벤트가 오지 않을 수 있어 문서에서 받고 그리드 포커스 여부로 거른다
     document.addEventListener('mouseup', s.onMouseUp);
+    document.addEventListener('mousedown', s.onDocMouseDown, true);   // 필터 패널 밖을 누르면 닫는다
     document.addEventListener('copy', s.onCopy);
     document.addEventListener('paste', s.onPaste);
     document.addEventListener('scroll', s.onScroll, true);   // 그리드·페이지 스크롤 시 선택 목록 위치를 따라간다
@@ -65,6 +67,7 @@ export function dispose(root) {
     root.removeEventListener('focusout', s.onFocusOut);
     root.removeEventListener('mousemove', s.onMouseMove);
     document.removeEventListener('mouseup', s.onMouseUp);
+    document.removeEventListener('mousedown', s.onDocMouseDown, true);
     document.removeEventListener('copy', s.onCopy);
     document.removeEventListener('paste', s.onPaste);
     document.removeEventListener('scroll', s.onScroll, true);
@@ -102,6 +105,14 @@ function onKeyDown(s, e) {
         e.preventDefault();
         return;
     }
+    // 필터 패널 안의 키는 입력란이 받는다. Enter 적용, Esc 닫기 (A-31)
+    if (e.target.closest('.quro-filter-panel')) {
+        if (e.key === 'Enter' || e.key === 'Escape') {
+            e.preventDefault();
+            enqueue(s, () => e.key === 'Enter' ? applyFilter(s) : closeFilter(s));
+        }
+        return;
+    }
     // 선택 목록(달력·Combo 목록, MudBlazor) 안의 키는 목록이 받는다. Esc만 편집 취소.
     if (e.target.closest('.quro-picker')) {
         if (e.key === 'Escape') {
@@ -123,7 +134,17 @@ function onKeyDown(s, e) {
 
     e.preventDefault();
     const key = { key: isRowDelete(e) ? 'RowDelete' : e.key, shift: e.shiftKey, alt: e.altKey, ctrl: e.ctrlKey, char: isChar(e) };
-    enqueue(s, () => s.header ? handleHeaderKey(s, key) : handleKey(s, key));
+    enqueue(s, () => typeAheadFilter(s, key) || (s.header ? handleHeaderKey(s, key) : handleKey(s, key)));
+}
+
+/** 필터 패널이 열리는 동안 먼저 친 키는 패널이 받는다 (편집 시작 중 입력과 같음). 처리했으면 true */
+function typeAheadFilter(s, k) {
+    const input = document.activeElement;
+    if (!input || !filterPanel(s)?.contains(input)) return false;
+    if (k.char && input.type !== 'checkbox') appendText(input, k.key);
+    else if (k.key === 'Enter') return applyFilter(s).then(() => true);
+    else if (k.key === 'Escape') return closeFilter(s).then(() => true);
+    return true;
 }
 
 function onMouseDown(s, e) {
@@ -141,7 +162,24 @@ function onMouseDown(s, e) {
         setTimeout(() => { s.pickerMouseDown = false; });
         return;
     }
+    if (e.target.closest('.quro-filter-panel')) {
+        // 패널 안 입력은 브라우저가 받는다. 적용·해제 버튼만 서버 1회 (해제 = 빈 입력으로 적용)
+        const action = e.button === 0 && e.target.closest('[data-filter-action]')?.dataset.filterAction;
+        if (action) {
+            e.preventDefault();
+            enqueue(s, () => applyFilter(s, action === 'clear'));
+        }
+        return;
+    }
     if (e.button !== 0 || e.target.closest('.quro-editor')) return;
+    const filterButton = e.target.closest('.quro-head .quro-filter-button');
+    if (filterButton) {
+        e.preventDefault();   // 정렬·드래그가 아니다
+        if (!s.editing) s.root.focus({ preventScroll: true });   // 패널이 열리기 전에 친 키도 그리드가 받아 패널로 넘긴다
+        const field = filterButton.closest('[role=columnheader]').dataset.field;
+        enqueue(s, () => openFilter(s, field));
+        return;
+    }
     const handle = e.target.closest('.quro-head .quro-resize');
     if (handle) {
         startResize(s, handle.closest('[role=columnheader]'), e);
@@ -498,6 +536,7 @@ async function handleHeaderKey(s, k) {
             await s.dotnet.invokeMethodAsync('Sort', s.header, k.shift);
             return;
         case 'ArrowDown': {
+            if (k.alt) return openFilter(s, s.header);   // Alt+↓: 필터 패널 (A-31)
             if (s.options.paging) s.root.scrollTop = 0;   // 첫 행이 그려져 있지 않을 수 있다
             const first = await waitFor(() => s.root.querySelector(`.quro-body [role=row][aria-rowindex="${headerRows(s.root) + 1}"]`));
             if (!first) return;
@@ -507,6 +546,63 @@ async function handleHeaderKey(s, k) {
             return;
         }
     }
+}
+
+// ── 헤더 필터 패널 (GS-071·GS-072, A-31): 열기·적용·닫기만 서버 1회. 패널 안 입력은 브라우저에서만 (R2) ──
+
+function filterPanel(s) {
+    return s.root.querySelector('.quro-filter-panel');
+}
+
+async function openFilter(s, field) {
+    if (s.editing && !(await commit(s))) return;
+    if (!(await s.dotnet.invokeMethodAsync('OpenFilter', field))) return;
+    const panel = await waitFor(() => s.root.querySelector(`.quro-filter-panel[data-field="${CSS.escape(field)}"]`));
+    if (!panel) return;
+    placeFilter(s);
+    panel.querySelector('[data-filter]')?.focus();
+}
+
+/** 패널 입력을 모아 적용한다 (clear면 빈 입력 = 그 컬럼 해제). 해석에 실패하면 패널이 남고 그 입력으로 포커스 */
+async function applyFilter(s, clear = false) {
+    const panel = filterPanel(s);
+    if (!panel) return;
+    const field = panel.dataset.field;
+    const value = name => clear ? null : (panel.querySelector(`[data-filter=${name}]`)?.value ?? null);
+    const options = [...panel.querySelectorAll('[data-filter=value]')];
+    const input = {
+        text: value('text'), min: value('min'), max: value('max'), from: value('from'), to: value('to'),
+        values: clear || options.length === 0 ? null : options.filter(o => o.checked).map(o => o.value),
+    };
+    if (await s.dotnet.invokeMethodAsync('ApplyFilter', field, input)) {
+        s.root.focus({ preventScroll: true });
+        return;
+    }
+    const invalid = await waitFor(() => filterPanel(s)?.querySelector('[aria-invalid=true]'));
+    invalid?.focus();
+}
+
+async function closeFilter(s) {
+    if (!filterPanel(s)) return;
+    await s.dotnet.invokeMethodAsync('CloseFilter');
+    s.root.focus({ preventScroll: true });
+}
+
+/** 패널 밖(필터 버튼 제외)을 누르면 닫는다 */
+function onDocMouseDown(s, e) {
+    const panel = filterPanel(s);
+    if (!panel || panel.contains(e.target) || (s.root.contains(e.target) && e.target.closest('.quro-filter-button'))) return;
+    enqueue(s, () => filterPanel(s) ? s.dotnet.invokeMethodAsync('CloseFilter') : null);
+}
+
+/** 패널을 그 컬럼 헤더 바로 아래에 둔다 (화면 기준, 그리드 스크롤 영역에 잘리지 않게) */
+function placeFilter(s) {
+    const panel = filterPanel(s);
+    const header = panel && headers(s).find(h => h.dataset.field === panel.dataset.field);
+    if (!header) return;
+    const r = header.getBoundingClientRect();
+    panel.style.left = `${Math.max(0, Math.min(r.left, window.innerWidth - panel.offsetWidth))}px`;
+    panel.style.top = `${r.bottom}px`;
 }
 
 /** 스크린리더용 선택 표시 (GS-066): 이전 표시를 지우고 주어진 요소에 aria-selected */

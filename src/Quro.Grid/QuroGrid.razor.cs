@@ -61,6 +61,14 @@ public partial class QuroGrid<TItem> where TItem : class
     private readonly List<int> _staleRows = [];                  // 정렬·다시 조회로 버린 페이지의 행. 새 범위를 받은 뒤 놓는다
     private bool _refreshRows;                                   // 행 구성이 바뀜 → 렌더 뒤 Virtualize 다시 조회
 
+    // 헤더 필터 (GS-071~GS-073, A-31)
+    private readonly List<ColumnFilter> _filters = [];
+    private readonly HashSet<int> _filterOut = [];               // 메모리 모드: 적용 시점에 걸러진 행
+    private int _filterGeneration;                               // 거른 시점의 DataSet.Generation. 다시 조회되면 다시 거른다
+    private string? _filterField;                                // 열린 필터 패널의 컬럼
+    private FilterInput? _filterDraft;                           // 해석에 실패한 입력 (패널에 그대로 남긴다)
+    private string? _filterInvalid;                              // 해석에 실패한 입력 이름 (data-filter)
+
     [Inject] private IJSRuntime JS { get; set; } = default!;
 
     [Parameter, EditorRequired] public QuroDataSet<TItem> DataSet { get; set; } = default!;
@@ -171,7 +179,8 @@ public partial class QuroGrid<TItem> where TItem : class
                 c.CurrencyField, c.Aggregate, c.Options))
             .ToList(),
         SortColumns,
-        EffectiveCulture.Name);
+        EffectiveCulture.Name,
+        Filters);
 
     /// <summary>화면에 보이는 컬럼 (화면 순서: 고정 열 → 일반 열, 숨긴 컬럼 제외). 렌더·붙여넣기·내보내기가 쓴다.</summary>
     internal IReadOnlyList<QuroColumn> Columns
@@ -216,6 +225,7 @@ public partial class QuroGrid<TItem> where TItem : class
         {
             _refreshRows = false;
             await _virtualize.RefreshDataAsync();
+            StateHasChanged();   // RefreshDataAsync는 스스로 다시 그리지 않는다 (호스트가 그린다). 행은 Revision이 같으면 건너뛴다 (R4)
         }
 
         if (firstRender)
@@ -888,7 +898,7 @@ public partial class QuroGrid<TItem> where TItem : class
             if (_pages.ContainsKey(page))
                 continue;
 
-            var result = await ItemsProvider!(new GridItemsRequest(page * PageSize, PageSize, SortColumns, cancellationToken));
+            var result = await ItemsProvider!(new GridItemsRequest(page * PageSize, PageSize, SortColumns, cancellationToken, Filters));
             var totalsChanged = !Equals(_totals, result.Totals) || _total != result.TotalCount;
             _total = result.TotalCount;
             _totals = result.Totals;
@@ -1002,6 +1012,259 @@ public partial class QuroGrid<TItem> where TItem : class
         Relayout();   // 모든 행의 셀 너비가 바뀐다
         await OnColumnResized.InvokeAsync(new ColumnResizedArgs(col.Field, width));
         StateHasChanged();
+    }
+
+    // ── 헤더 필터 (GS-071~GS-073, Addendum A-31): 패널 안 입력은 브라우저에서만, 열기·적용 때 1회씩 (R2) ──
+
+    /// <summary>사용자가 필터 패널에서 조건을 적용한 뒤 (Addendum A-31).</summary>
+    [Parameter] public EventCallback<FilterChangedArgs> OnFilterChanged { get; set; }
+
+    /// <summary>현재 필터 (컬럼마다 하나, 적용한 순서). 비어 있으면 거르지 않는다.</summary>
+    public IReadOnlyList<ColumnFilter> Filters => _filters.ToList();
+
+    /// <summary>필터 패널 열기 (필터 버튼·헤더에서 Alt+↓). Button 컬럼이면 열린 패널을 닫고 false.</summary>
+    [JSInvokable]
+    public bool OpenFilter(string field)
+    {
+        var col = Column(field);
+        _filterDraft = null;
+        _filterInvalid = null;
+        _filterField = col.Type == CellType.Button ? null : col.Field;
+        StateHasChanged();
+        return _filterField is not null;
+    }
+
+    [JSInvokable]
+    public void CloseFilter()
+    {
+        _filterField = null;
+        _filterDraft = null;
+        _filterInvalid = null;
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// 패널 입력을 적용한다 (JS가 1회 호출). 숫자는 사용자 로캘, 날짜는 ISO로 해석하고, 실패하면 그 입력을
+    /// aria-invalid로 표시하고 패널을 연 채 false. 모두 비었거나 값 목록을 전부 고르면 그 컬럼의 필터를 푼다.
+    /// 성공하면 패널을 닫고 OnFilterChanged.
+    /// </summary>
+    [JSInvokable]
+    public async Task<bool> ApplyFilter(string field, FilterInput input)
+    {
+        var col = Column(field);
+        if (col.Type == CellType.Button)
+            return false;
+        if (!TryBuildFilter(col, input, out var filter, out var invalid))
+        {
+            _filterField = col.Field;
+            _filterDraft = input;
+            _filterInvalid = invalid;
+            StateHasChanged();
+            return false;
+        }
+
+        var index = _filters.FindIndex(f => f.Field == col.Field);
+        if (filter is null)
+        {
+            if (index >= 0)
+                _filters.RemoveAt(index);
+        }
+        else if (index >= 0)
+            _filters[index] = filter;
+        else
+            _filters.Add(filter);
+
+        _filterField = null;
+        _filterDraft = null;
+        _filterInvalid = null;
+        FiltersChanged();
+        await OnFilterChanged.InvokeAsync(new FilterChangedArgs(Filters));
+        StateHasChanged();
+        return true;
+    }
+
+    /// <summary>앱에서 필터를 지정한다 (OnFilterChanged는 발생하지 않음). 빈 목록이면 전체 해제.</summary>
+    public void SetFilters(IReadOnlyList<ColumnFilter> filters)
+    {
+        _filters.Clear();
+        _filters.AddRange(filters
+            .Where(f => _columns.Any(c => c.Field == f.Field && c.Type != CellType.Button))
+            .DistinctBy(f => f.Field));
+        _filterField = null;
+        FiltersChanged();
+        StateHasChanged();
+    }
+
+    public void ClearFilters() => SetFilters([]);
+
+    /// <summary>필터가 바뀜: 페이징이면 조건으로 처음부터 다시 조회, 아니면 지금 행을 거른다.</summary>
+    private void FiltersChanged()
+    {
+        if (Paging)
+            ResetPages();
+        else
+            ApplyFilterToRows();
+        _ensureActive = true;   // 활성 행이 걸러졌으면 남은 행으로 (렌더 반영 뒤)
+    }
+
+    /// <summary>
+    /// 지금 행 중 조건에 맞지 않는 행을 기억한다 (메모리 모드). 적용한 뒤 편집·추가한 행은 다시 거르지 않는다
+    /// (정렬 A-22와 같은 원칙). 다시 조회되면 다시 적용한다.
+    /// </summary>
+    private void ApplyFilterToRows()
+    {
+        _filterGeneration = DataSet.Generation;
+        _filterOut.Clear();
+        if (_filters.Count == 0)
+            return;
+        var filters = _filters.Select(f => (Filter: f, Column: Column(f.Field))).ToList();
+        _filterOut.UnionWith(DataSet.RowKeys.Where(k => !filters.All(f => Matches(k, f.Column, f.Filter))));
+    }
+
+    private bool FilteredOut(int rowKey)
+    {
+        if (_filters.Count == 0 || Paging)
+            return false;
+        if (_filterGeneration != DataSet.Generation)
+            ApplyFilterToRows();
+        return _filterOut.Contains(rowKey);
+    }
+
+    private bool Matches(int rowKey, QuroColumn col, ColumnFilter filter)
+    {
+        var value = DataSet.GetValue(rowKey, col.Field);
+        if (filter.Contains is { } text
+            && (value is null || !Format(value, col).Contains(text, StringComparison.CurrentCultureIgnoreCase)
+                && !(value.ToString() ?? "").Contains(text, StringComparison.OrdinalIgnoreCase)))
+            return false;
+        if (filter.Min is not null || filter.Max is not null)
+        {
+            if (value is null)
+                return false;
+            var number = Number(value);
+            if (number < filter.Min || number > filter.Max)
+                return false;
+        }
+        if (filter.From is not null || filter.To is not null)
+        {
+            DateOnly? date = value switch
+            {
+                DateOnly d => d,
+                DateTime d => DateOnly.FromDateTime(d),
+                _ => null,
+            };
+            if (date is null || date < filter.From || date > filter.To)
+                return false;
+        }
+        if (filter.Values is { } values && !values.Contains(value?.ToString() ?? ""))
+            return false;
+        return true;
+    }
+
+    /// <summary>패널 입력 → 조건. 비어 있으면 filter는 null. 해석 실패면 false와 그 입력 이름(data-filter).</summary>
+    private bool TryBuildFilter(QuroColumn col, FilterInput input, out ColumnFilter? filter, out string? invalid)
+    {
+        filter = null;
+        invalid = null;
+        var result = new ColumnFilter(col.Field);
+        switch (FilterKind(col))
+        {
+            case "number":
+                if (!TryParseFilterNumber(input.Min, out var min))
+                    invalid = "min";
+                else if (!TryParseFilterNumber(input.Max, out var max))
+                    invalid = "max";
+                else if (min is not null || max is not null)
+                    result = result with { Min = min, Max = max };
+                break;
+            case "date":
+                if (!TryParseFilterDate(input.From, out var from))
+                    invalid = "from";
+                else if (!TryParseFilterDate(input.To, out var to))
+                    invalid = "to";
+                else if (from is not null || to is not null)
+                    result = result with { From = from, To = to };
+                break;
+            case "values":
+                var all = FilterValues(col).Select(v => v.Value).ToList();
+                var chosen = (input.Values ?? []).Where(all.Contains).Distinct().ToList();
+                if (chosen.Count > 0 && chosen.Count < all.Count)   // 전부 고름·아무것도 고르지 않음 = 거르지 않음
+                    result = result with { Values = all.Where(chosen.Contains).ToList() };
+                break;
+            default:
+                if (!string.IsNullOrWhiteSpace(input.Text))
+                    result = result with { Contains = input.Text.Trim() };
+                break;
+        }
+        if (invalid is not null)
+            return false;
+        if (result != new ColumnFilter(col.Field))
+            filter = result;
+        return true;
+    }
+
+    private bool TryParseFilterNumber(string? text, out decimal? value)
+    {
+        value = null;
+        if (string.IsNullOrWhiteSpace(text))
+            return true;
+        if (!decimal.TryParse(text.Trim(), NumberStyles.Number, EffectiveCulture, out var number))
+            return false;
+        value = number;
+        return true;
+    }
+
+    private static bool TryParseFilterDate(string? text, out DateOnly? value)
+    {
+        value = null;
+        if (string.IsNullOrWhiteSpace(text))
+            return true;
+        if (!DateOnly.TryParseExact(text.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+            return false;
+        value = date;
+        return true;
+    }
+
+    /// <summary>패널 입력 종류: text(Text·Popup) · number(Number·Currency) · date · values(Combo·Check)</summary>
+    internal static string FilterKind(QuroColumn col) => col.Type switch
+    {
+        CellType.Number or CellType.Currency => "number",
+        CellType.Date => "date",
+        CellType.Combo or CellType.Check => "values",
+        _ => "text",
+    };
+
+    /// <summary>값 목록 (Combo는 옵션, Check는 체크·해제). Value는 언어 무관 문자열</summary>
+    internal IReadOnlyList<(string Value, string Text)> FilterValues(QuroColumn col) => col.Type switch
+    {
+        CellType.Combo => (col.Options ?? []).Select(o => (o.Value?.ToString() ?? "", o.Text)).ToList(),
+        CellType.Check =>
+        [
+            (col.CheckedValue?.ToString() ?? "", Text(GridKeys.FilterChecked)),
+            (col.UncheckedValue?.ToString() ?? "", Text(GridKeys.FilterUnchecked)),
+        ],
+        _ => [],
+    };
+
+    internal QuroColumn? FilterColumn => _filterField is null ? null : Column(_filterField);
+
+    internal ColumnFilter? FilterOf(QuroColumn col) => _filters.Find(f => f.Field == col.Field);
+
+    internal string? FilterInvalid(string input) => _filterInvalid == input ? "true" : null;
+
+    /// <summary>패널에 보일 입력 값: 해석에 실패한 입력이 있으면 그 입력, 아니면 현재 조건 (숫자는 사용자 로캘, 날짜는 ISO)</summary>
+    internal FilterInput FilterDraft(QuroColumn col)
+    {
+        if (_filterDraft is { } draft)
+            return draft;
+        var f = FilterOf(col);
+        return new FilterInput(
+            f?.Contains,
+            f?.Min?.ToString(EffectiveCulture),
+            f?.Max?.ToString(EffectiveCulture),
+            f?.From?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            f?.To?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            f?.Values ?? FilterValues(col).Select(v => v.Value).ToList());
     }
 
     // ── Undo / Redo (GS-076~GS-078, Addendum A-33): 이력은 DataSet에 있다. 이벤트는 내지 않는다 ──
@@ -1300,10 +1563,10 @@ public partial class QuroGrid<TItem> where TItem : class
     private int BodyRowCount() =>
         Paging ? InsertedRowKeys().Count + (_total ?? 0) : VisibleRowKeys().Count();
 
+    /// <summary>메모리 모드의 화면 행 (화면 순서): 삭제 표시 행 처리(O-02)와 필터(A-31)를 거친다</summary>
     private IEnumerable<int> VisibleRowKeys() =>
-        DeletedRows == DeletedRowDisplay.Hide
-            ? OrderedRowKeys().Where(k => DataSet.GetState(k) != RowState.Deleted)
-            : OrderedRowKeys();
+        OrderedRowKeys().Where(k => !FilteredOut(k)
+                                    && (DeletedRows != DeletedRowDisplay.Hide || DataSet.GetState(k) != RowState.Deleted));
 
     internal string Text(string key) => Localizer is null ? key : Localizer[key].Value;
 
@@ -1387,7 +1650,7 @@ public partial class QuroGrid<TItem> where TItem : class
         if (col.Aggregate != Aggregate.Sum)
             return "";
 
-        var keys = DataSet.RowKeys.Where(k => DataSet.GetState(k) != RowState.Deleted).ToList();
+        var keys = DataSet.RowKeys.Where(k => DataSet.GetState(k) != RowState.Deleted && !FilteredOut(k)).ToList();   // 보이는 행 (A-31)
         decimal sum;
         if (Paging)
         {

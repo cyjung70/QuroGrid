@@ -148,6 +148,24 @@ public static class GridKeys
 
     /// <summary>미저장 변경이 있는 채로 앱 안 화면 이동 시 확인</summary>
     public const string LeaveUnsaved = "quro.leave.unsaved";
+
+    // 헤더 필터 패널 (A-31)
+
+    /// <summary>헤더의 필터 버튼 (스크린리더 이름)</summary>
+    public const string FilterOpen = "quro.filter.open";
+    public const string FilterApply = "quro.filter.apply";
+    public const string FilterClear = "quro.filter.clear";
+
+    /// <summary>텍스트 입력 이름 (포함)</summary>
+    public const string FilterContains = "quro.filter.contains";
+    public const string FilterMin = "quro.filter.min";
+    public const string FilterMax = "quro.filter.max";
+    public const string FilterFrom = "quro.filter.from";
+    public const string FilterTo = "quro.filter.to";
+
+    /// <summary>Check 컬럼 값 목록의 체크·해제</summary>
+    public const string FilterChecked = "quro.filter.checked";
+    public const string FilterUnchecked = "quro.filter.unchecked";
 }
 
 /// <summary>

@@ -236,3 +236,84 @@
     background: transparent;
     outline: none;
 }
+
+/* 헤더 필터 (A-31): 헤더 오른쪽 버튼(▽, 필터 중이면 채움 ▼) · 헤더 아래 패널 */
+.quro-header:has(.quro-filter-button) {
+    padding-right: 20px;
+}
+
+.quro-filter-button {
+    position: absolute;
+    top: 0;
+    right: 6px;
+    width: 14px;
+    height: 100%;
+    opacity: 0.45;
+    cursor: pointer;
+    background: currentColor;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M1.5 2.5h9L7 6.5v3.5l-2-1V6.5z' fill='none' stroke='black' stroke-width='1.2'/%3E%3C/svg%3E") center / 12px no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M1.5 2.5h9L7 6.5v3.5l-2-1V6.5z' fill='none' stroke='black' stroke-width='1.2'/%3E%3C/svg%3E") center / 12px no-repeat;
+}
+
+.quro-filter-button:hover,
+[data-filtered=true] > .quro-filter-button {
+    opacity: 1;
+}
+
+[data-filtered=true] > .quro-filter-button {
+    background: var(--qg-active);
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M1.5 2.5h9L7 6.5v3.5l-2-1V6.5z' fill='black' stroke='black' stroke-width='1.2'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M1.5 2.5h9L7 6.5v3.5l-2-1V6.5z' fill='black' stroke='black' stroke-width='1.2'/%3E%3C/svg%3E");
+}
+
+.quro-filter-panel {
+    position: fixed;
+    z-index: 1400;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 180px;
+    padding: 8px;
+    background: var(--qg-bg);
+    color: var(--qg-text);
+    border: 1px solid var(--qg-border);
+    box-shadow: 0 4px 12px var(--qg-shadow);
+}
+
+.quro-filter-input {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 2px 4px;
+    font: inherit;
+    color: inherit;
+    background: var(--qg-bg);
+    border: 1px solid var(--qg-border);
+}
+
+.quro-filter-input[aria-invalid=true] {
+    border-color: var(--qg-error-line);
+    background: var(--qg-error);
+}
+
+.quro-filter-option {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    cursor: pointer;
+}
+
+.quro-filter-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+}
+
+.quro-filter-actions button {
+    padding: 2px 10px;
+    font: inherit;
+    color: inherit;
+    background: var(--qg-head-bg);
+    border: 1px solid var(--qg-border);
+    border-radius: 3px;
+    cursor: pointer;
+}
