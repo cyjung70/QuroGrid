@@ -1,0 +1,143 @@
+@inherits GridTestContext
+
+@code {
+    // GS-051 · GS-052 (그리드 쪽): 서버측 페이징 (R6, O-04, Addendum A-24)
+    // 그리드는 앱의 조회 함수를 PageSize 단위로 부르고, 보이는 범위만 DataSet에 적재한다.
+    // (bUnit은 Virtualize의 JS를 흉내 내 전체 범위를 요청한다. 화면 범위만 적재하는 것은 E2E에서 확인)
+
+    private static readonly CultureInfo En = new("en-US");
+
+    /// <summary>가짜 조회 API: LineNo 1..N, 수량 = LineNo. 정렬은 Qty만 지원. 합계는 서버 값 기준.</summary>
+    private sealed class FakeServer(int count)
+    {
+        private readonly PoLine[] _rows = Enumerable.Range(1, count)
+            .Select(n => new PoLine { LineNo = n, ItemCode = $"I{n:00000}", Qty = n, Version = 1 }).ToArray();
+
+        public List<GridItemsRequest> Requests { get; } = [];
+
+        public decimal QtyTotal => _rows.Sum(r => r.Qty);
+
+        public Task<GridItemsResult<PoLine>> Provide(GridItemsRequest request)
+        {
+            Requests.Add(request);
+            IEnumerable<PoLine> query = _rows;
+            if (request.Sort is [{ Field: "Qty" } s, ..])
+                query = s.Direction == SortDirection.Ascending ? query.OrderBy(r => r.Qty) : query.OrderByDescending(r => r.Qty);
+            var page = query.Skip(request.StartIndex).Take(request.Count)
+                .Select(r => new PoLine { LineNo = r.LineNo, ItemCode = r.ItemCode, Qty = r.Qty, Version = r.Version })
+                .ToList();
+            return Task.FromResult(new GridItemsResult<PoLine>(page, _rows.Length,
+                new Dictionary<string, decimal> { ["Qty"] = QtyTotal }));
+        }
+    }
+
+    private static QuroDataSet<PoLine> Paged() => new(line => line.LineNo);
+
+    private IRenderedComponent<QuroGrid<PoLine>> RenderPaged(QuroDataSet<PoLine> ds, FakeServer server,
+        EventCallback<SortChangedArgs> onSort = default) =>
+        Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" ItemsProvider="server.Provide" PageSize="100" ShowFooter="true"
+                                            Culture="En" OnSortChanged="onSort">
+                                     <QuroColumn Field="LineNo" HeaderKey="mm.line_no" Type="CellType.Number" ReadOnly="true" />
+                                     <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" Aggregate="Aggregate.Sum" />
+                                 </QuroGrid>);
+
+    private static int[] Rendered(IRenderedComponent<QuroGrid<PoLine>> cut) =>
+        cut.FindAll("[role=row][data-row]").Select(r => int.Parse(r.GetAttribute("data-row")!)).ToArray();
+
+    /// <summary>LineNo의 행 키 (적재된 행에서)</summary>
+    private static int KeyOf(QuroDataSet<PoLine> ds, int lineNo) =>
+        ds.RowKeys.Single(k => ds.GetItem(k).LineNo == lineNo && ds.GetState(k) != RowState.Inserted);
+
+    private static string Footer(IRenderedComponent<QuroGrid<PoLine>> cut) =>
+        cut.Find("[data-footer-field=Qty]").TextContent.Trim();
+
+    /// <summary>GS-051: 조회는 PageSize 단위(시작 행이 PageSize의 배수), 정렬 없음, 조회 순서대로 표시</summary>
+    [Fact]
+    public void GS_051_RequestsPageAlignedChunks()
+    {
+        var server = new FakeServer(250);
+        var ds = Paged();
+        var cut = RenderPaged(ds, server);
+
+        cut.WaitForAssertion(() => Assert.NotEmpty(Rendered(cut)));
+        Assert.All(server.Requests, r => Assert.Equal((0, 100), (r.StartIndex % 100, r.Count)));
+        Assert.All(server.Requests, r => Assert.Empty(r.Sort));
+        Assert.Equal(server.Requests.Count, server.Requests.Select(r => r.StartIndex).Distinct().Count());   // 같은 페이지를 다시 부르지 않는다
+        Assert.Equal(1, ds.GetItem(Rendered(cut)[0]).LineNo);
+        Assert.Contains("quro-paged", cut.Find("[role=grid]").ClassList);
+    }
+
+    /// <summary>GS-052: 합계 = 서버 합계 + 저장 전 변경 (수정 차이, 추가 행 값, 삭제 행 원래 값) (A-24)</summary>
+    [Fact]
+    public async Task GS_052_Footer_ServerTotalPlusChanges()
+    {
+        var server = new FakeServer(250);
+        var ds = Paged();
+        var cut = RenderPaged(ds, server);
+        cut.WaitForAssertion(() => Assert.Equal(server.QtyTotal.ToString("#,0", En), Footer(cut)));
+
+        await cut.InvokeAsync(() => cut.Instance.CommitEdit(KeyOf(ds, 1), "Qty", "6"));    // +5
+        var added = await cut.InvokeAsync(() => cut.Instance.AddRow());
+        await cut.InvokeAsync(() => cut.Instance.CommitEdit(added, "Qty", "7"));           // +7
+        await cut.InvokeAsync(() => cut.Instance.CommitEdit(KeyOf(ds, 3), "Qty", "30"));
+        await cut.InvokeAsync(() => cut.Instance.DeleteRows([KeyOf(ds, 3)]));             // 원래 값 3을 뺀다
+
+        cut.WaitForAssertion(() => Assert.Equal((server.QtyTotal + 5 + 7 - 3).ToString("#,0", En), Footer(cut)));
+    }
+
+    /// <summary>GS-052: 페이징 중 추가 행은 맨 위 (A-24). 삭제 표시 행은 자리에 남아 취소선</summary>
+    [Fact]
+    public async Task GS_052_AddedRowsOnTop_DeletedRowsStay()
+    {
+        var server = new FakeServer(250);
+        var ds = Paged();
+        var cut = RenderPaged(ds, server);
+        cut.WaitForAssertion(() => Assert.NotEmpty(Rendered(cut)));
+        var second = KeyOf(ds, 2);
+
+        var first = await cut.InvokeAsync(() => cut.Instance.AddRow(afterRowKey: second));
+        var next = await cut.InvokeAsync(() => cut.Instance.AddRow());
+        await cut.InvokeAsync(() => cut.Instance.DeleteRows([second]));
+
+        cut.WaitForAssertion(() => Assert.Equal([first, next], Rendered(cut).Take(2)));
+        Assert.Contains("quro-deleted", cut.Find($"[role=row][data-row='{second}']").ClassList);
+    }
+
+    /// <summary>GS-050 + 페이징: 정렬은 조회 함수로 넘겨 다시 조회. 변경 행은 다시 조회해도 변경 값 유지 (A-24)</summary>
+    [Fact]
+    public async Task GS_050_Paging_SortRequeries_KeepsChanges()
+    {
+        var server = new FakeServer(250);
+        var ds = Paged();
+        IReadOnlyList<SortColumn>? notified = null;
+        var cut = RenderPaged(ds, server, EventCallback.Factory.Create<SortChangedArgs>(this, e => notified = e.Sort));
+        cut.WaitForAssertion(() => Assert.NotEmpty(Rendered(cut)));
+        await cut.InvokeAsync(() => cut.Instance.CommitEdit(KeyOf(ds, 1), "Qty", "999"));
+        var before = server.Requests.Count;
+
+        await cut.InvokeAsync(() => cut.Instance.Sort("Qty", additive: false));
+        await cut.InvokeAsync(() => cut.Instance.Sort("Qty", additive: false));   // 내림차순: 서버 수량 250이 맨 위
+
+        var sorted = server.Requests.Skip(before).ToList();
+        Assert.Contains(sorted, r => r.StartIndex == 0 && r.Sort is [{ Field: "Qty", Direction: SortDirection.Descending }]);
+        Assert.Equal([new SortColumn("Qty", SortDirection.Descending)], notified);
+        cut.WaitForAssertion(() => Assert.Equal(250, ds.GetItem(Rendered(cut)[0]).LineNo));
+        Assert.Equal(999m, ds.GetValue(KeyOf(ds, 1), "Qty"));                     // 변경 유지
+        Assert.Equal(RowState.Updated, ds.GetState(KeyOf(ds, 1)));
+    }
+
+    /// <summary>GS-052: 다시 조회(ReloadAsync) — 변경이 없는 적재 행은 놓고 처음부터 다시 부른다</summary>
+    [Fact]
+    public async Task GS_052_ReloadAsync_RequeriesFromStart()
+    {
+        var server = new FakeServer(250);
+        var ds = Paged();
+        var cut = RenderPaged(ds, server);
+        cut.WaitForAssertion(() => Assert.NotEmpty(Rendered(cut)));
+        var before = server.Requests.Count;
+
+        await cut.InvokeAsync(() => cut.Instance.ReloadAsync());
+
+        cut.WaitForAssertion(() => Assert.Contains(server.Requests.Skip(before), r => r.StartIndex == 0));
+    }
+}

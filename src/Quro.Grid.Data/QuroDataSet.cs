@@ -20,14 +20,72 @@ public sealed class QuroDataSet<T> where T : class
     private readonly Dictionary<string, FieldRule> _rules = [];
     private int _nextLoadedKey = 1;
     private int _nextInsertedKey = -1;   // 추가 행은 음수 임시 키 (Spec 4.4 tempKey)
+    private readonly Func<T, object>? _idOf;                 // 행 ID (서버측 페이징, A-24)
+    private readonly Dictionary<object, int> _keyById = [];  // 적재한(추가 행 아닌) 행의 ID → 행 키
+    private readonly Dictionary<int, object> _idByKey = [];
+
+    public QuroDataSet()
+    {
+    }
+
+    /// <summary>
+    /// 서버측 페이징용 (R6, Addendum A-24). <paramref name="idSelector"/>는 행 ID(기본 키).
+    /// 같은 행을 다시 적재해도 같은 행 키를 쓰고, 변경 행은 다시 적재해도 변경 값을 유지한다.
+    /// </summary>
+    public QuroDataSet(Func<T, object> idSelector) => _idOf = idSelector;
 
     // ── Spec 4.4에 없는 보조 API (행 적재·조회, 검증 규칙 등록) ──
+
+    /// <summary>
+    /// 조회한 한 페이지를 합친다 (서버측 페이징, GS-052). 행 키를 조회 순서대로 돌려준다.
+    /// 이미 가진 행(같은 ID)은 그 행 키를 쓰고 값은 바꾸지 않는다 (변경 유지). 행 ID 선택자가 필요하다.
+    /// </summary>
+    public IReadOnlyList<int> LoadPage(IEnumerable<T> rows)
+    {
+        if (_idOf is null)
+            throw new InvalidOperationException("LoadPage에는 행 ID 선택자가 필요합니다 (QuroDataSet(idSelector)).");
+
+        var keys = new List<int>();
+        foreach (var item in rows)
+        {
+            if (_keyById.TryGetValue(_idOf(item), out var known))
+            {
+                // 가진 행(변경 행 포함)은 그대로, 놓았던 행은 같은 행 키로 다시 적재
+                if (!_byKey.ContainsKey(known))
+                    Append(new Row(known, item, RowState.Normal, Snapshot(item)));
+                keys.Add(known);
+                continue;
+            }
+            var row = new Row(_nextLoadedKey++, item, RowState.Normal, Snapshot(item));
+            Append(row);
+            keys.Add(row.Key);
+        }
+        return keys;
+    }
+
+    /// <summary>
+    /// 화면에서 벗어난 행을 놓는다 (R6). 변경 행(Inserted·Updated·Deleted)은 남긴다.
+    /// 행 ID → 행 키 색인은 남겨, 다시 적재하면 같은 행 키를 쓴다 (화면의 활성 셀·선택 유지).
+    /// </summary>
+    public void Release(IEnumerable<int> rowKeys)
+    {
+        var drop = rowKeys.ToHashSet();
+        _rows.RemoveAll(row =>
+        {
+            if (row.State != RowState.Normal || !drop.Contains(row.Key))
+                return false;
+            _byKey.Remove(row.Key);
+            return true;
+        });
+    }
 
     /// <summary>조회 결과를 적재한다. 모든 행은 Normal.</summary>
     public void Load(IEnumerable<T> rows)
     {
         _rows.Clear();
         _byKey.Clear();
+        _keyById.Clear();
+        _idByKey.Clear();
         _nextLoadedKey = 1;
         _nextInsertedKey = -1;
         Generation++;
@@ -246,12 +304,26 @@ public sealed class QuroDataSet<T> where T : class
     {
         _rows.Add(row);
         _byKey.Add(row.Key, row);
+        if (_idOf is not null && row.State != RowState.Inserted)
+        {
+            var id = _idOf(row.Item);
+            _keyById[id] = row.Key;
+            _idByKey[row.Key] = id;
+        }
     }
 
     private void Remove(Row row)
     {
         _rows.Remove(row);
+        Forget(row);
+    }
+
+    /// <summary>키·ID 색인에서 뺀다 (목록에서는 호출한 쪽이 뺀다).</summary>
+    private void Forget(Row row)
+    {
         _byKey.Remove(row.Key);
+        if (_idByKey.Remove(row.Key, out var id))
+            _keyById.Remove(id);
     }
 
     private void Revert(Row row)

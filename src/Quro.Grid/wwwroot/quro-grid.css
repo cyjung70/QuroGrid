@@ -74,6 +74,17 @@
     opacity: 0.6;
 }
 
+/* 서버측 페이징 (A-24): 가상 스크롤은 행 높이가 일정해야 한다. 합계 행은 아래에 붙여 둔다 */
+.quro-paged .quro-body .quro-row {
+    height: var(--quro-row-height, 28px);
+}
+
+.quro-foot {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+}
+
 /* 헤더: 클릭 정렬(▲▼, 다중이면 순번), 오른쪽 경계 드래그 리사이즈 (A-22·A-23) */
 .quro-header {
     cursor: pointer;

@@ -469,13 +469,16 @@ async function moveEnter(s) {
         moved = moveToEditable(s, 1);
     }
 
-    if (!moved && s.options.addRowOnLastEnter) await addRow(s, null);
+    // 페이징 중에는 그려진 마지막 행이 실제 마지막 행이 아닐 수 있어 새 행을 추가하지 않는다 (A-24)
+    if (!moved && s.options.addRowOnLastEnter && !s.options.paging) await addRow(s, null);
 }
 
 /** 새 행을 추가하고(서버) 그 행의 첫 편집 가능 셀로. afterRow가 null이면 목록 끝. */
 async function addRow(s, afterRow) {
     const key = await s.dotnet.invokeMethodAsync('AddRow', afterRow);
+    if (s.options.paging) s.root.scrollTop = 0;   // 페이징 중 추가 행은 맨 위 (A-24)
     const row = await waitFor(() => s.root.querySelector(`.quro-body [role=row][data-row="${key}"]`));
+    if (!row) return;
     const first = cellsOf(row).find(editable);
     if (first) activate(s, key, first.dataset.field);
 }
