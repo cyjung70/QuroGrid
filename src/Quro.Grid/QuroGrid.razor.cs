@@ -291,6 +291,7 @@ public partial class QuroGrid<TItem> where TItem : class
     [JSInvokable]
     public async Task<bool> CommitEdit(int rowKey, string field, string? text)
     {
+        using var step = DataSet.BeginUndoStep();   // 사용자 동작 하나 = Undo 한 단계 (앱의 이벤트 처리 포함, A-33)
         var col = Column(field);
         if (col.ReadOnly)
             return false;
@@ -322,6 +323,7 @@ public partial class QuroGrid<TItem> where TItem : class
     [JSInvokable]
     public async Task<bool> RequestPopup(int rowKey, string field, string? text)
     {
+        using var step = DataSet.BeginUndoStep();   // 사용자 동작 하나 = Undo 한 단계 (앱의 이벤트 처리 포함, A-33)
         var col = Column(field);
         if (col.Type != CellType.Popup || !Editable(rowKey, col))
             return false;
@@ -395,6 +397,7 @@ public partial class QuroGrid<TItem> where TItem : class
 
     private async Task PickValue(object? value)
     {
+        using var step = DataSet.BeginUndoStep();   // 사용자 동작 하나 = Undo 한 단계 (앱의 이벤트 처리 포함, A-33)
         var (rowKey, field) = _picker!.Value;
         _picker = null;
         if (await ApplyValue(rowKey, field, value))
@@ -409,6 +412,7 @@ public partial class QuroGrid<TItem> where TItem : class
     [JSInvokable]
     public async Task<bool> ToggleCheck(int rowKey, string field)
     {
+        using var step = DataSet.BeginUndoStep();   // 사용자 동작 하나 = Undo 한 단계 (앱의 이벤트 처리 포함, A-33)
         var col = Column(field);
         if (col.Type != CellType.Check || !Editable(rowKey, col))
             return false;
@@ -480,6 +484,7 @@ public partial class QuroGrid<TItem> where TItem : class
     [JSInvokable]
     public async Task<int> AddRow(int? afterRowKey = null)
     {
+        using var step = DataSet.BeginUndoStep();   // 사용자 동작 하나 = Undo 한 단계 (앱의 이벤트 처리 포함, A-33)
         var key = await AddRowCore(after: afterRowKey);
         StateHasChanged();
         return key;
@@ -492,6 +497,7 @@ public partial class QuroGrid<TItem> where TItem : class
     [JSInvokable]
     public async Task<IReadOnlyList<int>> CopyRows(IReadOnlyList<int> rowKeys)
     {
+        using var step = DataSet.BeginUndoStep();   // 사용자 동작 하나 = Undo 한 단계 (앱의 이벤트 처리 포함, A-33)
         var copies = new List<int>();
         _batch++;
         try
@@ -518,6 +524,7 @@ public partial class QuroGrid<TItem> where TItem : class
     [JSInvokable]
     public async Task<int> DeleteRowRange(int fromIndex, int toIndex)
     {
+        using var step = DataSet.BeginUndoStep();   // 사용자 동작 하나 = Undo 한 단계 (앱의 이벤트 처리 포함, A-33)
         var (from, to) = (Math.Min(fromIndex, toIndex), Math.Max(fromIndex, toIndex));
         var keys = Paging
             ? await PagedRowsBetween(from, to)
@@ -564,6 +571,7 @@ public partial class QuroGrid<TItem> where TItem : class
     [JSInvokable]
     public async Task<int> DeleteRows(IReadOnlyList<int> rowKeys)
     {
+        using var step = DataSet.BeginUndoStep();   // 사용자 동작 하나 = Undo 한 단계 (앱의 이벤트 처리 포함, A-33)
         var deleted = new List<int>();
         _batch++;
         try
@@ -607,6 +615,7 @@ public partial class QuroGrid<TItem> where TItem : class
     [JSInvokable]
     public async Task<bool> Paste(int startRowKey, string startField, string[][] cells)
     {
+        using var step = DataSet.BeginUndoStep();   // 사용자 동작 하나 = Undo 한 단계 (앱의 이벤트 처리 포함, A-33)
         var args = new PastingArgs(startRowKey, startField, cells);
         await OnPasting.InvokeAsync(args);
         if (args.Cancel)
@@ -993,6 +1002,26 @@ public partial class QuroGrid<TItem> where TItem : class
         Relayout();   // 모든 행의 셀 너비가 바뀐다
         await OnColumnResized.InvokeAsync(new ColumnResizedArgs(col.Field, width));
         StateHasChanged();
+    }
+
+    // ── Undo / Redo (GS-076~GS-078, Addendum A-33): 이력은 DataSet에 있다. 이벤트는 내지 않는다 ──
+
+    /// <summary>Ctrl+Z (JS가 호출, 1회). 마지막 사용자 동작을 되돌린다. 되돌릴 것이 없으면 false.</summary>
+    [JSInvokable]
+    public Task<bool> Undo() => Task.FromResult(Replay(DataSet.Undo));
+
+    /// <summary>Ctrl+Y · Ctrl+Shift+Z (JS가 호출, 1회). 되돌린 동작을 다시 한다.</summary>
+    [JSInvokable]
+    public Task<bool> Redo() => Task.FromResult(Replay(DataSet.Redo));
+
+    private bool Replay(Func<bool> action)
+    {
+        if (!action())
+            return false;
+        _ensureActive = true;        // 되살리거나 없앤 행 때문에 활성 셀이 사라졌을 수 있다
+        _refreshRows = Paging;       // 추가 행이 생기거나 빠짐 → 가상 스크롤 다시 조회
+        StateHasChanged();
+        return true;
     }
 
     // ── 컬럼 숨김·이동·레이아웃 (GS-067~GS-069, P1) ──

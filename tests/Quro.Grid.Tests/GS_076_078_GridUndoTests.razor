@@ -1,0 +1,75 @@
+@inherits GridTestContext
+
+@code {
+    // GS-076~GS-078 그리드 쪽 (Addendum A-33): 사용자 동작 하나(앱의 OnCellValueChanged 재계산 포함)가 Undo 한 단계.
+    // Ctrl+Z / Ctrl+Y는 quro-grid.js가 받아 Undo·Redo를 1회 부른다 (E2E에서 확인).
+
+    private static string CellText(IRenderedComponent<GridHost> host, int row, string field) =>
+        host.Find($"[role=row][data-row='{row}'] [data-field={field}]").TextContent.Trim();
+
+    /// <summary>GS-076: 커밋과 앱의 금액 재계산이 한 단계. 되돌리면 둘 다, 다시 하면 둘 다</summary>
+    [Fact]
+    public async Task GS_076_CommitWithAppRecalc_IsOneStep()
+    {
+        var ds = TestData.ThreeLines();
+        var row = ds.RowKeys[0];
+        var host = Render<GridHost>(p => p.Add(h => h.DataSet, ds));
+        var grid = host.Instance.Grid;
+        await host.InvokeAsync(() => grid.BeginEdit(row, "Qty"));
+        await host.InvokeAsync(() => grid.CommitEdit(row, "Qty", "7"));
+        Assert.Equal("17,500", CellText(host, row, "Amount"));
+
+        Assert.True(await host.InvokeAsync(() => grid.Undo()));
+
+        Assert.Equal("10", CellText(host, row, "Qty"));
+        Assert.Equal("0", CellText(host, row, "Amount"));        // 재계산 전 값
+        Assert.Equal(RowState.Normal, ds.GetState(row));
+
+        Assert.True(await host.InvokeAsync(() => grid.Redo()));
+        Assert.Equal("7", CellText(host, row, "Qty"));
+        Assert.Equal("17,500", CellText(host, row, "Amount"));
+    }
+
+    /// <summary>GS-077: 붙여넣기(부족 행 추가 포함)는 한 단계</summary>
+    [Fact]
+    public async Task GS_077_Paste_IsOneStep_AddedRowsRemoved()
+    {
+        var ds = TestData.ThreeLines();
+        var host = Render<GridHost>(p => p.Add(h => h.DataSet, ds));
+        var grid = host.Instance.Grid;
+        var last = ds.RowKeys[2];
+
+        await host.InvokeAsync(() => grid.Paste(last, "Qty", [["1", "2"], ["3", "4"]]));   // 1행 부족 → 추가
+        Assert.Equal(4, ds.RowKeys.Count);
+
+        await host.InvokeAsync(() => grid.Undo());
+
+        Assert.Equal(3, ds.RowKeys.Count);
+        Assert.Equal(3m, ds.GetValue(last, "Qty"));
+        Assert.Equal(12.5m, ds.GetValue(last, "UnitPrice"));
+        Assert.Equal(3, host.FindAll("[role=row][data-row]").Count);
+        Assert.False(ds.HasChanges);
+    }
+
+    /// <summary>GS-077: 여러 행 삭제는 한 단계, 행 추가도 한 단계</summary>
+    [Fact]
+    public async Task GS_077_DeleteRows_And_AddRow_AreStepsEach()
+    {
+        var ds = TestData.ThreeLines();
+        var host = Render<GridHost>(p => p.Add(h => h.DataSet, ds));
+        var grid = host.Instance.Grid;
+
+        var added = await host.InvokeAsync(() => grid.AddRow());
+        await host.InvokeAsync(() => grid.DeleteRows([ds.RowKeys[0], ds.RowKeys[1]]));
+        Assert.Equal(2, host.FindAll("[role=row][data-row]").Count);   // 삭제 표시 행은 숨김
+
+        await host.InvokeAsync(() => grid.Undo());
+        Assert.Equal(4, host.FindAll("[role=row][data-row]").Count);
+        Assert.Equal(RowState.Normal, ds.GetState(ds.RowKeys[0]));
+
+        await host.InvokeAsync(() => grid.Undo());
+        Assert.DoesNotContain(added, ds.RowKeys);
+        Assert.Equal(3, host.FindAll("[role=row][data-row]").Count);
+        Assert.False(await host.InvokeAsync(() => grid.Undo()));
+    }
+}

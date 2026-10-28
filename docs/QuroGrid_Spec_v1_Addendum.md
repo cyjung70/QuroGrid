@@ -1,7 +1,7 @@
 # QuroGrid Spec v1 보완 문서 (Addendum A)
 
 - 대상: `docs/QuroGrid_FeatureMatrix_Spec_v1.pdf` (Spec v1 초안 Draft v0.2, 2026-10-28 — 4.9·5장 본문 개정)
-- 문서 상태: A.17 (2026-10-29) · 스테이블영 결정 사항 반영
+- 문서 상태: A.18 (2026-10-29) · 스테이블영 결정 사항 반영
 - 이 문서는 Spec v1의 일부입니다. **아래 항목은 Spec 본문보다 우선합니다.** 본문에 없는 내용은 "보완", 본문과 다른 내용은 "변경"으로 표시합니다.
 
 ---
@@ -48,6 +48,7 @@
 | A-36 | 3-A, R1 (P1) | 보완 | **컬럼 숨김·이동·레이아웃 (GS-067~GS-069)**: 앱이 `SetColumnVisible(필드, 보임)`으로 숨김 (화면·합계·키보드·붙여넣기·내보내기에서 빠지고 값·행 상태는 그대로, 다시 보이면 제자리). 헤더를 5px 넘게 끌면 이동: 드래그 중은 브라우저만, 놓을 때 서버 1회 → `OnColumnMoved(필드, 화면 위치)`. 고정 열 영역과 일반 영역 사이는 넘지 않고 영역 끝으로 맞춤. `GetLayout()` → `GridLayout(Columns[필드·리사이즈 너비·숨김], Sort)`, `ApplyLayout(layout)`. 저장 위치는 앱·저장 API | 2026-10-29 |
 | A-37 | 3-A (P1) | 보완 | **다단 헤더 (GS-070)**: `<QuroColumnGroup HeaderKey>`로 컬럼(과 그룹)을 묶으면 그 위에 그룹 헤더 행을 그린다. 그룹 칸 너비 = 묶인 **보이는** 컬럼 너비의 합 (리사이즈·숨김 반영, 모두 숨기면 칸 없음). 그룹 없는 컬럼 위는 빈 칸. 헤더 행 수만큼 `aria-rowindex`가 밀리고 그리드에 `data-header-rows`. 그룹 안 컬럼은 그 그룹 안에서만 이동, 그룹을 가르는 이동은 하지 않음 | 2026-10-29 |
 | A-38 | 3-E, 4.2 (P1) | 보완 | **테마·다크 모드 (GS-080·GS-081)**: 그리드 색은 CSS 변수로만 정의. 앱은 `--quro-*`(bg·text·border·head-bg·active·selected·error·error-line·warning·warning-line·check-line·check-mark·shadow)를 그리드나 바깥 요소에 두어 바꾼다. 없으면 MudBlazor 팔레트(`--mud-palette-surface`·`text-primary`·`lines-default`·`background-gray`·`primary`·`error`·`warning` 등, 다크 모드 포함), 그것도 없으면 기본값. 선택·오류·경고 배경은 강조색을 배경에 섞어(`color-mix`) 글자 명암비 4.5:1 이상 | 2026-10-29 |
+| A-39 | 4.4, A-33 (P1) | 보완 | **Undo/Redo 구현 (GS-076~GS-078)**: 이력은 QuroDataSet에 둔다 (`Undo`·`Redo`·`CanUndo`·`CanRedo`·`BeginUndoStep`). 단계마다 건드린 행의 전후 모습(값·상태·목록 위치)을 남겨 되살리므로 행 상태 규칙(6장)이 그대로 지켜진다. 그리드는 사용자 동작 하나(커밋 + 앱의 `OnCellValueChanged` 재계산, 붙여넣기, 일괄 삭제, 행 추가·복사, 체크 토글, 목록·코드도움 확정)를 한 단계로 묶는다. Ctrl+Z / Ctrl+Y·Ctrl+Shift+Z는 편집 중이 아닐 때 서버 1회, 편집 중에는 입력란 기본 Undo. `RevertRow`도 한 단계 | 2026-10-29 |
 
 ## 2. 이벤트 API 보완 (4.10)
 
@@ -102,5 +103,9 @@
 | 레이아웃과 그룹 (A-37) | `GridLayout`에 그룹 정보 없음 (그룹은 화면 정의). 적용한 순서가 그룹을 가르면 그룹 칸이 나뉘어 그려짐 |
 | 테마 섞음 비율 (A-38) | 선택 16%·오류 12%·경고 14% (강조색을 배경에). `color-mix` 지원 브라우저 필요 (Chrome·Edge 111+, Firefox 113+, Safari 16.2+) |
 | 그리드 밖 MudBlazor 요소 (A-38) | 달력·Combo 목록(MudBlazor)은 Mud 테마를 그대로 따른다. 그리드 토큰은 적용하지 않음 |
+| Undo 중 이벤트 (A-39) | 내지 않는다 (`OnCellValueChanging`·`OnCellValueChanged`·`OnRowAdded` 등). 앱이 재계산한 값도 이력에서 함께 되살아남 |
+| `RejectChanges`와 이력 (A-39) | 이력을 비운다 (저장 성공·다시 조회와 같음) |
+| Undo 이력과 셀 표시 (A-39) | `SetCellMark`는 이력에 없음 (값만 되살림, 표시는 앱이 다시 판정) |
+| 페이징 중 Undo (A-39) | 놓았다가 다시 적재한 행은 행 키로 찾아 되살림 |
 | 혼합 통화 합계 행 | 첫 행 통화의 소수 자릿수로 표시 |
 | 큰 붙여넣기 중 앱 화면 (A-26) | 셀마다 값 변경 이벤트를 받은 앱 화면은 이벤트마다 다시 그려진다 (Blazor `EventCallback` 동작). 그리드는 그리지 않지만, 앱 화면에 변경분 전체 직렬화 같은 무거운 표시가 있으면 느려진다 (샘플의 저장 payload 미리보기로 500행 × 10열 약 7초 확인 → 붙여넣기 성능 화면에서 뺌). 앱 지침으로 둠 |
