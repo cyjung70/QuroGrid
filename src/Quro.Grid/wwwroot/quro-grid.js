@@ -1,6 +1,6 @@
 // quro-grid.js — QuroGrid의 얇은 JS 층 (Spec 4.2).
 // 소유: 활성 셀(포커스)·활성 헤더·범위 선택·키보드 이동·편집 중 키 입력·클립보드 (R1).
-// 서버 호출은 편집 시작·커밋·취소·행 추가·행 삭제·붙여넣기(1회, R3)·활성 행 변경(구독 시)·정렬·컬럼 너비·이동(놓을 때)·
+// 서버 호출은 편집 시작·커밋·취소·행 추가·행 삭제·붙여넣기(1회, R3)·활성 행 변경(구독 시)·정렬·컬럼 너비·이동(놓을 때)·Undo/Redo·
 // 코드도움(F4)·선택 목록 열기(Alt+↓)·체크 토글·버튼 클릭 때만 (R2).
 // 셀마다 핸들러를 달지 않고 그리드 루트 하나에서 이벤트를 받아 data-row / data-field로 좌표를 해석한다 (R5).
 
@@ -89,6 +89,10 @@ function isRowDelete(e) {
     return e.key === 'Delete' && e.ctrlKey;
 }
 
+function isUndoKey(e) {
+    return (e.ctrlKey || e.metaKey) && !e.altKey && ['z', 'y'].includes(e.key.toLowerCase());
+}
+
 function isPickerKey(e) {
     return e.key === 'ArrowDown' && e.altKey;
 }
@@ -104,6 +108,13 @@ function onKeyDown(s, e) {
             e.preventDefault();
             enqueue(s, () => s.editing ? cancel(s) : null);
         }
+        return;
+    }
+    // Undo / Redo (GS-076, A-33): 편집 중이 아니면 서버 1회. 편집 중에는 입력란의 기본 Undo
+    if (!s.editing && isUndoKey(e)) {
+        e.preventDefault();
+        const redo = e.key.toLowerCase() === 'y' || e.shiftKey;
+        enqueue(s, () => s.editing ? null : s.dotnet.invokeMethodAsync(redo ? 'Redo' : 'Undo'));
         return;
     }
     // 편집 중이고 밀린 동작이 없으면 문자·화살표는 에디터가 그대로 받는다 (서버 호출 없음, R2)

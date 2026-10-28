@@ -24,6 +24,13 @@ public sealed class QuroDataSet<T> where T : class
     private readonly Dictionary<object, int> _keyById = [];  // 적재한(추가 행 아닌) 행의 ID → 행 키
     private readonly Dictionary<int, object> _idByKey = [];
 
+    // Undo / Redo (GS-076~GS-078, Addendum A-33): 단계마다 건드린 행의 전후 모습(값·상태·목록 위치)을 둔다
+    private const int UndoLimit = 50;
+    private readonly LinkedList<Step> _undo = [];
+    private readonly Stack<Step> _redo = [];
+    private Step? _step;      // 열린 단계
+    private int _stepDepth;   // BeginUndoStep 중첩 깊이
+
     public QuroDataSet()
     {
     }
@@ -89,6 +96,7 @@ public sealed class QuroDataSet<T> where T : class
         _nextLoadedKey = 1;
         _nextInsertedKey = -1;
         Generation++;
+        ClearHistory();
 
         foreach (var item in rows)
             Append(new Row(_nextLoadedKey++, item, RowState.Normal, Snapshot(item)));
@@ -192,6 +200,8 @@ public sealed class QuroDataSet<T> where T : class
         if (row.State == RowState.Deleted)
             throw new InvalidOperationException($"삭제 표시된 행({rowKey})은 수정할 수 없습니다.");
 
+        using var _ = Record();
+        Touch(row);
         prop.SetValue(row.Item, value);
         row.Revision++;
 
@@ -204,6 +214,8 @@ public sealed class QuroDataSet<T> where T : class
     {
         var item = template is null ? Activator.CreateInstance<T>() : Clone(template);
         var row = new Row(_nextInsertedKey--, item, RowState.Inserted, original: null);
+        using var _ = Record();
+        Touch(row);   // 목록에 넣기 전: 되돌리면 빠진다
 
         if (afterRowKey is null)
             Append(row);
@@ -220,6 +232,8 @@ public sealed class QuroDataSet<T> where T : class
     public void DeleteRow(int rowKey)
     {
         var row = Find(rowKey);
+        using var _ = Record();
+        Touch(row);
         if (row.State == RowState.Inserted)
             Remove(row);
         else
@@ -230,10 +244,16 @@ public sealed class QuroDataSet<T> where T : class
     }
 
     /// <summary>
-    /// 행 단위 변경 취소 (MVP Undo 대체, O-01 잠정안).
-    /// Updated·Deleted는 원본값으로 Normal 복귀, Inserted는 목록에서 제거.
+    /// 행 단위 변경 취소 (O-01 결정: MVP Undo). Updated·Deleted는 원본값으로 Normal 복귀, Inserted는 목록에서 제거.
+    /// 이것도 Undo 한 단계다 (되돌리면 취소 전 값·상태).
     /// </summary>
-    public void RevertRow(int rowKey) => Revert(Find(rowKey));
+    public void RevertRow(int rowKey)
+    {
+        var row = Find(rowKey);
+        using var _ = Record();
+        Touch(row);
+        Revert(row);
+    }
 
     /// <summary>필수·범위 검증. 저장 대상인 Inserted·Updated 행만 검사한다.</summary>
     public ValidationResult Validate()
@@ -277,6 +297,7 @@ public sealed class QuroDataSet<T> where T : class
     /// </summary>
     public void AcceptChanges()
     {
+        ClearHistory();   // 저장된 상태가 새 기준 (A-33)
         foreach (var row in _rows.ToList())
         {
             if (row.State == RowState.Deleted)
@@ -294,8 +315,133 @@ public sealed class QuroDataSet<T> where T : class
     /// <summary>전체 변경 취소. 각 행에 RevertRow와 같은 규칙을 적용한다.</summary>
     public void RejectChanges()
     {
+        ClearHistory();
         foreach (var row in _rows.ToList())
             Revert(row);
+    }
+
+    // ── Undo / Redo (P1, GS-076~GS-078, Addendum A-33) ──
+
+    public bool CanUndo => _undo.Count > 0;
+
+    public bool CanRedo => _redo.Count > 0;
+
+    /// <summary>
+    /// 여러 변경을 Undo 한 단계로 묶는다 (붙여넣기·일괄 삭제·앱의 재계산 포함 커밋 등). 범위를 닫을 때 단계가 끝난다.
+    /// 중첩하면 바깥 범위에 합쳐진다. 범위 밖의 SetValue·AddRow·DeleteRow·RevertRow는 호출마다 한 단계.
+    /// </summary>
+    public IDisposable BeginUndoStep()
+    {
+        if (_stepDepth++ == 0)
+            _step = new Step();
+        return new StepScope(this);
+    }
+
+    /// <summary>마지막 단계를 되돌린다. 되돌릴 것이 없으면 false. 행 상태 규칙(Spec 4.4)은 행 모습을 그대로 되살려 지킨다.</summary>
+    public bool Undo()
+    {
+        if (_undo.Last is not { } node)
+            return false;
+        _undo.RemoveLast();
+        Restore(node.Value.Before);
+        _redo.Push(node.Value);
+        return true;
+    }
+
+    /// <summary>되돌린 단계를 다시 적용한다. 없으면 false.</summary>
+    public bool Redo()
+    {
+        if (!_redo.TryPop(out var step))
+            return false;
+        Restore(step.After);
+        _undo.AddLast(step);
+        return true;
+    }
+
+    private void EndUndoStep()
+    {
+        if (--_stepDepth > 0)
+            return;
+        var step = _step!;
+        _step = null;
+        if (step.Before.Count == 0)
+            return;
+
+        foreach (var row in step.Before.Keys)
+            step.After[row] = Image(row);
+        _undo.AddLast(step);
+        if (_undo.Count > UndoLimit)
+            _undo.RemoveFirst();
+        _redo.Clear();
+    }
+
+    private void ClearHistory()
+    {
+        _undo.Clear();
+        _redo.Clear();
+    }
+
+    /// <summary>열린 단계에서 처음 건드리는 행이면 바뀌기 전 모습을 남긴다.</summary>
+    private void Touch(Row row)
+    {
+        if (_step is not null && !_step.Before.ContainsKey(row))
+            _step.Before[row] = Image(row);
+    }
+
+    private RowImage Image(Row row) => new(_rows.IndexOf(row), Snapshot(row.Item), row.State);
+
+    /// <summary>행들을 남긴 모습으로 되살린다: 목록에 없던 행은 빼고, 있던 행은 그 위치에 값·상태와 함께.</summary>
+    private void Restore(Dictionary<Row, RowImage> images)
+    {
+        foreach (var (row, image) in images.Where(x => x.Value.Index < 0))
+            if (_byKey.TryGetValue(row.Key, out var current))
+                Remove(current);
+
+        foreach (var (row, image) in images.Where(x => x.Value.Index >= 0).OrderBy(x => x.Value.Index))
+        {
+            // 페이징으로 놓았다가 다시 적재한 행은 새 객체일 수 있어 행 키로 찾는다
+            if (!_byKey.TryGetValue(row.Key, out var target))
+            {
+                target = row;
+                _rows.Insert(Math.Min(image.Index, _rows.Count), target);
+                _byKey.Add(target.Key, target);
+                if (_idOf is not null && target.State != RowState.Inserted && image.State != RowState.Inserted)
+                {
+                    var id = _idOf(target.Item);
+                    _keyById[id] = target.Key;
+                    _idByKey[target.Key] = id;
+                }
+            }
+            foreach (var (field, value) in image.Values)
+                Fields[field].SetValue(target.Item, value);
+            target.State = image.State;
+            target.Revision++;
+        }
+    }
+
+    /// <summary>호출 하나를 한 단계로 (열린 범위가 있으면 거기에 합쳐진다).</summary>
+    private StepScope Record() => (StepScope)BeginUndoStep();
+
+    private sealed class Step
+    {
+        public Dictionary<Row, RowImage> Before { get; } = [];
+        public Dictionary<Row, RowImage> After { get; } = [];
+    }
+
+    /// <summary>행 모습. Index가 -1이면 목록에 없음.</summary>
+    private sealed record RowImage(int Index, Dictionary<string, object?> Values, RowState State);
+
+    private sealed class StepScope(QuroDataSet<T> owner) : IDisposable
+    {
+        private bool _disposed;
+
+        public void Dispose()
+        {
+            if (_disposed)
+                return;
+            _disposed = true;
+            owner.EndUndoStep();
+        }
     }
 
     // ── 내부 ──
