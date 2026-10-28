@@ -1,0 +1,24 @@
+@using Quro.Grid.Sample.Data
+
+@* 품목 코드도움 팝업 (Spec 4.6: 화면별 구현). 그리드가 넘긴 후보 중 하나를 고르면 그 코드로 닫는다. *@
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="1">
+            @foreach (var itemCode in Codes)
+            {
+                <MudButton Variant="Variant.Text" data-testid="help-item" OnClick="() => MudDialog.Close(DialogResult.Ok(itemCode))">@itemCode</MudButton>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton data-testid="help-cancel" OnClick="() => MudDialog.Cancel()">@L["sample.cancel"]</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private static readonly SampleLocalizer L = new();
+
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public IReadOnlyList<string> Codes { get; set; } = [];
+}

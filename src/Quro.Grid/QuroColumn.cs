@@ -35,6 +35,24 @@ public sealed class QuroColumn : ComponentBase, IDisposable
     [Parameter] public decimal? Min { get; set; }
     [Parameter] public decimal? Max { get; set; }
 
+    /// <summary>
+    /// Popup 셀 코드 조회 (Addendum A-16). 입력 문자열 → 일치하는 코드 목록.
+    /// 1건이면 자동 확정, 여러 건이면 OnPopupRequested, 0건이면 편집 유지 (A-05).
+    /// </summary>
+    [Parameter] public Func<string, Task<IReadOnlyList<string>>>? Lookup { get; set; }
+
+    /// <summary>Combo 셀 목록 (Spec 4.6: 공통코드).</summary>
+    [Parameter] public IReadOnlyList<ComboOption>? Options { get; set; }
+
+    /// <summary>Check 셀에서 체크 상태로 저장할 값 (Y/N 매핑 등). 기본 true.</summary>
+    [Parameter] public object? CheckedValue { get; set; } = true;
+
+    /// <summary>Check 셀에서 체크 해제 상태로 저장할 값. 기본 false.</summary>
+    [Parameter] public object? UncheckedValue { get; set; } = false;
+
+    /// <summary>Button 셀 표시 문자열 리소스 키 (Spec 4.8). Button 컬럼의 Field는 식별자일 뿐 값을 읽지 않는다.</summary>
+    [Parameter] public string? TextKey { get; set; }
+
     private object? _rendered;
 
     protected override void OnInitialized()
@@ -47,7 +65,8 @@ public sealed class QuroColumn : ComponentBase, IDisposable
     /// <summary>정의가 실제로 바뀐 경우에만 그리드 전체를 다시 그리게 한다 (R4).</summary>
     protected override void OnParametersSet()
     {
-        object now = (Field, HeaderKey, Type, Format, ReadOnly, Width, Aggregate, CurrencyField, Required, Min, Max);
+        object now = (Field, HeaderKey, Type, Format, ReadOnly, Width, Aggregate, CurrencyField, Required, Min, Max,
+            (Lookup, Options, CheckedValue, UncheckedValue, TextKey));
         if (_rendered is not null && !Equals(now, _rendered))
             Host?.ColumnChanged(this);
         _rendered = now;

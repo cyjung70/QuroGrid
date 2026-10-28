@@ -27,6 +27,19 @@ public enum DeletedRowDisplay
     Strikethrough,
 }
 
+/// <summary>코드도움 요청 계기 (Addendum A-16).</summary>
+public enum PopupTrigger
+{
+    /// <summary>Popup 셀 확정(Tab·Enter·셀 이탈) 시 조회 결과가 여러 건</summary>
+    Commit,
+
+    /// <summary>F4 키</summary>
+    F4,
+}
+
+/// <summary>Combo 셀 목록 항목 (공통코드). <see cref="Text"/>는 화면 표시용 데이터(코드 명칭)다.</summary>
+public sealed record ComboOption(object? Value, string Text);
+
 /// <summary>Enter 확정 후 이동 방향 (O-05 결정: 기본 오른쪽).</summary>
 public enum EnterDirection
 {
