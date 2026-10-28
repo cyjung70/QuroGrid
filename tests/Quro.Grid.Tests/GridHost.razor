@@ -1,0 +1,24 @@
+@* 이벤트를 부모 컴포넌트가 받는 실제 화면 구조를 흉내 낸다. 부모가 다시 그려져도 바뀐 행만 렌더돼야 한다 (R4). *@
+<QuroGrid TItem="PoLine" @ref="Grid" DataSet="DataSet" Culture="En" ShowFooter="true" OnCellValueChanged="RecalcAmount">
+    <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" />
+    <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" Aggregate="Aggregate.Sum" />
+    <QuroColumn Field="UnitPrice" HeaderKey="mm.unit_price" Type="CellType.Number" />
+    <QuroColumn Field="Amount" HeaderKey="mm.amount" Type="CellType.Number" ReadOnly="true" Aggregate="Aggregate.Sum" />
+</QuroGrid>
+
+@code {
+    private static readonly CultureInfo En = new("en-US");
+
+    [Parameter, EditorRequired] public QuroDataSet<PoLine> DataSet { get; set; } = default!;
+
+    public QuroGrid<PoLine> Grid { get; private set; } = default!;
+    public int ChangedCount { get; private set; }
+
+    /// <summary>금액 = 수량 × 단가 (Spec 4.10 OnCellValueChanged 용도)</summary>
+    private void RecalcAmount(CellValueChangedArgs<PoLine> e)
+    {
+        ChangedCount++;
+        if (e.Field is nameof(PoLine.Qty) or nameof(PoLine.UnitPrice))
+            DataSet.SetValue(e.RowKey, nameof(PoLine.Amount), e.Item.Qty * e.Item.UnitPrice);
+    }
+}

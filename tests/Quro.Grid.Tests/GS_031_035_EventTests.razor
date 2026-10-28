@@ -1,0 +1,188 @@
+@inherits BunitContext
+
+@code {
+    // GS-031 ~ GS-035: 이벤트 API (Spec 4.10)
+
+    private static readonly CultureInfo En = new("en-US");
+    private const string Usd = "USD";
+
+    private static AngleSharp.Dom.IElement Cell(IRenderedComponent<QuroGrid<PoLine>> cut, int rowKey, string field) =>
+        cut.Find($"[role=row][data-row='{rowKey}'] [data-field='{field}']");
+
+    /// <summary>GS-031: OnCellValueChanging에서 취소 → 값 반영 안 됨, Changed 미발생</summary>
+    [Fact]
+    public async Task GS_031_ChangingCancelled_ValueNotApplied()
+    {
+        var ds = TestData.ThreeLines();
+        var row = ds.RowKeys[0];
+        CellValueChangingArgs<PoLine>? seen = null;
+        var changed = 0;
+
+        var cut = Render<QuroGrid<PoLine>>(
+            @<QuroGrid DataSet="ds" Culture="En"
+                       OnCellValueChanging="(CellValueChangingArgs<PoLine> e) => { seen = e; e.Cancel = (decimal)e.NewValue! < 0; }"
+                       OnCellValueChanged="(CellValueChangedArgs<PoLine> e) => changed++">
+                 <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" />
+             </QuroGrid>);
+
+        await cut.InvokeAsync(() => cut.Instance.BeginEdit(row, "Qty"));
+        var ok = await cut.InvokeAsync(() => cut.Instance.CommitEdit(row, "Qty", "-1"));
+
+        Assert.False(ok);
+        Assert.Equal(10m, ds.GetValue(row, "Qty"));
+        Assert.Equal(RowState.Normal, ds.GetState(row));
+        Assert.Equal(0, changed);
+        Assert.Equal(10m, seen!.OldValue);
+        Assert.Equal(-1m, seen.NewValue);
+        Assert.Single(cut.FindAll(".quro-editor"));   // 편집 상태 유지
+
+        ok = await cut.InvokeAsync(() => cut.Instance.CommitEdit(row, "Qty", "12"));
+
+        Assert.True(ok);
+        Assert.Equal(12m, ds.GetValue(row, "Qty"));
+        Assert.Equal(1, changed);
+        Assert.Empty(cut.FindAll(".quro-editor"));
+    }
+
+    /// <summary>GS-031: 값이 그대로면 이벤트 없이 편집만 닫는다</summary>
+    [Fact]
+    public async Task GS_031_SameValue_NoEvents()
+    {
+        var ds = TestData.ThreeLines();
+        var row = ds.RowKeys[0];
+        var events = 0;
+
+        var cut = Render<QuroGrid<PoLine>>(
+            @<QuroGrid DataSet="ds" Culture="En"
+                       OnCellValueChanging="(CellValueChangingArgs<PoLine> e) => events++"
+                       OnCellValueChanged="(CellValueChangedArgs<PoLine> e) => events++">
+                 <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" />
+             </QuroGrid>);
+
+        await cut.InvokeAsync(() => cut.Instance.BeginEdit(row, "Qty"));
+        var ok = await cut.InvokeAsync(() => cut.Instance.CommitEdit(row, "Qty", "10"));
+
+        Assert.True(ok);
+        Assert.Equal(0, events);
+        Assert.Equal(RowState.Normal, ds.GetState(row));
+        Assert.Empty(cut.FindAll(".quro-editor"));
+    }
+
+    /// <summary>GS-032: OnCellValueChanged에서 금액 재계산 → 금액 셀·합계 갱신, 바뀐 행만 렌더 (R4)</summary>
+    [Fact]
+    public async Task GS_032_Changed_RecalcAmount_UpdatesCellAndFooter()
+    {
+        var ds = TestData.ThreeLines();
+        var row = ds.RowKeys[0];
+        var host = Render<GridHost>(p => p.Add(h => h.DataSet, ds));
+        var grid = host.FindComponent<QuroGrid<PoLine>>();
+        var rows = host.FindComponents<QuroGridRow<PoLine>>();
+        var before = rows.Select(r => r.RenderCount).ToArray();
+
+        await host.InvokeAsync(() => host.Instance.Grid.CommitEdit(row, "Qty", "20"));
+
+        Assert.Equal(1, host.Instance.ChangedCount);
+        Assert.Equal("50,000", Cell(grid, row, "Amount").TextContent.Trim());
+        Assert.Equal("50,000", host.Find("[data-footer-field=Amount]").TextContent.Trim());
+        Assert.Equal("28", host.Find("[data-footer-field=Qty]").TextContent.Trim());
+
+        var after = rows.Select(r => r.RenderCount).ToArray();
+        Assert.True(after[0] > before[0]);
+        Assert.Equal(before[1], after[1]);
+        Assert.Equal(before[2], after[2]);
+    }
+
+    /// <summary>GS-033: OnRowDeleting에서 취소한 행은 유지 (행마다 발생, 일괄 삭제는 호출 1회)</summary>
+    [Fact]
+    public async Task GS_033_DeletingCancelled_RowKept()
+    {
+        var ds = TestData.ThreeLines();
+        var (r1, r2) = (ds.RowKeys[0], ds.RowKeys[1]);
+        var asked = new List<int>();
+
+        var cut = Render<QuroGrid<PoLine>>(
+            @<QuroGrid DataSet="ds" Culture="En"
+                       OnRowDeleting="(RowDeletingArgs<PoLine> e) => { asked.Add(e.RowKey); e.Cancel = e.Item.LineNo == 1; }">
+                 <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" />
+             </QuroGrid>);
+
+        var deleted = await cut.InvokeAsync(() => cut.Instance.DeleteRows([r1, r2]));
+
+        Assert.Equal(1, deleted);
+        Assert.Equal([r1, r2], asked);
+        Assert.Equal(RowState.Normal, ds.GetState(r1));
+        Assert.Equal(RowState.Deleted, ds.GetState(r2));
+        Assert.Equal(2, cut.FindAll("[role=row][data-row]").Count);   // 삭제 행은 숨김 (O-02 잠정안)
+    }
+
+    /// <summary>GS-034: OnPasting에서 취소 → 값 반영 없음</summary>
+    [Fact]
+    public async Task GS_034_PastingCancelled_NothingApplied()
+    {
+        var ds = TestData.ThreeLines();
+        PastingArgs? seen = null;
+        string[][] cells = [["B1", "7"], ["B2", "8"]];
+
+        var cut = Render<QuroGrid<PoLine>>(
+            @<QuroGrid DataSet="ds" Culture="En" OnPasting="(PastingArgs e) => { seen = e; e.Cancel = true; }">
+                 <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" />
+                 <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" />
+             </QuroGrid>);
+
+        var applied = await cut.InvokeAsync(() => cut.Instance.Paste(ds.RowKeys[0], "ItemCode", cells));
+
+        Assert.False(applied);
+        Assert.Equal(ds.RowKeys[0], seen!.StartRowKey);
+        Assert.Equal("ItemCode", seen.StartField);
+        Assert.Same(cells, seen.Cells);
+        Assert.True(ds.GetChanges().IsEmpty);
+    }
+
+    /// <summary>GS-034: 취소하지 않으면 값 반영 (전체 붙여넣기 규칙은 GS-004·GS-005)</summary>
+    [Fact]
+    public async Task GS_034_PastingNotCancelled_Applied()
+    {
+        var ds = TestData.ThreeLines();
+        string[][] cells = [["B1", "7"], ["B2", "8"]];
+
+        var cut = Render<QuroGrid<PoLine>>(
+            @<QuroGrid DataSet="ds" Culture="En">
+                 <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" />
+                 <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" />
+             </QuroGrid>);
+
+        var applied = await cut.InvokeAsync(() => cut.Instance.Paste(ds.RowKeys[0], "ItemCode", cells));
+
+        Assert.True(applied);
+        Assert.Equal("B1", ds.GetValue(ds.RowKeys[0], "ItemCode"));
+        Assert.Equal(7m, ds.GetValue(ds.RowKeys[0], "Qty"));
+        Assert.Equal("B2", ds.GetValue(ds.RowKeys[1], "ItemCode"));
+        Assert.Equal(8m, ds.GetValue(ds.RowKeys[1], "Qty"));
+        Assert.Equal("8", Cell(cut, ds.RowKeys[1], "Qty").TextContent.Trim());
+    }
+
+    /// <summary>GS-035: OnRowAdding에서 기본값 세팅 → 새 행에 반영, OnRowAdded 발생</summary>
+    [Fact]
+    public async Task GS_035_RowAdding_SetsDefaults_AddedRaised()
+    {
+        var ds = TestData.ThreeLines();
+        RowAddedArgs<PoLine>? added = null;
+
+        var cut = Render<QuroGrid<PoLine>>(
+            @<QuroGrid DataSet="ds" Culture="En"
+                       OnRowAdding="(RowAddingArgs<PoLine> e) => { e.Item.CurrencyCode = Usd; e.Item.Qty = 1m; }"
+                       OnRowAdded="(RowAddedArgs<PoLine> e) => added = e">
+                 <QuroColumn Field="CurrencyCode" HeaderKey="mm.currency" />
+                 <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" />
+             </QuroGrid>);
+
+        var key = await cut.InvokeAsync(() => cut.Instance.AddRow());
+
+        Assert.Equal(RowState.Inserted, ds.GetState(key));
+        Assert.Equal("USD", ds.GetValue(key, "CurrencyCode"));
+        Assert.Equal(1m, ds.GetValue(key, "Qty"));
+        Assert.Equal(key, added!.RowKey);
+        Assert.Equal("USD", Cell(cut, key, "CurrencyCode").TextContent.Trim());
+        Assert.Equal(4, cut.FindAll("[role=row][data-row]").Count);
+    }
+}

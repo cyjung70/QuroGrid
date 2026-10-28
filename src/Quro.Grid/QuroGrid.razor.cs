@@ -36,10 +36,33 @@ public partial class QuroGrid<TItem> where TItem : class
     /// <summary>삭제 표시 행의 화면 처리 (O-02 잠정안: 숨김).</summary>
     [Parameter] public DeletedRowDisplay DeletedRows { get; set; }
 
+    // ── 이벤트 (Spec 4.10). OnPopupRequested·OnSelectionChanged는 JS 층과 함께 추가한다. ──
+
+    [Parameter] public EventCallback<CellValueChangingArgs<TItem>> OnCellValueChanging { get; set; }
+    [Parameter] public EventCallback<CellValueChangedArgs<TItem>> OnCellValueChanged { get; set; }
+    [Parameter] public EventCallback<RowAddingArgs<TItem>> OnRowAdding { get; set; }
+    [Parameter] public EventCallback<RowAddedArgs<TItem>> OnRowAdded { get; set; }
+    [Parameter] public EventCallback<RowDeletingArgs<TItem>> OnRowDeleting { get; set; }
+    [Parameter] public EventCallback<PastingArgs> OnPasting { get; set; }
+
     internal IReadOnlyList<QuroColumn> Columns => _columns;
     internal CultureInfo EffectiveCulture => Culture ?? CultureInfo.CurrentCulture;
 
-    protected override void OnParametersSet() => _epoch++;
+    private object? _layoutParameters;
+
+    /// <summary>
+    /// 행 표시에 영향을 주는 파라미터가 바뀐 경우에만 전체 행을 다시 그린다.
+    /// 부모가 이벤트 처리 후 다시 그려질 때마다 모든 행을 그리지 않기 위함 (R4).
+    /// </summary>
+    protected override void OnParametersSet()
+    {
+        object layout = (DataSet, Localizer, Culture, FrozenColumns, CurrencyDigits, DeletedRows);
+        if (!Equals(layout, _layoutParameters))
+        {
+            _layoutParameters = layout;
+            _epoch++;
+        }
+    }
 
     // ── 편집 (quro-grid.js가 호출) ──
 
@@ -58,16 +81,105 @@ public partial class QuroGrid<TItem> where TItem : class
     /// <summary>
     /// 셀 이탈 시 1회 호출 (R2). 문자열은 <see cref="EffectiveCulture"/>로 해석한다.
     /// 해석에 실패하면 값을 바꾸지 않고 편집 상태를 유지한 채 false.
+    /// 값이 그대로면 이벤트 없이 편집만 닫는다. OnCellValueChanging에서 취소해도 false.
     /// </summary>
-    public Task<bool> CommitEdit(int rowKey, string field, string? text)
+    public async Task<bool> CommitEdit(int rowKey, string field, string? text)
     {
         var col = Column(field);
-        if (col.ReadOnly || !DataSet.TrySetText(rowKey, col.Field, text, EffectiveCulture))
-            return Task.FromResult(false);
+        if (col.ReadOnly
+            || !DataSet.TryParseText(col.Field, text, EffectiveCulture, out var value)
+            || !await ApplyValue(rowKey, col.Field, value))
+            return false;
 
         _editing = null;
         StateHasChanged();
-        return Task.FromResult(true);
+        return true;
+    }
+
+    // ── 행 추가·삭제·붙여넣기 (단축키·메뉴에서 호출, 일괄 처리는 호출 1회: R3) ──
+
+    /// <summary>행 추가. OnRowAdding에서 기본값을 넣고, 추가 후 OnRowAdded.</summary>
+    public async Task<int> AddRow()
+    {
+        var item = Activator.CreateInstance<TItem>();
+        await OnRowAdding.InvokeAsync(new RowAddingArgs<TItem>(item));
+
+        var key = DataSet.AddRow(item);
+        await OnRowAdded.InvokeAsync(new RowAddedArgs<TItem>(key, DataSet.GetItem(key)));
+        StateHasChanged();
+        return key;
+    }
+
+    /// <summary>여러 행 삭제. OnRowDeleting은 행마다 발생하고, 취소한 행은 남는다. 삭제한 행 수를 돌려준다.</summary>
+    public async Task<int> DeleteRows(IReadOnlyList<int> rowKeys)
+    {
+        var deleted = 0;
+        foreach (var key in rowKeys)
+        {
+            if (DataSet.GetState(key) == RowState.Deleted)
+                continue;
+
+            var args = new RowDeletingArgs<TItem>(key, DataSet.GetItem(key));
+            await OnRowDeleting.InvokeAsync(args);
+            if (args.Cancel)
+                continue;
+
+            DataSet.DeleteRow(key);
+            if (_editing?.RowKey == key)
+                _editing = null;
+            deleted++;
+        }
+
+        StateHasChanged();
+        return deleted;
+    }
+
+    /// <summary>
+    /// 붙여넣기 (엑셀 형식을 행 × 열로 나눈 값). OnPasting에서 취소하면 false.
+    /// 시작 셀부터 표시 순서대로 채우고, 읽기 전용·해석 실패 셀은 건너뛴다. 셀마다 값 변경 이벤트가 발생한다.
+    /// 부족 행 자동 추가와 안내는 GS-004·GS-005에서 정한다.
+    /// </summary>
+    public async Task<bool> Paste(int startRowKey, string startField, string[][] cells)
+    {
+        var args = new PastingArgs(startRowKey, startField, cells);
+        await OnPasting.InvokeAsync(args);
+        if (args.Cancel)
+            return false;
+
+        var rows = VisibleRowKeys().ToList();
+        var firstRow = rows.IndexOf(startRowKey);
+        var firstCol = _columns.IndexOf(Column(startField));
+        if (firstRow < 0)
+            throw new ArgumentException($"행 키 {startRowKey}가 화면에 없습니다.", nameof(startRowKey));
+
+        for (var r = 0; r < cells.Length && firstRow + r < rows.Count; r++)
+        for (var c = 0; c < cells[r].Length && firstCol + c < _columns.Count; c++)
+        {
+            var col = _columns[firstCol + c];
+            if (!col.ReadOnly && DataSet.TryParseText(col.Field, cells[r][c], EffectiveCulture, out var value))
+                await ApplyValue(rows[firstRow + r], col.Field, value);
+        }
+
+        StateHasChanged();
+        return true;
+    }
+
+    /// <summary>OnCellValueChanging → SetValue → OnCellValueChanged. 값이 같으면 아무것도 하지 않는다.</summary>
+    private async Task<bool> ApplyValue(int rowKey, string field, object? value)
+    {
+        var old = DataSet.GetValue(rowKey, field);
+        if (Equals(old, value))
+            return true;
+
+        var item = DataSet.GetItem(rowKey);
+        var changing = new CellValueChangingArgs<TItem>(rowKey, field, item, old, value);
+        await OnCellValueChanging.InvokeAsync(changing);
+        if (changing.Cancel)
+            return false;
+
+        DataSet.SetValue(rowKey, field, value);
+        await OnCellValueChanged.InvokeAsync(new CellValueChangedArgs<TItem>(rowKey, field, item, old, value));
+        return true;
     }
 
     public void CancelEdit()
@@ -86,6 +198,8 @@ public partial class QuroGrid<TItem> where TItem : class
         _columns.Add(column);
         _epoch++;
     }
+
+    void IColumnHost.ColumnChanged() => _epoch++;
 
     void IColumnHost.RemoveColumn(QuroColumn column)
     {
