@@ -216,7 +216,7 @@ function drawDrag(s, field, target) {
     const line = target.marker.side === 'left' ? 'inset 3px 0 0' : 'inset -3px 0 0';
     s.dragStyle.textContent = [
         `${head} [data-field="${CSS.escape(field)}"] { opacity: 0.5; }`,
-        `${head} [data-field="${CSS.escape(target.marker.field)}"] { box-shadow: ${line} var(--quro-active,#2e6be6); }`,
+        `${head} [data-field="${CSS.escape(target.marker.field)}"] { box-shadow: ${line} var(--qg-active); }`,
     ].join('\n');
 }
 
@@ -462,7 +462,7 @@ function enterHeader(s, field) {
     s.header = field;
     s.root.setAttribute('data-active-header', field);
     const scope = `[data-quro-grid="${s.id}"]`;
-    s.style.textContent = `${scope} .quro-head [data-field="${CSS.escape(field)}"]{outline:2px solid var(--quro-active,#2e6be6);outline-offset:-2px}`;
+    s.style.textContent = `${scope} .quro-head [data-field="${CSS.escape(field)}"]{outline:2px solid var(--qg-active);outline-offset:-2px}`;
     const el = headers(s).find(h => h.dataset.field === field);
     markSelected(s, el ? [el] : []);
     el?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
@@ -665,10 +665,10 @@ function activate(s, row, field, extend = false) {
 
     // 서버 렌더가 셀 class를 바꿔도 지워지지 않도록 별도 style 규칙으로 그린다
     const scope = `[data-quro-grid="${s.id}"]`;
-    let css = `${scope} ${cellSelector(row, field)}{outline:2px solid var(--quro-active,#2e6be6);outline-offset:-2px}`;
+    let css = `${scope} ${cellSelector(row, field)}{outline:2px solid var(--qg-active);outline-offset:-2px}`;
     if (sel.rowEls.length > 1 || sel.fields.length > 1) {
         const selectors = sel.rowEls.flatMap(r => sel.fields.map(f => `${scope} ${cellSelector(rowKey(r), f)}`));
-        css += `${selectors.join(',')}{background:var(--quro-selected,#dbe7fd)}`;
+        css += `${selectors.join(',')}{background:var(--qg-selected)}`;
     }
     s.style.textContent = css;
     markSelected(s, sel.rowEls.flatMap(r => sel.fields.map(f => cellAt(s, rowKey(r), f))).filter(Boolean));
