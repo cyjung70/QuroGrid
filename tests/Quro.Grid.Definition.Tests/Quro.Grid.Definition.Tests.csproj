@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <None Include="Golden\**\*.toon" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Golden\catalog.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

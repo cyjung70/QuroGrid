@@ -1,0 +1,63 @@
+{
+  "resourceKeys": [
+    "sd.so.entry.title",
+    "sd.so.soNo",
+    "sd.so.customer",
+    "sd.so.totalAmt",
+    "sd.so.salesRep",
+    "sd.so.terms",
+    "sd.so.shipVia",
+    "sd.so.remarks",
+    "sd.so.freightCharge",
+    "sd.so.soDate",
+    "sd.so.deliveryDate",
+    "sd.so.dueDate",
+    "sd.so.shipName",
+    "sd.so.shipAddr1",
+    "sd.so.shipAddr2",
+    "sd.so.shipCity",
+    "sd.so.shipState",
+    "sd.so.shipZip",
+    "sd.so.shipCountry",
+    "sd.so.shipPhone",
+    "sd.so.shipFax",
+    "sd.so.dcStatus",
+    "sd.so.status",
+    "sd.so.line.itemCd",
+    "sd.so.line.itemName",
+    "sd.so.line.qty",
+    "sd.so.line.unitPrice",
+    "sd.so.line.amount",
+    "sd.so.line.dcCode",
+    "sd.so.line.dcRate",
+    "sd.so.line.stdPrice",
+    "sd.so.line.invQty",
+    "sd.so.line.invNo",
+    "msg.qty.zero",
+    "msg.price.zero",
+    "msg.customer.first"
+  ],
+  "codeMajors": [
+    "S200",
+    "A300",
+    "S600",
+    "S800",
+    "S900",
+    "S910"
+  ],
+  "lookupIds": [
+    "salesOrder",
+    "customer",
+    "item",
+    "discount"
+  ],
+  "handlers": [
+    "loadCustomer",
+    "calcDueDate"
+  ],
+  "permissions": [
+    "SD.SO.Read",
+    "SD.SO.Write",
+    "SD.SO.ReadOnlyTerms"
+  ]
+}

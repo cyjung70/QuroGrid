@@ -6,7 +6,7 @@ namespace Quro.Grid.Definition;
 /// Checks that need only the definition itself (design v0.2 chapter 8, V-03 ranges and V-04..V-18).
 /// Catalog checks (V-19..V-32) are <c>ScreenDefValidator</c>'s job.
 /// </summary>
-internal sealed partial class StructureChecks(string file, IReadOnlyDictionary<string, int> lines, List<DefinitionError> errors)
+internal sealed partial class StructureChecks(string file, List<DefinitionError> errors)
 {
     private static readonly HashSet<ToolbarCommand> GridCommands =
     [
@@ -19,9 +19,11 @@ internal sealed partial class StructureChecks(string file, IReadOnlyDictionary<s
     [GeneratedRegex(@"[A-Za-z][A-Za-z0-9]*(?!\s*\()(?![A-Za-z0-9])")]
     private static partial Regex Identifier();
 
-    private void Error(string code, int line, string message) => errors.Add(new DefinitionError(code, file, line, message));
+    // Design 5.5: @today, @now, @company.{key}, @setting:{key}, @user.{key}. Anything else starting with '@' is a typo.
+    [GeneratedRegex(@"^@(?:today|now|company\.[A-Za-z][A-Za-z0-9]*|user\.[A-Za-z][A-Za-z0-9]*|setting:[A-Za-z][A-Za-z0-9.]*)$")]
+    private static partial Regex DefaultToken();
 
-    private int LineOf(string key, ScreenDef def) => lines.TryGetValue(key, out var l) ? l : def.Source.Line;
+    private void Error(string code, int line, string message) => errors.Add(new DefinitionError(code, file, line, message));
 
     public void Run(ScreenDef def)
     {
@@ -29,11 +31,11 @@ internal sealed partial class StructureChecks(string file, IReadOnlyDictionary<s
         var fieldById = fields.GroupBy(f => f.Id).ToDictionary(g => g.Key, g => g.First());
 
         if (!string.Equals(Path.GetFileName(file), def.Id + ".screen.toon", StringComparison.Ordinal))
-            Error("V-05", LineOf("id", def), $"screen id '{def.Id}' does not match the file name; expected {def.Id}.screen.toon");
+            Error("V-05", def.LineOf("id"), $"screen id '{def.Id}' does not match the file name; expected {def.Id}.screen.toon");
         if (!fieldById.ContainsKey(def.Key))
-            Error("V-10", LineOf("key", def), $"key '{def.Key}' is not a form field");
+            Error("V-10", def.LineOf("key"), $"key '{def.Key}' is not a form field");
         if (def.Grids.Count == 0 && def.Toolbar.FirstOrDefault(GridCommands.Contains) is var cmd && GridCommands.Contains(cmd))
-            Error("V-14", LineOf("toolbar", def), $"toolbar command '{cmd}' needs a grid");
+            Error("V-14", def.LineOf("toolbar"), $"toolbar command '{cmd}' needs a grid");
 
         CheckUniqueIds(def);
         if (def.Form is { } form)
@@ -70,6 +72,8 @@ internal sealed partial class StructureChecks(string file, IReadOnlyDictionary<s
             Error("V-03", f.Source.Line, $"span {f.Span} of '{f.Id}' must be between 0 and cols ({cols})");
         else if (f.Span == 0 && f.Type != FieldType.Hidden)
             Error("V-03", f.Source.Line, $"span 0 is only for hidden fields; '{f.Id}' is {f.Type}");
+        if (f.Default is ['@', ..] && !DefaultToken().IsMatch(f.Default))
+            Error("V-03", f.Source.Line, $"default '{f.Default}' of '{f.Id}' is not a known token (@today, @now, @company.x, @setting:x, @user.x)");
     }
 
     private void CheckGrid(GridDef grid, Dictionary<string, FieldDef> fieldById)

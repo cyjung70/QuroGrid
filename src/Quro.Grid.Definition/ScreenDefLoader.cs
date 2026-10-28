@@ -21,7 +21,7 @@ public static class ScreenDefLoader
         var screen = builder.Build(root);
         // Structure checks only on a cleanly read file: dropped rows or unknown keys would cause follow-up errors.
         if (screen is not null && errors.Count == 0)
-            new StructureChecks(path, builder.Lines, errors).Run(screen);
+            new StructureChecks(path, errors).Run(screen);
         errors.Sort((a, b) => a.Line.CompareTo(b.Line));
         return new DefinitionResult<ScreenDef>(screen, errors);
     }
@@ -88,9 +88,6 @@ internal sealed class ScreenBuilder(string file, List<DefinitionError> errors)
 
     private SourceInfo At(int line) => new(file, line);
 
-    /// <summary>Lines of top-level and <c>screen</c> entries that have no <see cref="SourceInfo"/> in the model.</summary>
-    public Dictionary<string, int> Lines { get; } = [];
-
     public ScreenDef? Build(ToonObject root)
     {
         var top = Entries(root, "file", required: ["screen"], optional: ["toolbar", "form", "grids"]);
@@ -100,10 +97,11 @@ internal sealed class ScreenBuilder(string file, List<DefinitionError> errors)
 
         var s = Entries(screenObj, "screen",
             required: ["id", "module", "title", "version", "api", "key", "layout", "perm"], optional: ["lockWhen"]);
+        var lines = new Dictionary<string, int>();
         foreach (var (key, entry) in s.Concat(top))
-            Lines.TryAdd(key, entry.Line);
+            lines.TryAdd(key, entry.Line);
         var perm = s.TryGetValue("perm", out var permEntry) && Obj(permEntry) is { } permObj
-            ? BuildPerm(permObj)
+            ? BuildPerm(permObj, lines)
             : new PermDef("", "");
 
         var toolbar = top.TryGetValue("toolbar", out var tb) ? BuildToolbar(tb) : [];
@@ -114,12 +112,14 @@ internal sealed class ScreenBuilder(string file, List<DefinitionError> errors)
             Text(s, "id") ?? "", Text(s, "module") ?? "", Text(s, "title") ?? "", Int(s, "version") ?? 0,
             Text(s, "api") ?? "", Text(s, "key") ?? "",
             Enum(s, "layout", Layouts) ?? ScreenLayout.FormGrid, perm, Text(s, "lockWhen"),
-            toolbar, form, grids, At(screenEntry.Line));
+            toolbar, form, grids, At(screenEntry.Line)) { Lines = lines };
     }
 
-    private PermDef BuildPerm(ToonObject obj)
+    private PermDef BuildPerm(ToonObject obj, Dictionary<string, int> lines)
     {
         var p = Entries(obj, "perm", required: ["read", "write"], optional: []);
+        foreach (var (key, entry) in p)
+            lines["perm." + key] = entry.Line;
         return new PermDef(Text(p, "read") ?? "", Text(p, "write") ?? "");
     }
 
@@ -155,7 +155,7 @@ internal sealed class ScreenBuilder(string file, List<DefinitionError> errors)
         var readOnly = new List<ReadOnlyRule>();
         if (f.TryGetValue("readOnlyFor", out var re) && Table(re, required: ["perm", "fields"], optional: []) is { } ro)
             foreach (var r in ro)
-                readOnly.Add(new ReadOnlyRule(Cell(r, "perm") ?? "", Ids(Cell(r, "fields"))));
+                readOnly.Add(new ReadOnlyRule(Cell(r, "perm") ?? "", Ids(Cell(r, "fields")), At(r.Line)));
 
         return new FormDef(Int(f, "cols") ?? 1, fields, readOnly);
     }
