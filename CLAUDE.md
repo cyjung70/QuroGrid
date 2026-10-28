@@ -112,7 +112,7 @@ docs/
 | `Normal` | 값 변경 → `Updated` |
 | `Inserted` | 값 변경해도 `Inserted` 유지. 삭제 시 목록에서 즉시 제거 (서버 전송 안 함) |
 | `Updated` | 모든 값이 원본과 같아지면 `Normal` 복귀 |
-| `Deleted` | 저장 시 DELETE. 화면 처리 방식은 오픈 이슈 O-02 |
+| `Deleted` | 저장 시 DELETE. 화면 처리는 그리드 옵션, 기본 숨김 (O-02 결정) |
 
 - 필수 API: `GetState`, `GetOriginal`, `SetValue`, `AddRow`, `DeleteRow`, `RevertRow`, `Validate`, `GetChanges`, `AcceptChanges`, `RejectChanges`
 - 저장 payload: `{ inserted[], updated[], deleted[] }`. 수정·삭제 행은 `version`을 포함한다.
@@ -170,10 +170,10 @@ Enter(확정·이동, 마지막 셀에서 새 행 추가는 그리드 옵션 —
 
 | ID | 내용 | 잠정안 |
 |---|---|---|
-| O-01 | MVP Undo/Redo 범위 | 행 단위 변경 취소(`RevertRow`)만 |
-| O-02 | 삭제 표시 행 화면 처리 | 그리드 옵션 (기본: 숨김) |
-| O-03 | 연결 끊김 대비 미저장 변경 브라우저 보관 | 보관 안 함, 경고만 |
-| O-04 | 서버측 페이징 기준 | 화면별 설정 |
+| O-01 | MVP Undo/Redo 범위 | **결정 (2026-10-29): 행 단위 변경 취소(`RevertRow`)만.** 셀 단위 Undo/Redo는 P1 |
+| O-02 | 삭제 표시 행 화면 처리 | **결정 (2026-10-29): 그리드 옵션, 기본 숨김** |
+| O-03 | 연결 끊김 대비 미저장 변경 브라우저 보관 | **결정 (2026-10-29): 보관 안 함, 경고만** |
+| O-04 | 서버측 페이징 기준 | **결정 (2026-10-28, Addendum A-24): 화면별 설정** |
 | O-05 | Enter 키 기본 이동 방향 | **결정 (2026-10-28): 오른쪽.** 그리드 옵션으로 아래쪽 선택 가능 |
 
 그 밖에 아키텍처·라이선스·데이터 모델에 영향을 주는 **Critical 결정**도 구현 전에 스테이블영에게 확인한다.
