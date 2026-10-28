@@ -30,6 +30,7 @@ public sealed class SampleServer : IAsyncLifetime
             {
                 ["ASPNETCORE_ENVIRONMENT"] = "Development",
                 ["Circuit__RetentionSeconds"] = "5",   // GS-048: 끊긴 회로를 빨리 버려 회로 소멸을 재현
+                ["Diagnostics__Memory"] = "true",      // GS-058: 회로당 메모리 측정용 /_diag/memory
             },
         }) ?? throw new InvalidOperationException("샘플 앱을 시작하지 못했습니다.");
         _process.BeginOutputReadLine();

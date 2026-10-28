@@ -36,6 +36,10 @@ app.UseRequestLocalization(o => o
 
 app.UseAntiforgery();
 
+// 성능 측정용 관리 힙 크기 (GS-058, E2E). 설정으로 켠 경우에만 연다.
+if (app.Configuration.GetValue<bool>("Diagnostics:Memory"))
+    app.MapGet("/_diag/memory", () => new { HeapBytes = GC.GetTotalMemory(forceFullCollection: true) });
+
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

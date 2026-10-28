@@ -46,6 +46,17 @@
         <QuroColumn Field="DueDate" HeaderKey="mm.due_date" Type="CellType.Date" />
         <QuroColumn Field="Detail" HeaderKey="mm.detail" Type="CellType.Button" TextKey="mm.detail.open" Width="80" />
     }
+    else if (Wide == 1)
+    {
+        @* 붙여넣기 성능 (GS-057): ItemCode부터 편집 가능 열 10개 *@
+        <QuroColumn Field="Remark" HeaderKey="mm.remark" />
+        <QuroColumn Field="Spec" HeaderKey="mm.spec" />
+        <QuroColumn Field="Maker" HeaderKey="mm.maker" />
+        <QuroColumn Field="Origin" HeaderKey="mm.origin" Width="70" />
+        <QuroColumn Field="Lot" HeaderKey="mm.lot" />
+        <QuroColumn Field="Location" HeaderKey="mm.location" />
+        <QuroColumn Field="DueDate" HeaderKey="mm.due_date" Type="CellType.Date" />
+    }
     else if (Dates == 1)
     {
         <QuroColumn Field="DueDate" HeaderKey="mm.due_date" Type="CellType.Date" />
@@ -73,8 +84,12 @@
     <dd data-testid="loaded-rows" data-refresh="@_refreshes">@_lines.RowKeys.Count</dd>
     <dt>@L["sample.provider_calls"]</dt>
     <dd data-testid="provider-calls">@_providerCalls</dd>
-    <dt>@L["sample.payload"]</dt>
-    <dd><code data-testid="json">@_lines.GetChanges().ToJson()</code></dd>
+    @* 저장 payload 미리보기는 붙여넣기 성능 화면(?wide=1)에서 뺀다: 셀 이벤트마다 화면이 다시 그려지며 변경분 전체를 직렬화하므로 (GS-057) *@
+    @if (Wide != 1)
+    {
+        <dt>@L["sample.payload"]</dt>
+        <dd><code data-testid="json">@_lines.GetChanges().ToJson()</code></dd>
+    }
 </dl>
 
 @code {
@@ -121,6 +136,9 @@
 
     /// <summary>1이면 OnSelectionChanged 구독 (활성 행 표시).</summary>
     [SupplyParameterFromQuery] public int? Selection { get; set; }
+
+    /// <summary>1이면 텍스트 열 6개와 납기일 추가 (500행 × 10열 붙여넣기 성능, GS-057).</summary>
+    [SupplyParameterFromQuery] public int? Wide { get; set; }
 
     /// <summary>1이면 대량 조회 (10,000행, 서버측 페이징 PageSize 100, GS-051·GS-052).</summary>
     [SupplyParameterFromQuery] public int? Large { get; set; }
