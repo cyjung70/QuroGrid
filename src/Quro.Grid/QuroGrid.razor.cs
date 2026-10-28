@@ -148,6 +148,18 @@ public partial class QuroGrid<TItem> where TItem : class
     /// <summary>현재 정렬 (1차·2차… 순서). 비어 있으면 조회 순서.</summary>
     public IReadOnlyList<SortColumn> SortColumns => _sort.ToList();
 
+    /// <summary>
+    /// 엑셀 내보내기 요청 (GS-054, Addendum A-28). 파일은 저장 API 서버가 만들고, 그리드는 현재 화면의
+    /// 컬럼(화면 순서, 사용자 언어 헤더, 너비)과 정렬만 준다. Button 셀은 값이 없어 뺀다.
+    /// </summary>
+    public GridExportRequest GetExportRequest() => new(
+        _columns.Where(c => c.Type != CellType.Button)
+            .Select(c => new ExportColumn(c.Field, c.HeaderKey, Text(c.HeaderKey), c.Type, c.Format, WidthOf(c),
+                c.CurrencyField, c.Aggregate, c.Options))
+            .ToList(),
+        SortColumns,
+        EffectiveCulture.Name);
+
     internal IReadOnlyList<QuroColumn> Columns => _columns;
     internal CultureInfo EffectiveCulture => Culture ?? CultureInfo.CurrentCulture;
 

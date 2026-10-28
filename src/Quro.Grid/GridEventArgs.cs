@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Quro.Grid;
 
 // 이벤트 인자 (Spec 4.10). 취소 가능한 이벤트는 Cancel을 true로 두면 동작을 막는다.
@@ -161,6 +163,8 @@ public sealed class LeavingArgs(string targetLocation)
 }
 
 /// <summary>정렬 방향 (Addendum A-22).</summary>
+// JSON(저장 API 요청 등)에는 이름으로 쓴다 (GS-054)
+[JsonConverter(typeof(JsonStringEnumConverter<SortDirection>))]
 public enum SortDirection
 {
     Ascending,

@@ -1,0 +1,84 @@
+@inherits GridTestContext
+
+@code {
+    // GS-054 엑셀 내보내기 그리드 쪽 (Addendum A-28). .xlsx 생성·내용은 저장 API 서버 범위.
+
+    private static readonly CultureInfo En = new("en-US");
+
+    private static readonly ComboOption[] Units = [new("EA", "Piece"), new("BOX", "Box")];
+
+    private IRenderedComponent<QuroGrid<PoLine>> RenderGrid() =>
+        Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="Lines()" Culture="En" Localizer="new FakeLocalizer()">
+                                     <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" Width="100" />
+                                     <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" Format="#,0.00"
+                                                 Width="80" Aggregate="Aggregate.Sum" />
+                                     <QuroColumn Field="Unit" HeaderKey="mm.unit" Type="CellType.Combo" Options="Units" />
+                                     <QuroColumn Field="Detail" HeaderKey="mm.detail" Type="CellType.Button" TextKey="mm.detail.open" />
+                                 </QuroGrid>);
+
+    private static QuroDataSet<PoLine> Lines()
+    {
+        var ds = new QuroDataSet<PoLine>();
+        ds.Load([new PoLine { ItemCode = "A1001", Qty = 10m, Unit = "BOX" }, new PoLine { ItemCode = "A1002", Qty = 5m, Unit = "EA" }]);
+        return ds;
+    }
+
+    private static T WithUiCulture<T>(string name, Func<T> action)
+    {
+        var saved = CultureInfo.CurrentUICulture;
+        try
+        {
+            CultureInfo.CurrentUICulture = new CultureInfo(name);
+            return action();
+        }
+        finally
+        {
+            CultureInfo.CurrentUICulture = saved;
+        }
+    }
+
+    /// <summary>GS-054: 화면 순서의 컬럼, 사용자 언어 헤더, 리사이즈한 너비. Button 셀 제외</summary>
+    [Fact]
+    public async Task GS_054_ExportColumns_ScreenOrder_UserLanguageHeaders()
+    {
+        var cut = RenderGrid();
+        await cut.InvokeAsync(() => cut.Instance.ColumnResized("Qty", 150));
+
+        var request = WithUiCulture("ko-KR", () => cut.Instance.GetExportRequest());
+
+        Assert.Equal(["ItemCode", "Qty", "Unit"], request.Columns.Select(c => c.Field));
+        Assert.Equal(["품목코드", "수량", "mm.unit"], request.Columns.Select(c => c.Header));   // 리소스가 없으면 키
+        Assert.Equal(["mm.item.code", "mm.qty", "mm.unit"], request.Columns.Select(c => c.HeaderKey));
+        Assert.Equal([100, 150, 120], request.Columns.Select(c => c.Width));
+
+        var qty = request.Columns[1];
+        Assert.Equal(CellType.Number, qty.Type);
+        Assert.Equal("#,0.00", qty.Format);
+        Assert.Equal(Aggregate.Sum, qty.Aggregate);
+        Assert.Equal(Units, request.Columns[2].Options);
+        Assert.Equal("en-US", request.Culture);
+        Assert.Empty(request.Sort);
+
+        var english = WithUiCulture("en-US", () => cut.Instance.GetExportRequest());
+        Assert.Equal(["Item Code", "Quantity", "mm.unit"], english.Columns.Select(c => c.Header));
+    }
+
+    /// <summary>GS-054: 현재 정렬을 담고, 저장 API로 보낼 JSON은 열거형을 이름으로 쓴다</summary>
+    [Fact]
+    public async Task GS_054_ExportRequest_IncludesSort_JsonForApi()
+    {
+        var cut = RenderGrid();
+        await cut.InvokeAsync(() => cut.Instance.Sort("Qty", additive: false));
+        await cut.InvokeAsync(() => cut.Instance.Sort("Qty", additive: false));
+
+        var request = WithUiCulture("en-US", () => cut.Instance.GetExportRequest());
+        Assert.Equal([new SortColumn("Qty", SortDirection.Descending)], request.Sort);
+
+        var json = System.Text.Json.JsonSerializer.Serialize(request, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        Assert.Contains("\"header\":\"Quantity\"", json);
+        Assert.Contains("\"type\":\"Number\"", json);
+        Assert.Contains("\"aggregate\":\"Sum\"", json);
+        Assert.Contains("\"sort\":[{\"field\":\"Qty\",\"direction\":\"Descending\"}]", json);
+        Assert.Contains("\"culture\":\"en-US\"", json);
+    }
+}
