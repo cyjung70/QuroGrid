@@ -8,14 +8,19 @@ namespace Quro.Grid;
 public sealed class CellValueChangingArgs<TItem>(int rowKey, string field, TItem item, object? oldValue, object? newValue)
     where TItem : class
 {
+    /// <summary>Row key.</summary>
     public int RowKey { get; } = rowKey;
+    /// <summary>Field of the edited cell.</summary>
     public string Field { get; } = field;
+    /// <summary>Row item.</summary>
     public TItem Item { get; } = item;
+    /// <summary>Value before the change.</summary>
     public object? OldValue { get; } = oldValue;
 
     /// <summary>사용자 로캘로 해석한 새 값.</summary>
     public object? NewValue { get; } = newValue;
 
+    /// <summary>True to keep the old value.</summary>
     public bool Cancel { get; set; }
 }
 
@@ -23,16 +28,22 @@ public sealed class CellValueChangingArgs<TItem>(int rowKey, string field, TItem
 public sealed class CellValueChangedArgs<TItem>(int rowKey, string field, TItem item, object? oldValue, object? newValue)
     where TItem : class
 {
+    /// <summary>Row key.</summary>
     public int RowKey { get; } = rowKey;
+    /// <summary>Field of the edited cell.</summary>
     public string Field { get; } = field;
+    /// <summary>Row item.</summary>
     public TItem Item { get; } = item;
+    /// <summary>Value before the change.</summary>
     public object? OldValue { get; } = oldValue;
+    /// <summary>Committed value.</summary>
     public object? NewValue { get; } = newValue;
 }
 
 /// <summary>행 추가 전 (OnRowAdding). <see cref="Item"/>에 기본값을 넣는다.</summary>
 public sealed class RowAddingArgs<TItem>(TItem item, int? sourceRowKey = null) where TItem : class
 {
+    /// <summary>New row item.</summary>
     public TItem Item { get; } = item;
 
     /// <summary>행 복사(A-12)면 원본 행 키. 앱은 여기서 키·버전 등 복사하면 안 되는 값을 정리한다.</summary>
@@ -46,8 +57,11 @@ public sealed class RowAddingArgs<TItem>(TItem item, int? sourceRowKey = null) w
 public sealed class PopupRequestedArgs<TItem>(int rowKey, string field, TItem item, string text,
     IReadOnlyList<string> matches, PopupTrigger trigger) where TItem : class
 {
+    /// <summary>Row key.</summary>
     public int RowKey { get; } = rowKey;
+    /// <summary>Field of the popup cell.</summary>
     public string Field { get; } = field;
+    /// <summary>Row item.</summary>
     public TItem Item { get; } = item;
 
     /// <summary>입력 문자열</summary>
@@ -56,6 +70,7 @@ public sealed class PopupRequestedArgs<TItem>(int rowKey, string field, TItem it
     /// <summary>컬럼 Lookup 결과 (Lookup이 없으면 빈 목록)</summary>
     public IReadOnlyList<string> Matches { get; } = matches;
 
+    /// <summary>What opened the request.</summary>
     public PopupTrigger Trigger { get; } = trigger;
 
     /// <summary>앱이 고른 코드. null이면 확정하지 않는다.</summary>
@@ -65,55 +80,71 @@ public sealed class PopupRequestedArgs<TItem>(int rowKey, string field, TItem it
 /// <summary>Button 셀 클릭 (OnCellButtonClick, Addendum A-19).</summary>
 public sealed class CellButtonClickArgs<TItem>(int rowKey, string field, TItem item) where TItem : class
 {
+    /// <summary>Row key.</summary>
     public int RowKey { get; } = rowKey;
+    /// <summary>Field of the button column.</summary>
     public string Field { get; } = field;
+    /// <summary>Row item.</summary>
     public TItem Item { get; } = item;
 }
 
 /// <summary>활성 행 변경 (OnSelectionChanged, Addendum A-13).</summary>
 public sealed class SelectionChangedArgs<TItem>(int rowKey, TItem item) where TItem : class
 {
+    /// <summary>Row key of the new active row.</summary>
     public int RowKey { get; } = rowKey;
+    /// <summary>Row item.</summary>
     public TItem Item { get; } = item;
 }
 
 /// <summary>행 추가 후 (OnRowAdded).</summary>
 public sealed class RowAddedArgs<TItem>(int rowKey, TItem item) where TItem : class
 {
+    /// <summary>Row key of the new row (negative until saved).</summary>
     public int RowKey { get; } = rowKey;
+    /// <summary>Row item.</summary>
     public TItem Item { get; } = item;
 }
 
 /// <summary>행 삭제 후 (OnRowDeleted, Addendum A-14). 삭제 호출 1회에 한 번, 실제 삭제된 행 키(취소 행 제외).</summary>
 public sealed class RowDeletedArgs(IReadOnlyList<int> rowKeys)
 {
+    /// <summary>Keys of the deleted rows.</summary>
     public IReadOnlyList<int> RowKeys { get; } = rowKeys;
 }
 
 /// <summary>행 삭제 전 (OnRowDeleting). 행마다 발생하며 취소한 행만 남는다.</summary>
 public sealed class RowDeletingArgs<TItem>(int rowKey, TItem item) where TItem : class
 {
+    /// <summary>Row key.</summary>
     public int RowKey { get; } = rowKey;
+    /// <summary>Row item.</summary>
     public TItem Item { get; } = item;
+    /// <summary>True to keep the row.</summary>
     public bool Cancel { get; set; }
 }
 
 /// <summary>붙여넣기 직전 (OnPasting). 범위·데이터 확인과 취소.</summary>
 public sealed class PastingArgs(int startRowKey, string startField, string[][] cells)
 {
+    /// <summary>Row key of the top-left target cell.</summary>
     public int StartRowKey { get; } = startRowKey;
+    /// <summary>Field of the top-left target cell.</summary>
     public string StartField { get; } = startField;
 
     /// <summary>클립보드 내용 (행 × 열, 엑셀 탭·줄바꿈 형식을 나눈 결과).</summary>
     public string[][] Cells { get; } = cells;
 
+    /// <summary>True to skip the paste.</summary>
     public bool Cancel { get; set; }
 }
 
 /// <summary>붙여넣기 후 (OnPasted, Addendum A-04). 안내 표시는 앱이 정한다.</summary>
 public sealed class PastedArgs(int startRowKey, string startField, IReadOnlyList<int> addedRowKeys, IReadOnlyList<PasteSkip> skipped)
 {
+    /// <summary>Row key of the top-left target cell.</summary>
     public int StartRowKey { get; } = startRowKey;
+    /// <summary>Field of the top-left target cell.</summary>
     public string StartField { get; } = startField;
 
     /// <summary>부족 행 자동 추가로 생긴 행 (AddRowsOnPaste).</summary>
@@ -129,8 +160,11 @@ public sealed record PasteSkip(int RowKey, string Field, string MessageKey);
 /// <summary>붙여넣기 건너뜀 사유 리소스 키 (Addendum 2절).</summary>
 public static class PasteKeys
 {
+    /// <summary>The cell is read-only.</summary>
     public const string ReadOnly = "quro.paste.readonly";
+    /// <summary>The value cannot be parsed for the cell type.</summary>
     public const string Invalid = "quro.paste.invalid";
+    /// <summary>OnCellValueChanging cancelled the value.</summary>
     public const string Cancelled = "quro.paste.cancelled";
 }
 
@@ -193,6 +227,7 @@ public static class GridKeys
 /// </summary>
 public sealed class LeavingArgs(string targetLocation)
 {
+    /// <summary>Address the user is navigating to.</summary>
     public string TargetLocation { get; } = targetLocation;
 
     /// <summary>true면 이동하지 않는다.</summary>
@@ -204,7 +239,9 @@ public sealed class LeavingArgs(string targetLocation)
 [JsonConverter(typeof(JsonStringEnumConverter<SortDirection>))]
 public enum SortDirection
 {
+    /// <summary>Ascending.</summary>
     Ascending,
+    /// <summary>Descending.</summary>
     Descending,
 }
 
@@ -214,12 +251,14 @@ public sealed record SortColumn(string Field, SortDirection Direction);
 /// <summary>사용자가 헤더를 눌러 정렬이 바뀐 뒤 (OnSortChanged, Addendum A-22). 비어 있으면 정렬 해제.</summary>
 public sealed class SortChangedArgs(IReadOnlyList<SortColumn> sort)
 {
+    /// <summary>New sort, in priority order.</summary>
     public IReadOnlyList<SortColumn> Sort { get; } = sort;
 }
 
 /// <summary>컬럼 경계 드래그가 끝난 뒤 (OnColumnResized, Addendum A-23). 레이아웃 저장(P1)에 쓴다.</summary>
 public sealed class ColumnResizedArgs(string field, int width)
 {
+    /// <summary>Field of the resized column.</summary>
     public string Field { get; } = field;
 
     /// <summary>새 너비 (px, 최소 40)</summary>
@@ -229,6 +268,7 @@ public sealed class ColumnResizedArgs(string field, int width)
 /// <summary>헤더 드래그로 컬럼을 옮긴 뒤 (OnColumnMoved, GS-068). 레이아웃 저장에 쓴다.</summary>
 public sealed class ColumnMovedArgs(string field, int index)
 {
+    /// <summary>Field of the moved column.</summary>
     public string Field { get; } = field;
 
     /// <summary>옮긴 뒤 화면 위치 (보이는 컬럼 중 0부터)</summary>

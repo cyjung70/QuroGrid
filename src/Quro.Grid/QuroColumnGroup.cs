@@ -17,6 +17,7 @@ public sealed class QuroColumnGroup : ComponentBase, IDisposable
     /// <summary>그룹 헤더 리소스 키 (Spec 4.8)</summary>
     [Parameter, EditorRequired] public string HeaderKey { get; set; } = "";
 
+    /// <summary>Columns and nested groups under this header.</summary>
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
     /// <summary>안에 정의된 컬럼과 그룹 (정의 순서). 그리드가 채운다</summary>
@@ -24,6 +25,7 @@ public sealed class QuroColumnGroup : ComponentBase, IDisposable
 
     private string? _rendered;
 
+    /// <inheritdoc />
     protected override void OnInitialized()
     {
         if (Host is null)
@@ -31,6 +33,7 @@ public sealed class QuroColumnGroup : ComponentBase, IDisposable
         Host.AddGroup(this);
     }
 
+    /// <inheritdoc />
     protected override void OnParametersSet()
     {
         if (_rendered is not null && _rendered != HeaderKey)
@@ -38,6 +41,7 @@ public sealed class QuroColumnGroup : ComponentBase, IDisposable
         _rendered = HeaderKey;
     }
 
+    /// <inheritdoc />
     protected override void BuildRenderTree(RenderTreeBuilder builder)
     {
         builder.OpenComponent<CascadingValue<QuroColumnGroup>>(0);
@@ -47,6 +51,7 @@ public sealed class QuroColumnGroup : ComponentBase, IDisposable
         builder.CloseComponent();
     }
 
+    /// <summary>Removes the group from the grid.</summary>
     public void Dispose() => Host?.RemoveGroup(this);
 
     /// <summary>바깥에서 안쪽 순서의 그룹 경로 (이 그룹 포함)</summary>

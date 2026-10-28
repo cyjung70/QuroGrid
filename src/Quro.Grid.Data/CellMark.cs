@@ -1,5 +1,6 @@
 namespace Quro.Grid.Data;
 
+/// <summary>Severity of a cell mark.</summary>
 public enum CellMarkLevel
 {
     /// <summary>경고 색 + 툴팁 (예: Minus 재고 허용 ON)</summary>

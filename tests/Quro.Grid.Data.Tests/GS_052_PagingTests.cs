@@ -37,8 +37,8 @@ public class GS_052_PagingTests
         ds.Release(keys);
 
         Assert.Equal([keys[0], keys[1], added], ds.RowKeys);
-        Assert.Equal(1, ds.GetChanges().Updated.Count);
-        Assert.Equal(1, ds.GetChanges().Deleted.Count);
+        Assert.Single(ds.GetChanges().Updated);
+        Assert.Single(ds.GetChanges().Deleted);
     }
 
     /// <summary>놓았다가 다시 적재한 행도 같은 행 키 (화면의 활성 셀·선택이 행 키로 이어진다)</summary>

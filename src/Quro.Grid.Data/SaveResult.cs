@@ -2,6 +2,7 @@ using System.Net;
 
 namespace Quro.Grid.Data;
 
+/// <summary>Outcome of a save call.</summary>
 public enum SaveStatus
 {
     /// <summary>변경분이 없어 API를 호출하지 않음</summary>
@@ -17,4 +18,7 @@ public enum SaveStatus
     Failed,
 }
 
+/// <summary>Result of a save call.</summary>
+/// <param name="Status">Outcome</param>
+/// <param name="StatusCode">HTTP status of the storage API response, or null when no call was made</param>
 public sealed record SaveResult(SaveStatus Status, HttpStatusCode? StatusCode = null);

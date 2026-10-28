@@ -7,13 +7,21 @@ namespace Quro.Grid;
 [JsonConverter(typeof(JsonStringEnumConverter<CellType>))]
 public enum CellType
 {
+    /// <summary>Free text.</summary>
     Text,
+    /// <summary>Number shown with the column format.</summary>
     Number,
+    /// <summary>Amount whose decimals follow the row currency.</summary>
     Currency,
+    /// <summary>Date.</summary>
     Date,
+    /// <summary>Value chosen from a list of options.</summary>
     Combo,
+    /// <summary>Check box.</summary>
     Check,
+    /// <summary>Code entered or picked with a lookup popup.</summary>
     Popup,
+    /// <summary>Button that raises OnCellButtonClick.</summary>
     Button,
 }
 
@@ -22,14 +30,18 @@ public enum CellType
 [JsonConverter(typeof(JsonStringEnumConverter<Aggregate>))]
 public enum Aggregate
 {
+    /// <summary>No footer value.</summary>
     None,
+    /// <summary>Sum of the column.</summary>
     Sum,
 }
 
 /// <summary>삭제 표시 행의 화면 처리 (O-02 잠정안: 기본 숨김).</summary>
 public enum DeletedRowDisplay
 {
+    /// <summary>Deleted rows are hidden.</summary>
     Hide,
+    /// <summary>Deleted rows are shown with a strikethrough.</summary>
     Strikethrough,
 }
 
@@ -49,6 +61,8 @@ public sealed record ComboOption(object? Value, string Text);
 /// <summary>Enter 확정 후 이동 방향 (O-05 결정: 기본 오른쪽).</summary>
 public enum EnterDirection
 {
+    /// <summary>Move to the next cell on the right.</summary>
     Right,
+    /// <summary>Move to the cell below.</summary>
     Down,
 }

@@ -77,7 +77,9 @@ public partial class QuroGrid<TItem> where TItem : class
 
     [Inject] private IJSRuntime JS { get; set; } = default!;
 
+    /// <summary>Rows, row states and validation behind the grid.</summary>
     [Parameter, EditorRequired] public QuroDataSet<TItem> DataSet { get; set; } = default!;
+    /// <summary>Column definitions (QuroColumn, QuroColumnGroup).</summary>
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
     /// <summary>헤더·메시지 리소스 (Spec 4.8). 없으면 키를 그대로 표시한다.</summary>
@@ -86,7 +88,9 @@ public partial class QuroGrid<TItem> where TItem : class
     /// <summary>표시·입력 해석 로캘. 기본은 <see cref="CultureInfo.CurrentCulture"/>.</summary>
     [Parameter] public CultureInfo? Culture { get; set; }
 
+    /// <summary>Number of columns frozen on the left.</summary>
     [Parameter] public int FrozenColumns { get; set; }
+    /// <summary>Shows the footer (totals) row.</summary>
     [Parameter] public bool ShowFooter { get; set; }
 
     /// <summary>통화 코드 → 소수 자릿수 (통화 마스터, Spec 4.6). Currency 컬럼에 필요하다.</summary>
@@ -106,14 +110,20 @@ public partial class QuroGrid<TItem> where TItem : class
 
     // ── 이벤트 (Spec 4.10, Addendum A-04·A-13·A-14·A-16·A-19) ──
 
+    /// <summary>Before a value is committed. Set Cancel to keep the old value.</summary>
     [Parameter] public EventCallback<CellValueChangingArgs<TItem>> OnCellValueChanging { get; set; }
+    /// <summary>After a value is committed.</summary>
     [Parameter] public EventCallback<CellValueChangedArgs<TItem>> OnCellValueChanged { get; set; }
+    /// <summary>Before a row is added. Fill default values here.</summary>
     [Parameter] public EventCallback<RowAddingArgs<TItem>> OnRowAdding { get; set; }
+    /// <summary>After a row is added.</summary>
     [Parameter] public EventCallback<RowAddedArgs<TItem>> OnRowAdded { get; set; }
+    /// <summary>Before each row is deleted. Set Cancel to keep the row.</summary>
     [Parameter] public EventCallback<RowDeletingArgs<TItem>> OnRowDeleting { get; set; }
 
     /// <summary>삭제 후 (Addendum A-14). 삭제 호출 1회에 한 번.</summary>
     [Parameter] public EventCallback<RowDeletedArgs> OnRowDeleted { get; set; }
+    /// <summary>Before a paste is applied. Set Cancel to skip it.</summary>
     [Parameter] public EventCallback<PastingArgs> OnPasting { get; set; }
 
     /// <summary>붙여넣기 후: 추가된 행, 건너뛴 셀과 사유 (Addendum A-04).</summary>
@@ -228,6 +238,7 @@ public partial class QuroGrid<TItem> where TItem : class
 
     // ── JS 층 등록 (R1·R5): 키보드·포커스·클릭은 quro-grid.js가 그리드 루트 하나에서 받는다 ──
 
+    /// <inheritdoc />
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (_refreshRows && _virtualize is not null)
@@ -264,6 +275,7 @@ public partial class QuroGrid<TItem> where TItem : class
         }
     }
 
+    /// <summary>Releases the JS module and its event handlers.</summary>
     public async ValueTask DisposeAsync()
     {
         try
@@ -729,6 +741,7 @@ public partial class QuroGrid<TItem> where TItem : class
         return true;
     }
 
+    /// <summary>Cancels the cell edit and keeps the old value (called from quro-grid.js on Esc).</summary>
     [JSInvokable]
     public void CancelEdit() => EndEditing();
 
@@ -776,6 +789,7 @@ public partial class QuroGrid<TItem> where TItem : class
         StateHasChanged();
     }
 
+    /// <summary>Clears the sort.</summary>
     public void ClearSort() => SetSort([]);
 
     /// <summary>정렬이 바뀜: 페이징이면 정렬 조건으로 다시 조회, 아니면 메모리 정렬.</summary>
