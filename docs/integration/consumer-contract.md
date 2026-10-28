@@ -39,7 +39,7 @@ builder.Services.AddSingleton<IQuroDefinitionCatalog, ErpDefinitionCatalog>(); /
 | 업무 판정 | Minus 재고, 금액 계산, 저장 가능 여부 → `SetCellMark`, `OnCellValueChanged` | 판정하지 않음 |
 
 ## 4. 컴포넌트 · 이벤트 (요약)
-- `<QuroGrid DataSet="…" Columns="…" />` 또는 `<QuroGrid Definition="sd.invoice" Grid="lines" />` [미정]
+- `<QuroGrid DataSet="…">` + `<QuroColumn>` 직접 선언, 또는 `<QuroGrid Definition="@gridDef">` (`GridDef`는 `Quro.Grid.Definition`, Addendum A-44 — 구현 예정)
 - 이벤트: `OnCellValueChanging`(취소 가능), `OnCellValueChanged`, `OnRowAdding`/`OnRowAdded`, `OnRowDeleting`(취소 가능), `OnPopupRequested`, `OnPasting`(취소 가능), `OnSelectionChanged`
 - 셀 표시: `SetCellMark(row, field, CellMark(Error|Warning, resourceKey))`
 
@@ -84,9 +84,12 @@ builder.Services.AddSingleton<IQuroDefinitionCatalog, ErpDefinitionCatalog>(); /
 - 서버는 한 트랜잭션에서 삭제 → 수정 → 추가, `version` 불일치 시 409
 
 ## 6. 화면 정의(TOON) 계약
-- 스키마: `docs/QuroGrid_TOON_ScreenDef_v0.1.pdf` 6장 (v0.2에서 확정)
-- 정의 파일은 소비자 저장소 소유. 필드명은 소비자 glossary의 영문 식별자
-- 검증 CLI: `dotnet quro-deflint <폴더>` [미정 — dotnet tool로 배포 여부 I-02]
+- 스키마: `docs/QuroGrid_TOON_ScreenDef_v0.2.md` 3·4·5장 (Addendum A-44). 시나리오: `tests/scenarios/GS-D.md`
+- 정의 파일(`*.screen.toon`)은 소비자 저장소 소유. id는 소비자 glossary의 영문 camelCase 식별자
+- 파서·검증기·`FieldModeResolver`·`RuleExpression`은 `Quro.Grid.Definition` (UI 무관 — 소비자 서버도 참조 가능). 패키지는 아직 없음 (구현 예정)
+- 소비자가 맡는 것: 화면 레지스트리·폼 렌더러, `code:`·`lookup:`·`@` 기본값 토큰 해석, 권한 판정, 저장 커맨드 변환(`ChangeSet` → 소비자 DTO), 서버 권위 재계산
+- 카탈로그 `IQuroDefinitionCatalog`: 리소스 키, code Major, lookup id, 핸들러 id, 권한 id [이름 미정]
+- 검증 CLI: `dotnet quro-deflint <폴더>` [미정 — T-12]
 
 ## 7. 버전 정책
 - SemVer. 1.0 전 `0.MINOR.PATCH-alpha.N`. 깨지는 변경 = MINOR 증가 + CHANGELOG `BREAKING:`

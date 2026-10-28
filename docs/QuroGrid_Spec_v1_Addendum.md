@@ -1,7 +1,7 @@
 # QuroGrid Spec v1 보완 문서 (Addendum A)
 
 - 대상: `docs/QuroGrid_FeatureMatrix_Spec_v1.pdf` (Spec v1 초안 Draft v0.2, 2026-10-28 — 4.9·5장 본문 개정)
-- 문서 상태: A.21 (2026-10-29) · 스테이블영 결정 사항 반영
+- 문서 상태: A.22 (2026-10-29) · 스테이블영 결정 사항 반영
 - 이 문서는 Spec v1의 일부입니다. **아래 항목은 Spec 본문보다 우선합니다.** 본문에 없는 내용은 "보완", 본문과 다른 내용은 "변경"으로 표시합니다.
 
 ---
@@ -53,6 +53,7 @@
 | A-41 | D-03 | 변경 | **라이선스: LGPL v3 → MIT.** 저장소 루트 `LICENSE.md`(MIT, Copyright (c) 2026 CHO Y. JUNG), 패키지 `PackageLicenseExpression` = `MIT`. 새 의존성은 MIT와 함께 배포할 수 있는 라이선스만(MIT·Apache 2.0·BSD 등). GPL 계열·상용은 계속 금지. Clean-room 규칙(2장)은 그대로 | 2026-10-29 |
 | A-42 | 3-D, A-32 (P1) | 보완 | **그룹핑·소계 구현 (GS-074·GS-075, 2026-10-29 제안 승인)**: 앱이 `SetGroupBy(필드 목록)`으로 지정 (목록 순서 = 단 순서, 여러 단). `ClearGroupBy`·`GroupColumns`·`ExpandAll`·`CollapseAll`, 이벤트 없음. 그룹 머리 행 = "헤더: 값 (건수)" (리소스 키 `quro.group.header`, 빈 값 `quro.group.empty`, Combo는 명칭, Check는 체크·해제 문구), 그룹 끝에 소계 행 (`Aggregate.Sum` 컬럼, 첫 칸 `quro.group.subtotal`). 그룹 순서는 값 오름차순(Combo는 명칭, 그 컬럼을 내림차순 정렬 중이면 내림차순, 빈 값은 맨 뒤), 그룹 안은 현재 순서. 그룹을 정한 뒤 그룹 값을 편집해도 행은 옮기지 않고 소계만 갱신 (A-22와 같은 원칙), `SetGroupBy`·`Load` 때 다시 정함. 키보드: ↑↓가 그룹 머리 행에도 서고 소계 행은 건너뜀(서버 호출 없음), Space·Enter·클릭 펼침·접기, ← 접기, → 펼치기 (서버 1회). 머리 행·소계 행은 편집·붙여넣기·범위 선택·복사 대상이 아니고 `aria-rowcount`에는 센다. 페이징 중에는 `SetGroupBy`를 무시 (A-32). CSS `.quro-group-head-row`(`aria-expanded`, `data-group-level`), `.quro-subtotal-row` | 2026-10-29 |
 | A-43 | 3-E, A-34 (P1) | 보완 | **CSV 내보내기 구현 (GS-079, 2026-10-29 제안 승인)**: `enum ExportFormat { Xlsx, Csv }` (JSON은 소문자 `"xlsx"`·`"csv"`), `GridExportRequest`의 마지막 필드 `Format`(기본 `Xlsx`), `GetExportRequest(ExportFormat format = Xlsx)`. 기존 `GetExportRequest()` 호출은 그대로 xlsx (GS-054 변화 없음). 컬럼·정렬·필터·로캘은 형식과 관계없이 같다. CSV의 구분자·인코딩(예: Excel용 UTF-8 BOM)·따옴표 처리는 저장 API가 정한다 | 2026-10-29 |
+| A-44 | 신규 (화면 정의) | 결정 | **TOON 화면 정의 v0.2 (2026-10-29 스테이블영 확정)**: 설계서 `docs/QuroGrid_TOON_ScreenDef_v0.2.md`, Harness `tests/scenarios/GS-D.md` v0.2. QuroERP TO BE 설계서 v0.1의 스키마(`screen`·`toolbar`·`form`·`grids[]{columns,rules,validate}`)를 기준으로 한다. ① 그리드는 QuroGrid 유지 (TO BE 설계서 D1의 MudBlazor·Radzen 권고는 채택하지 않음, D-01). ② 파서·불변 모델·의미 검증·`FieldModeResolver`·규칙 식 평가는 `Quro.Grid.Definition` (I-02 해소). UI 무관이라 소비자 서버도 같은 패키지로 검증·재계산한다. ③ 저장 payload는 QuroDataSet 형식(`inserted`·`updated`·`deleted` + 행 `version`, Spec 4.4) 유지. TO BE 설계서의 `header + lines[{rowState}]`는 소비자가 변환한다. ④ `rules`의 `calc`·`sum` 식은 그리드가 평가하지 않는다. `RuleExpression`(화이트리스트 식, `decimal`, null = 0)을 앱이 `OnCellValueChanged`에서 쓴다 — 열 규칙이며 Spec의 "셀 수식 v1 범위 밖"과 다르다. ⑤ 레거시 변환기(xml2toon)·toonlint는 이 저장소에 두지 않는다 (QuroERP 쪽 비공개 도구, I-07). ⑥ 그리드 연결 공개 API는 `<QuroGrid Definition="@gridDef">` 파라미터 (consumer-contract 4장 `[미정]` 해소, 구현은 GS-D11부터). 그리드 갭 G-01~G-05(추가 행만 편집, 배타 범위, 클립보드 끄기, 열별 필터·정렬·그룹 허용, CSV 올리기)는 각각 공개 API 승인 후 GS로 진행 | 2026-10-29 |
 
 ## 2. 이벤트 API 보완 (4.10)
 
