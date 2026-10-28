@@ -1,0 +1,66 @@
+# QuroERP UI Metadata  (TOON v3 subset, delimiter = comma, indent = 2)
+screen:
+  id: sd.so.entry
+  module: SD
+  title: sd.so.entry.title
+  version: 1
+  api: /api/sd/sales-orders
+  key: soNo
+  layout: form-grid
+  perm:
+    read: SD.SO.Read
+    write: SD.SO.Write
+  lockWhen: "status in [RE,CL]"
+toolbar[9]: query,new,save,delete,addRow,deleteRow,undoRow,uploadCsv
+form:
+  cols: 3
+  fields[22]{id,label,type,mode,max,case,default,source,span,on}:
+    soNo,sd.so.soNo,text,auto,18,upper,"","lookup:salesOrder",1,""
+    customer,sd.so.customer,select,req,40,"","","lookup:customer",2,loadCustomer
+    totalAmt,sd.so.totalAmt,money,ro,"","",0,"",1,""
+    salesRep,sd.so.salesRep,select,req,"","","","code:S200",1,""
+    terms,sd.so.terms,select,opt,"","","","code:A300",1,calcDueDate
+    shipVia,sd.so.shipVia,select,opt,"","","","code:S600",1,""
+    remarks,sd.so.remarks,text,opt,200,"","","",2,""
+    freightCharge,sd.so.freightCharge,select,opt,"","",Collect,"code:S800",1,""
+    soDate,sd.so.soDate,date,req,"","",@today,"",1,calcDueDate
+    deliveryDate,sd.so.deliveryDate,date,req,"","",@today,"",1,""
+    dueDate,sd.so.dueDate,date,req,"","",@today,"",1,""
+    shipName,sd.so.shipName,text,opt,40,"","","",2,""
+    shipAddr1,sd.so.shipAddr1,text,opt,80,"","","",2,""
+    shipAddr2,sd.so.shipAddr2,text,opt,80,"","","",2,""
+    shipCity,sd.so.shipCity,text,opt,40,"","","",1,""
+    shipState,sd.so.shipState,select,opt,"","","","code:S900",1,""
+    shipZip,sd.so.shipZip,text,req,20,"","","",1,""
+    shipCountry,sd.so.shipCountry,text,opt,20,"",@company.country,"",1,""
+    shipPhone,sd.so.shipPhone,text,opt,18,"","","",1,""
+    shipFax,sd.so.shipFax,text,opt,18,"","","",1,""
+    dcStatus,sd.so.dcStatus,select,opt,"","","","code:S910",1,""
+    status,sd.so.status,hidden,ro,"","",SO,"",0,""
+  readOnlyFor[1]{perm,fields}:
+    SD.SO.ReadOnlyTerms,"terms|dcStatus|freightCharge"
+grids[1]:
+  - id: lines
+    bind: lines
+    rowKey: seq
+    initRows: 0
+    clipboard: true
+    columns[10]{id,label,type,width,edit,req,fmt,lookup,sum,hidden}:
+      itemCd,sd.so.line.itemCd,text,150,true,true,"","item",false,false
+      itemName,sd.so.line.itemName,text,250,true,false,"","",false,false
+      qty,sd.so.line.qty,number,80,true,true,"#,##0.###","",false,false
+      unitPrice,sd.so.line.unitPrice,money,90,true,true,"#,##0.00","",false,false
+      amount,sd.so.line.amount,money,100,false,false,"#,##0.00","",true,false
+      dcCode,sd.so.line.dcCode,text,60,true,false,"","discount",false,false
+      dcRate,sd.so.line.dcRate,number,60,false,false,"0.00","",false,false
+      stdPrice,sd.so.line.stdPrice,money,90,false,false,"#,##0.00","",false,false
+      invQty,sd.so.line.invQty,number,80,false,false,"#,##0.###","",false,false
+    rules[4]{on,action,target,expr}:
+      itemCd.change,lookup,"itemName|unitPrice|stdPrice","item.byCustomer(customer)"
+      qty.change,calc,amount,"qty * unitPrice * (1 - dcRate/100)"
+      unitPrice.change,calc,amount,"qty * unitPrice * (1 - dcRate/100)"
+      lines.change,sum,totalAmt,"sum(amount)"
+    validate[3]{target,rule,msg}:
+      qty,"gt 0"
+      unitPrice,"gt 0",msg.price.zero
+      itemCd,"requires customer",msg.customer.first

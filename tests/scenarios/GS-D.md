@@ -33,7 +33,7 @@ TOBE의 Harness 8개 중 QuroGrid가 판정할 수 있는 것은 여기서, Quro
 
 ## 3. 시나리오
 
-### 3.1 파서·구조 (xUnit, `Quro.Grid.Definition.Tests`) — 묶음 D-1·D-2
+### 3.1 파서·구조 (xUnit, `Quro.Grid.Definition.Tests`) — 묶음 D-1(GS-D01·GS-D02 ✅)·D-2
 
 | ID | 시나리오 | 입력 | 기대 결과 | H |
 |---|---|---|---|---|

@@ -364,3 +364,9 @@ Spec 3장 Feature Matrix의 P1 항목과 6장 로드맵(v1.x: 다단 헤더, 필
 - 5-4 (헤더 필터): GS-071~GS-073, A-40 — **완료**. 샘플 대량 조회(`?large=1`)의 가짜 조회 API도 조건을 반영
 - 5-5 (그룹핑·소계): GS-074·GS-075, A-42 — **완료**. 여러 단, 메모리 모드만. 샘플 `?types=1&groupby=Unit`
 - 5-7 (CSV 내보내기): GS-079, A-43 — **완료**. P1 8개 묶음 모두 완료
+
+### 화면 정의(TOON) 착수 순서 (2026-10-29 승인, A-44)
+
+D-1 → D-2 → D-3 → D-4 → D-5 → D-6. 시나리오는 `GS-D.md`, 설계는 `docs/QuroGrid_TOON_ScreenDef_v0.2.md` 11장.
+
+- D-1 (`Quro.Grid.Definition`, strict TOON 리더·모델): GS-D01·GS-D02 — **완료**. 골든 `tests/Quro.Grid.Definition.Tests/Golden/`
