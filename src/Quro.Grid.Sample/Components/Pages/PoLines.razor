@@ -166,6 +166,15 @@
     /// <summary>?groups=1: 수량·단가를 그룹 헤더로 묶는다 (GS-070)</summary>
     [SupplyParameterFromQuery] public int? Groups { get; set; }
 
+    /// <summary>?groupby=Unit 등: 그 컬럼(쉼표로 여러 단)으로 그룹핑 (GS-074). 단위는 Box·Each·Box로 채운다</summary>
+    [SupplyParameterFromQuery(Name = "groupby")] public string? GroupBy { get; set; }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender && !string.IsNullOrEmpty(GroupBy))
+            _grid.SetGroupBy(GroupBy.Split(','));   // 컬럼이 등록된 뒤 (앱이 그룹을 지정하는 예)
+    }
+
     /// <summary>1이면 대량 조회 (10,000행, 서버측 페이징 PageSize 100, GS-051·GS-052).</summary>
     [SupplyParameterFromQuery] public int? Large { get; set; }
 
@@ -204,6 +213,8 @@
             r.Amount = r.Qty * r.UnitPrice;
         if (Types == 1)
             rows[0].DueDate = new DateOnly(2026, 11, 2);
+        if (!string.IsNullOrEmpty(GroupBy))
+            (rows[0].Unit, rows[1].Unit, rows[2].Unit) = ("BOX", "EA", "BOX");
         if (Large != 1)
             _lines.Load(rows);   // 대량 조회는 그리드가 조회 함수로 필요한 범위만 적재한다
     }

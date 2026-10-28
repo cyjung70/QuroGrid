@@ -63,6 +63,9 @@ public sealed class SampleLocalizer : IStringLocalizer
         ["quro.filter.to"] = ("종료일", "To"),
         ["quro.filter.checked"] = ("체크", "Checked"),
         ["quro.filter.unchecked"] = ("체크 안 함", "Unchecked"),
+        ["quro.group.header"] = ("{0}: {1} ({2}건)", "{0}: {1} ({2})"),
+        ["quro.group.subtotal"] = ("소계", "Subtotal"),
+        ["quro.group.empty"] = ("(빈 값)", "(Empty)"),
     };
 
     public LocalizedString this[string name] =>

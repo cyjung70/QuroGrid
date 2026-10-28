@@ -13,10 +13,16 @@ public sealed record ColumnFilter(string Field)
     /// <summary>포함할 문자열 (대소문자 무시)</summary>
     public string? Contains { get; init; }
 
+    /// <summary>최소 (포함)</summary>
     public decimal? Min { get; init; }
+
+    /// <summary>최대 (포함)</summary>
     public decimal? Max { get; init; }
 
+    /// <summary>시작일 (포함)</summary>
     public DateOnly? From { get; init; }
+
+    /// <summary>종료일 (포함)</summary>
     public DateOnly? To { get; init; }
 
     /// <summary>고른 값: Combo는 코드, Check는 저장 값 (언어 무관 문자열)</summary>

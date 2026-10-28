@@ -317,3 +317,34 @@
     border-radius: 3px;
     cursor: pointer;
 }
+
+/* 그룹핑 (A-42): 그룹 머리 행은 한 칸(펼침 표시 ▾/▸ + "헤더: 값 (건수)"), 소계 행은 합계 행과 같은 모양 */
+.quro-group-head-row {
+    cursor: pointer;
+    user-select: none;
+}
+
+.quro-group-head-cell {
+    background: var(--qg-head-bg);
+    font-weight: 600;
+}
+
+.quro-group-head-text {
+    position: sticky;
+    left: 6px;
+}
+
+.quro-group-head-text::before {
+    display: inline-block;
+    width: 1em;
+    content: "\25BE";
+}
+
+[aria-expanded=false] .quro-group-head-text::before {
+    content: "\25B8";
+}
+
+.quro-subtotal {
+    background: color-mix(in srgb, var(--qg-head-bg) 50%, var(--qg-bg));
+    font-weight: 600;
+}

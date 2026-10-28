@@ -1,7 +1,7 @@
 // quro-grid.js — QuroGrid의 얇은 JS 층 (Spec 4.2).
 // 소유: 활성 셀(포커스)·활성 헤더·범위 선택·키보드 이동·편집 중 키 입력·클립보드 (R1).
 // 서버 호출은 편집 시작·커밋·취소·행 추가·행 삭제·붙여넣기(1회, R3)·활성 행 변경(구독 시)·정렬·컬럼 너비·이동(놓을 때)·Undo/Redo·
-// 코드도움(F4)·선택 목록 열기(Alt+↓)·체크 토글·버튼 클릭·필터 패널 열기·적용·닫기 때만 (R2).
+// 코드도움(F4)·선택 목록 열기(Alt+↓)·체크 토글·버튼 클릭·필터 패널 열기·적용·닫기·그룹 펼침·접기 때만 (R2).
 // 셀마다 핸들러를 달지 않고 그리드 루트 하나에서 이벤트를 받아 data-row / data-field로 좌표를 해석한다 (R5).
 
 const grids = new Map();
@@ -20,6 +20,7 @@ export function init(root, dotnet, options) {
         active: null,      // { row: number, field: string } — 선택 범위의 움직이는 끝
         anchor: null,      // 선택 범위의 고정 끝 (Shift+이동·드래그)
         header: null,      // 키보드로 헤더에 있을 때 그 필드 (GS-064). 이때 본문 활성 셀 표시는 없다
+        group: null,       // 키보드로 그룹 머리 행에 있을 때 그 그룹 ID (GS-074). 활성 셀(열)은 기억해 둔다
         dragging: false,
         editing: null,     // { row, field, input }
         queue: Promise.resolve(),
@@ -134,7 +135,8 @@ function onKeyDown(s, e) {
 
     e.preventDefault();
     const key = { key: isRowDelete(e) ? 'RowDelete' : e.key, shift: e.shiftKey, alt: e.altKey, ctrl: e.ctrlKey, char: isChar(e) };
-    enqueue(s, () => typeAheadFilter(s, key) || (s.header ? handleHeaderKey(s, key) : handleKey(s, key)));
+    enqueue(s, () => typeAheadFilter(s, key)
+        || (s.header ? handleHeaderKey(s, key) : s.group ? handleGroupKey(s, key) : handleKey(s, key)));
 }
 
 /** 필터 패널이 열리는 동안 먼저 친 키는 패널이 받는다 (편집 시작 중 입력과 같음). 처리했으면 true */
@@ -178,6 +180,20 @@ function onMouseDown(s, e) {
         if (!s.editing) s.root.focus({ preventScroll: true });   // 패널이 열리기 전에 친 키도 그리드가 받아 패널로 넘긴다
         const field = filterButton.closest('[role=columnheader]').dataset.field;
         enqueue(s, () => openFilter(s, field));
+        return;
+    }
+    const groupHead = e.target.closest('.quro-body .quro-group-head-row');
+    if (groupHead) {
+        // 그룹 머리 행 클릭: 그 그룹으로 옮기고 펼침·접기 (서버 1회, GS-074)
+        e.preventDefault();
+        const id = groupHead.dataset.group;
+        enqueue(s, async () => {
+            if (s.editing && !(await commit(s))) return;
+            const el = groupEl(s, id);
+            if (!el) return;
+            enterGroup(s, el);
+            await toggleGroup(s, el, el.getAttribute('aria-expanded') !== 'true');
+        });
         return;
     }
     const handle = e.target.closest('.quro-head .quro-resize');
@@ -491,11 +507,23 @@ async function handleKey(s, k) {
                 await s.dotnet.invokeMethodAsync('DeleteRows', selectedKeys(s));
             }
             return;
-        case 'ArrowUp':
-            // 헤더로 (GS-064): Ctrl+↑는 어느 행에서나, ↑는 첫 행에서
-            if (k.ctrl || (!k.shift && rowIndexOf(rowEl(s, s.active.row)) === 0)) return enterHeader(s, s.active.field);
+        case 'ArrowUp': {
+            // 헤더로 (GS-064): Ctrl+↑는 어느 행에서나, ↑는 첫 행에서. 위가 그룹 머리 행이면 그 행으로 (GS-074)
+            if (k.ctrl) return enterHeader(s, s.active.field);
+            if (!k.shift && s.options.paging && rowIndexOf(rowEl(s, s.active.row)) === 0) return enterHeader(s, s.active.field);
+            if (!k.shift && !s.options.paging) {
+                const prev = navNeighbor(s, rowEl(s, s.active.row), -1);
+                if (!prev) return enterHeader(s, s.active.field);
+                if (isGroupHead(prev)) return enterGroup(s, prev);
+            }
             return moveBy(s, -1, 0, k.shift);
-        case 'ArrowDown': return k.alt ? openPicker(s) : moveBy(s, 1, 0, k.shift);
+        }
+        case 'ArrowDown': {
+            if (k.alt) return openPicker(s);
+            const next = !k.shift && !s.options.paging ? navNeighbor(s, rowEl(s, s.active.row), 1) : null;
+            if (next && isGroupHead(next)) return enterGroup(s, next);
+            return moveBy(s, 1, 0, k.shift);
+        }
         case 'ArrowLeft': return moveBy(s, 0, -1, k.shift);
         case 'ArrowRight': return moveBy(s, 0, 1, k.shift);
     }
@@ -508,6 +536,7 @@ function headers(s) {
 }
 
 function enterHeader(s, field) {
+    if (s.group) leaveGroup(s);
     s.header = field;
     s.root.setAttribute('data-active-header', field);
     const scope = `[data-quro-grid="${s.id}"]`;
@@ -540,6 +569,7 @@ async function handleHeaderKey(s, k) {
             if (s.options.paging) s.root.scrollTop = 0;   // 첫 행이 그려져 있지 않을 수 있다
             const first = await waitFor(() => s.root.querySelector(`.quro-body [role=row][aria-rowindex="${headerRows(s.root) + 1}"]`));
             if (!first) return;
+            if (isGroupHead(first)) return enterGroup(s, first);   // 그룹핑 중 첫 행은 그룹 머리 행 (GS-074)
             const cells = cellsOf(first);
             const cell = cells.find(c => c.dataset.field === s.header) ?? cells[0];
             if (cell) activate(s, rowKey(first), cell.dataset.field);
@@ -603,6 +633,70 @@ function placeFilter(s) {
     const r = header.getBoundingClientRect();
     panel.style.left = `${Math.max(0, Math.min(r.left, window.innerWidth - panel.offsetWidth))}px`;
     panel.style.top = `${r.bottom}px`;
+}
+
+// ── 그룹 머리 행 키보드 (GS-074, A-42): ↑↓ 이동(소계 행은 건너뜀), Space·Enter 펼침·접기, ← 접기, → 펼치기 ──
+
+function isGroupHead(el) {
+    return el.classList.contains('quro-group-head-row');
+}
+
+function groupEl(s, id) {
+    return [...s.root.querySelectorAll('.quro-body .quro-group-head-row')].find(el => el.dataset.group === id) ?? null;
+}
+
+/** ↑↓ 이동 대상 (화면 순서): 데이터 행과 그룹 머리 행. 소계 행은 아니다 */
+function navNeighbor(s, el, dir) {
+    if (!el) return null;
+    const all = [...s.root.querySelectorAll('.quro-body [role=row][data-row], .quro-body .quro-group-head-row')];
+    return all[all.indexOf(el) + dir] ?? null;
+}
+
+function enterGroup(s, el) {
+    if (s.header) leaveHeader(s);
+    s.group = el.dataset.group;
+    s.root.setAttribute('data-active-group', s.group);
+    const scope = `[data-quro-grid="${s.id}"]`;
+    s.style.textContent = `${scope} .quro-group-head-row[data-group="${CSS.escape(s.group)}"] > .quro-group-head-cell{outline:2px solid var(--qg-active);outline-offset:-2px}`;
+    markSelected(s, [el]);
+    el.scrollIntoView({ block: 'nearest' });
+    if (document.activeElement !== s.root) s.root.focus({ preventScroll: true });
+}
+
+function leaveGroup(s) {
+    s.group = null;
+    s.root.removeAttribute('data-active-group');
+}
+
+/** 펼침·접기 (서버 1회). 이미 그 상태면 호출하지 않는다 */
+async function toggleGroup(s, el, expand) {
+    if ((el.getAttribute('aria-expanded') === 'true') === expand) return;
+    await s.dotnet.invokeMethodAsync('ExpandGroup', el.dataset.group, expand);
+}
+
+async function handleGroupKey(s, k) {
+    const el = groupEl(s, s.group);
+    if (!el) return leaveGroup(s);   // 그룹이 사라짐 (그룹 해제·다시 조회)
+    switch (k.key) {
+        case 'ArrowUp':
+        case 'ArrowDown': {
+            const target = navNeighbor(s, el, k.key === 'ArrowUp' ? -1 : 1);
+            if (!target) {
+                if (k.key === 'ArrowUp') enterHeader(s, s.active?.field ?? headers(s)[0]?.dataset.field);
+                return;
+            }
+            if (isGroupHead(target)) return enterGroup(s, target);
+            const cells = cellsOf(target);
+            const cell = cells.find(c => c.dataset.field === s.active?.field) ?? cells[0];   // 들어올 때의 열로
+            if (cell) activate(s, rowKey(target), cell.dataset.field);
+            return;
+        }
+        case ' ':
+        case 'Enter':
+            return toggleGroup(s, el, el.getAttribute('aria-expanded') !== 'true');
+        case 'ArrowLeft': return toggleGroup(s, el, false);
+        case 'ArrowRight': return toggleGroup(s, el, true);
+    }
 }
 
 /** 스크린리더용 선택 표시 (GS-066): 이전 표시를 지우고 주어진 요소에 aria-selected */
@@ -762,6 +856,7 @@ function activate(s, row, field, extend = false) {
     // 화면 위치(aria-rowindex)도 기억한다: 페이징 중 범위의 끝 행이 화면 밖으로 나가 그려지지 않아도 범위를 안다 (A-25)
     const index = rowIndexOf(rowEl(s, row));
     if (s.header) leaveHeader(s);
+    if (s.group) leaveGroup(s);
     s.active = { row, field, index };
     if (!extend || !s.anchor) s.anchor = { row, field, index };
 
@@ -917,7 +1012,8 @@ export function endEdit(root) {
  */
 export function ensureActive(root) {
     const s = grids.get(root);
-    if (!s || !s.active || currentCell(s)) return;
+    // 그룹 머리 행에 있으면 그대로 둔다: 그 그룹을 접어 활성 셀이 가려진 경우 (GS-074)
+    if (!s || !s.active || currentCell(s) || (s.group && groupEl(s, s.group))) return;
     const all = rows(s);
     if (all.length === 0) {
         s.active = s.anchor = null;
