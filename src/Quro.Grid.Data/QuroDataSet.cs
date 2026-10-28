@@ -1,4 +1,7 @@
+using System.Globalization;
+using System.Net;
 using System.Reflection;
+using System.Text;
 
 namespace Quro.Grid.Data;
 
@@ -39,6 +42,60 @@ public sealed class QuroDataSet<T> where T : class
 
     /// <summary>필드 검증 규칙 등록. 같은 필드에 다시 등록하면 교체한다.</summary>
     public void SetRule(string field, FieldRule rule) => _rules[Field(field).Name] = rule;
+
+    /// <summary>
+    /// 붙여넣기·입력 문자열을 사용자 로캘로 해석해 저장한다 (Spec 4.8, GS-007).
+    /// 해석에 실패하면 값을 바꾸지 않고 false. 빈 문자열은 nullable 필드에서만 null로 받는다.
+    /// </summary>
+    public bool TrySetText(int rowKey, string field, string? text, IFormatProvider culture)
+    {
+        if (!TryParse(text, Field(field).PropertyType, culture, out var value))
+            return false;
+
+        SetValue(rowKey, field, value);
+        return true;
+    }
+
+    /// <summary>앱이 판정한 셀 표시를 지정한다. null이면 지운다 (Spec 4.9, GS-008).</summary>
+    public void SetCellMark(int rowKey, string field, CellMark? mark)
+    {
+        var name = Field(field).Name;
+        var row = Find(rowKey);
+        if (mark is null)
+            row.Marks.Remove(name);
+        else
+            row.Marks[name] = mark;
+    }
+
+    public CellMark? GetCellMark(int rowKey, string field)
+    {
+        var name = Field(field).Name;
+        return Find(rowKey).Marks.GetValueOrDefault(name);
+    }
+
+    /// <summary>
+    /// 변경분을 저장 API에 POST한다 (GS-009). 2xx면 <see cref="AcceptChanges"/>, 그 밖에는 변경분을 유지한다.
+    /// 저장 후 재조회(<see cref="Load"/>)는 앱이 한다.
+    /// </summary>
+    public async Task<SaveResult> SaveAsync(HttpClient http, string requestUri, CancellationToken cancellationToken = default)
+    {
+        var changes = GetChanges();
+        if (changes.IsEmpty)
+            return new SaveResult(SaveStatus.NoChanges);
+
+        using var content = new StringContent(changes.ToJson(), Encoding.UTF8, "application/json");
+        // ConfigureAwait(false)를 쓰지 않는다: AcceptChanges는 호출한 회로의 동기화 컨텍스트에서 실행돼야 한다.
+        using var response = await http.PostAsync(requestUri, content, cancellationToken);
+
+        if (response.IsSuccessStatusCode)
+        {
+            AcceptChanges();
+            return new SaveResult(SaveStatus.Saved, response.StatusCode);
+        }
+
+        var status = response.StatusCode == HttpStatusCode.Conflict ? SaveStatus.Conflict : SaveStatus.Failed;
+        return new SaveResult(status, response.StatusCode);
+    }
 
     // ── Spec 4.4 API ──
 
@@ -203,6 +260,41 @@ public sealed class QuroDataSet<T> where T : class
         _ => null,
     };
 
+    private static bool TryParse(string? text, Type type, IFormatProvider culture, out object? value)
+    {
+        value = null;
+        var target = Nullable.GetUnderlyingType(type) ?? type;
+
+        if (target == typeof(string))
+        {
+            value = text;
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(text))
+            return Nullable.GetUnderlyingType(type) is not null;
+
+        const NumberStyles Integer = NumberStyles.Integer | NumberStyles.AllowThousands;
+        const NumberStyles Float = NumberStyles.Float | NumberStyles.AllowThousands;
+        text = text.Trim();
+
+        bool ok;
+        (ok, value) = target switch
+        {
+            _ when target == typeof(decimal) => (decimal.TryParse(text, NumberStyles.Number, culture, out var v), v),
+            _ when target == typeof(int) => (int.TryParse(text, Integer, culture, out var v), v),
+            _ when target == typeof(long) => (long.TryParse(text, Integer, culture, out var v), v),
+            _ when target == typeof(double) => (double.TryParse(text, Float, culture, out var v), v),
+            _ when target == typeof(DateOnly) => (DateOnly.TryParse(text, culture, DateTimeStyles.None, out var v), v),
+            _ when target == typeof(DateTime) => (DateTime.TryParse(text, culture, DateTimeStyles.None, out var v), v),
+            _ when target == typeof(bool) => (bool.TryParse(text, out var v), v),
+            _ => (false, (object?)null),
+        };
+        if (!ok)
+            value = null;
+        return ok;
+    }
+
     private List<ChangedRow<T>> ItemsIn(RowState state) =>
         _rows.Where(r => r.State == state).Select(r => new ChangedRow<T>(r.Key, r.Item)).ToList();
 
@@ -214,5 +306,8 @@ public sealed class QuroDataSet<T> where T : class
 
         /// <summary>조회(또는 마지막 AcceptChanges) 시점 값. 추가 행은 null.</summary>
         public Dictionary<string, object?>? Original { get; set; } = original;
+
+        /// <summary>앱이 지정한 셀 표시. 행과 함께 사라진다.</summary>
+        public Dictionary<string, CellMark> Marks { get; } = [];
     }
 }

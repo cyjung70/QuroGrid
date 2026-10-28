@@ -47,7 +47,7 @@ QuroERP Community용 공통 그리드 컴포넌트 **QuroGrid** 저장소입니�
 | 컴포넌트 | bUnit | QuroGrid 렌더링, 포맷, 합계, 이벤트 |
 | E2E | Playwright | 키보드, 범위 선택, 붙여넣기, 코드도움, 저장 흐름 |
 | 성능 | Playwright + 측정 스크립트 | Spec 4.11 목표치, 회로당 메모리 |
-| API 통합 | xUnit + PostgreSQL 컨테이너 | 변경분 저장 트랜잭션, 버전 충돌, Minus 재고 |
+| API 통합 | — (이 저장소 범위 밖) | 저장 API는 분리된 서버 (2026-10-28 결정). 트랜잭션·버전 충돌·Minus 재고 최종 판정은 저장 API 쪽에서 검증. DataSet의 저장 호출은 가짜 HTTP 핸들러로 단위 테스트 |
 
 ---
 
@@ -116,7 +116,8 @@ docs/
 
 - 필수 API: `GetState`, `GetOriginal`, `SetValue`, `AddRow`, `DeleteRow`, `RevertRow`, `Validate`, `GetChanges`, `AcceptChanges`, `RejectChanges`
 - 저장 payload: `{ inserted[], updated[], deleted[] }`. 수정·삭제 행은 `version`을 포함한다.
-- 서버 저장은 **한 트랜잭션**에서 삭제 → 수정 → 추가 순서. `version` 불일치 시 충돌 오류.
+- **저장 API는 QuroGrid와 분리된 서버이며, DataSet이 저장 API와 통신한다** (2026-10-28 결정). `SaveAsync(http, url)`: 2xx → `AcceptChanges`, 409 → `Conflict`, 그 밖 → `Failed` (변경분 유지). 성공 후 재조회는 앱이 한다 (응답 본문으로 키·버전을 갱신하지 않음).
+- 서버 저장은 **한 트랜잭션**에서 삭제 → 수정 → 추가 순서. `version` 불일치 시 충돌 오류 (저장 API 쪽 책임).
 - `AcceptChanges()`는 저장 성공 응답을 받은 뒤에만 호출한다.
 
 ---
@@ -137,9 +138,10 @@ Enter(확정·이동), Tab/Shift+Tab, 화살표, F2(편집, 값 유지), 문자 
 - 표시는 사용자 `CultureInfo`, 저장 값은 언어 무관 형식(ISO 날짜, 소수점 `.`).
 - 붙여넣기는 사용자 로캘로 해석한다 (`1.234,5` vs `1,234.5`).
 
-### Minus 재고 허용 옵션
-- OFF: 가용 재고 초과 시 셀 오류 + 저장 차단 / ON: 셀 경고 표시 + 저장 허용
-- 최종 판정은 반드시 서버 저장 트랜잭션에서 다시 검사한다.
+### Minus 재고 허용 옵션 (2026-10-28 결정 — Spec 4.9와 다름)
+- 재고 판정·셀 오류·저장 차단은 **앱(윗단 애플리케이션)**이 한다. 그리드는 판정하지 않는다.
+- 그리드는 **Minus 표시만** 한다: 앱이 `SetCellMark(row, field, CellMark(Error|Warning, 리소스 키))`로 지정한 셀을 오류·경고 색과 툴팁으로 그린다.
+- 최종 판정은 반드시 저장 API의 트랜잭션에서 다시 검사한다.
 
 ### 이벤트 API
 `OnCellValueChanging`(취소 가능), `OnCellValueChanged`, `OnRowAdding`/`OnRowAdded`, `OnRowDeleting`(취소 가능), `OnPopupRequested`, `OnPasting`(취소 가능), `OnSelectionChanged`
