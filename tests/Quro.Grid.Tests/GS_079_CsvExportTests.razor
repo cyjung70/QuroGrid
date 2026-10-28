@@ -1,0 +1,49 @@
+@inherits GridTestContext
+
+@code {
+    // GS-079 CSV export, grid side (Addendum A-34, A-43). The storage API builds the file; the grid only adds the format to the A-28 request.
+
+    private static readonly CultureInfo En = new("en-US");
+    private static readonly System.Text.Json.JsonSerializerOptions Web = new(System.Text.Json.JsonSerializerDefaults.Web);
+
+    private IRenderedComponent<QuroGrid<PoLine>> RenderGrid()
+    {
+        var ds = new QuroDataSet<PoLine>();
+        ds.Load([new PoLine { ItemCode = "A1001", Qty = 10m }]);
+        return Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" Culture="En">
+                                            <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" />
+                                            <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" />
+                                        </QuroGrid>);
+    }
+
+    /// <summary>GS-079: default stays xlsx (GS-054 unchanged); csv carries the same columns, sort and filters with Format = Csv</summary>
+    [Fact]
+    public async Task GS_079_CsvExport_SameRequestWithFormat()
+    {
+        var cut = RenderGrid();
+        await cut.InvokeAsync(() => cut.Instance.Sort("Qty", additive: false));
+
+        var xlsx = cut.Instance.GetExportRequest();
+        var csv = cut.Instance.GetExportRequest(ExportFormat.Csv);
+
+        Assert.Equal(ExportFormat.Xlsx, xlsx.Format);
+        Assert.Equal(ExportFormat.Csv, csv.Format);
+        Assert.Equal(xlsx.Columns, csv.Columns);
+        Assert.Equal(xlsx.Sort, csv.Sort);
+        Assert.Equal(xlsx.Culture, csv.Culture);
+    }
+
+    /// <summary>GS-079: the JSON for the storage API writes the format in lower case ("xlsx" / "csv", A-34) and reads it back</summary>
+    [Fact]
+    public void GS_079_FormatJson_LowerCase_RoundTrip()
+    {
+        var cut = RenderGrid();
+
+        var csvJson = System.Text.Json.JsonSerializer.Serialize(cut.Instance.GetExportRequest(ExportFormat.Csv), Web);
+        var xlsxJson = System.Text.Json.JsonSerializer.Serialize(cut.Instance.GetExportRequest(), Web);
+
+        Assert.Contains("\"format\":\"csv\"", csvJson);
+        Assert.Contains("\"format\":\"xlsx\"", xlsxJson);
+        Assert.Equal(ExportFormat.Csv, System.Text.Json.JsonSerializer.Deserialize<GridExportRequest>(csvJson, Web)!.Format);
+    }
+}

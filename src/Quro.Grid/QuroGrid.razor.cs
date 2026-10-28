@@ -178,15 +178,18 @@ public partial class QuroGrid<TItem> where TItem : class
     /// <summary>
     /// 엑셀 내보내기 요청 (GS-054, Addendum A-28). 파일은 저장 API 서버가 만들고, 그리드는 현재 화면의
     /// 컬럼(화면 순서, 사용자 언어 헤더, 너비)과 정렬만 준다. Button 셀은 값이 없어 뺀다.
+    /// CSV도 같은 요청에 형식만 다르다 (GS-079, A-34·A-43).
     /// </summary>
-    public GridExportRequest GetExportRequest() => new(
+    /// <param name="format">만들 파일 형식 (기본 xlsx)</param>
+    public GridExportRequest GetExportRequest(ExportFormat format = ExportFormat.Xlsx) => new(
         Columns.Where(c => c.Type != CellType.Button)
             .Select(c => new ExportColumn(c.Field, c.HeaderKey, Text(c.HeaderKey), c.Type, c.Format, WidthOf(c),
                 c.CurrencyField, c.Aggregate, c.Options))
             .ToList(),
         SortColumns,
         EffectiveCulture.Name,
-        Filters);
+        Filters,
+        format);
 
     /// <summary>화면에 보이는 컬럼 (화면 순서: 고정 열 → 일반 열, 숨긴 컬럼 제외). 렌더·붙여넣기·내보내기가 쓴다.</summary>
     internal IReadOnlyList<QuroColumn> Columns

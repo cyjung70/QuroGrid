@@ -1,7 +1,7 @@
 # QuroGrid Spec v1 보완 문서 (Addendum A)
 
 - 대상: `docs/QuroGrid_FeatureMatrix_Spec_v1.pdf` (Spec v1 초안 Draft v0.2, 2026-10-28 — 4.9·5장 본문 개정)
-- 문서 상태: A.20 (2026-10-29) · 스테이블영 결정 사항 반영
+- 문서 상태: A.21 (2026-10-29) · 스테이블영 결정 사항 반영
 - 이 문서는 Spec v1의 일부입니다. **아래 항목은 Spec 본문보다 우선합니다.** 본문에 없는 내용은 "보완", 본문과 다른 내용은 "변경"으로 표시합니다.
 
 ---
@@ -52,6 +52,7 @@
 | A-40 | 3-D, A-31 (P1) | 보완 | **헤더 필터 구현 (GS-071~GS-073)**: 헤더 오른쪽 필터 버튼(Button 컬럼 제외) 또는 헤더에서 Alt+↓ → 헤더 아래 패널. 입력은 컬럼 타입별로 Text·Popup = 포함(대소문자 무시), Number·Currency = 최소·최대(사용자 로캘), Date = 시작·종료(양 끝 포함, 빈 날짜 제외), Combo·Check = 값 목록. 컬럼끼리 AND. 패널 안 입력은 브라우저에서만, 열기·적용(Enter·적용 버튼)·해제·닫기(Esc·바깥 클릭) 때 서버 1회. 해석 실패면 그 입력에 `aria-invalid`, 패널 유지. 필터 중인 헤더에 `data-filtered`. API: `Filters`, `SetFilters`·`ClearFilters`(이벤트 없음), `OnFilterChanged(Filters)`, `ColumnFilter(Field, Contains, Min, Max, From, To, Values)`. 메모리 모드는 적용 시점에 거르고 합계·`aria-rowcount`는 보이는 행 기준. 페이징 모드는 `GridItemsRequest.Filters`로 서버가 거르고 처음부터 다시 조회. 내보내기 요청(`GridExportRequest.Filters`)에도 담는다 | 2026-10-29 |
 | A-41 | D-03 | 변경 | **라이선스: LGPL v3 → MIT.** 저장소 루트 `LICENSE.md`(MIT, Copyright (c) 2026 CHO Y. JUNG), 패키지 `PackageLicenseExpression` = `MIT`. 새 의존성은 MIT와 함께 배포할 수 있는 라이선스만(MIT·Apache 2.0·BSD 등). GPL 계열·상용은 계속 금지. Clean-room 규칙(2장)은 그대로 | 2026-10-29 |
 | A-42 | 3-D, A-32 (P1) | 보완 | **그룹핑·소계 구현 (GS-074·GS-075, 2026-10-29 제안 승인)**: 앱이 `SetGroupBy(필드 목록)`으로 지정 (목록 순서 = 단 순서, 여러 단). `ClearGroupBy`·`GroupColumns`·`ExpandAll`·`CollapseAll`, 이벤트 없음. 그룹 머리 행 = "헤더: 값 (건수)" (리소스 키 `quro.group.header`, 빈 값 `quro.group.empty`, Combo는 명칭, Check는 체크·해제 문구), 그룹 끝에 소계 행 (`Aggregate.Sum` 컬럼, 첫 칸 `quro.group.subtotal`). 그룹 순서는 값 오름차순(Combo는 명칭, 그 컬럼을 내림차순 정렬 중이면 내림차순, 빈 값은 맨 뒤), 그룹 안은 현재 순서. 그룹을 정한 뒤 그룹 값을 편집해도 행은 옮기지 않고 소계만 갱신 (A-22와 같은 원칙), `SetGroupBy`·`Load` 때 다시 정함. 키보드: ↑↓가 그룹 머리 행에도 서고 소계 행은 건너뜀(서버 호출 없음), Space·Enter·클릭 펼침·접기, ← 접기, → 펼치기 (서버 1회). 머리 행·소계 행은 편집·붙여넣기·범위 선택·복사 대상이 아니고 `aria-rowcount`에는 센다. 페이징 중에는 `SetGroupBy`를 무시 (A-32). CSS `.quro-group-head-row`(`aria-expanded`, `data-group-level`), `.quro-subtotal-row` | 2026-10-29 |
+| A-43 | 3-E, A-34 (P1) | 보완 | **CSV 내보내기 구현 (GS-079, 2026-10-29 제안 승인)**: `enum ExportFormat { Xlsx, Csv }` (JSON은 소문자 `"xlsx"`·`"csv"`), `GridExportRequest`의 마지막 필드 `Format`(기본 `Xlsx`), `GetExportRequest(ExportFormat format = Xlsx)`. 기존 `GetExportRequest()` 호출은 그대로 xlsx (GS-054 변화 없음). 컬럼·정렬·필터·로캘은 형식과 관계없이 같다. CSV의 구분자·인코딩(예: Excel용 UTF-8 BOM)·따옴표 처리는 저장 API가 정한다 | 2026-10-29 |
 
 ## 2. 이벤트 API 보완 (4.10)
 
