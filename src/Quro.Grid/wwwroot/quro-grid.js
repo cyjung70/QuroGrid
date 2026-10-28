@@ -187,7 +187,7 @@ async function handleKey(s, k) {
             moveToEditable(s, k.shift ? -1 : 1);
             return;
         case 'Insert':
-            if (!s.editing) await addRow(s);   // 잠정: 목록 끝에 추가
+            if (!s.editing) await addRow(s, s.active.row);   // 활성 행 바로 아래 (A-15)
             return;
         case 'RowDelete':
             // 선택 범위의 행을 한 번에 (R3). 남은 행으로의 이동은 서버 렌더 뒤 ensureActive가 한다.
@@ -272,12 +272,12 @@ async function moveEnter(s) {
         moved = moveToEditable(s, 1);
     }
 
-    if (!moved && s.options.addRowOnLastEnter) await addRow(s);
+    if (!moved && s.options.addRowOnLastEnter) await addRow(s, null);
 }
 
-/** 새 행을 추가하고(서버) 그 행의 첫 편집 가능 셀로 */
-async function addRow(s) {
-    const key = await s.dotnet.invokeMethodAsync('AddRow');
+/** 새 행을 추가하고(서버) 그 행의 첫 편집 가능 셀로. afterRow가 null이면 목록 끝. */
+async function addRow(s, afterRow) {
+    const key = await s.dotnet.invokeMethodAsync('AddRow', afterRow);
     const row = await waitFor(() => s.root.querySelector(`.quro-body [role=row][data-row="${key}"]`));
     const first = cellsOf(row).find(editable);
     if (first) activate(s, key, first.dataset.field);

@@ -12,16 +12,16 @@ public class GS_045_047_059_RowTests(SampleServer server) : GridPageTest(server)
         return keys.Select(int.Parse).ToArray();
     }
 
-    /// <summary>GS-045: Insert → 행 추가 (목록 끝, 잠정), 새 행 첫 편집 가능 셀로</summary>
+    /// <summary>GS-045: Insert → 활성 행 바로 아래에 행 추가 (A-15), 새 행 첫 편집 가능 셀로</summary>
     [Fact]
-    public async Task GS_045_Insert_AddsRow()
+    public async Task GS_045_Insert_AddsRowBelowActive()
     {
         await OpenAsync();
         await Cell(1, "Qty").ClickAsync();
 
         await Page.Keyboard.PressAsync("Insert");
 
-        await Expect(Page.Locator("[role=row][data-row]")).ToHaveCountAsync(4);
+        Assert.Equal(new[] { 1, -1, 2, 3 }, await RetryRowKeysAsync(4));
         await ExpectActiveAsync(-1, "ItemCode");
         await Expect(Cell(-1, "LineNo")).ToHaveTextAsync("4");          // 샘플이 OnRowAdding에서 행 번호 부여
     }

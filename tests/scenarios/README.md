@@ -154,8 +154,9 @@ C-11~C-44는 GS-021~GS-054, C-48~C-51은 GS-055~GS-058로 확정했습니다. C-
 6. ~~API 통합 테스트 프로젝트 추가~~ — **결정: 추가하지 않음.** 저장 API는 분리된 서버이고, DataSet 호출은 가짜 HTTP 핸들러로 단위 테스트 (2026-10-28)
 7. GS-008 결정에 따른 Spec 4.9 개정 — 현재 Spec은 "그리드 검증 훅"으로 되어 있음
 8. C-44 엑셀 내보내기를 어느 서버에서 만들지 (저장 API와 같은 서버인지)
-9. Addendum A-14 `OnRowDeleted` 이벤트 추가 승인 (3-3에서 구현, Spec 4.10 목록에 없음)
-10. Insert 키 행 추가 위치 — 잠정: 목록 끝 (활성 행 아래가 아님)
+9. ~~Addendum A-14 `OnRowDeleted` 이벤트 추가~~ — **결정: 승인** (2026-10-28)
+10. ~~Insert 키 행 추가 위치~~ — **결정: 활성 행 바로 아래** (2026-10-28, A-15)
+11. ~~GS-059 신규 ID, 선택 알림 100ms~~ — **결정: 승인** (2026-10-28)
 
 ### 착수 순서 (Spec 6장 로드맵 기준)
 
@@ -178,13 +179,13 @@ C-11~C-44는 GS-021~GS-054, C-48~C-51은 GS-055~GS-058로 확정했습니다. C-
 - 헤더·툴팁 리소스는 그리드 파라미터 `Localizer`(`IStringLocalizer`)로 받습니다. 없으면 키를 그대로 표시합니다.
 - Combo·Check·Popup·Button의 표시와 에디터는 아직 Text와 같게 그립니다 (3차에서 MudBlazor 에디터와 함께 구현).
 
-**Phase 2 3-3 구현 메모 (Addendum A-10·A-12·A-13, 제안 A-14)**
-- Insert: 행 추가(목록 끝, 잠정) 후 새 행의 첫 편집 가능 셀로. Ctrl+Delete: 선택 범위의 행을 서버 호출 1회로 삭제, 활성 셀은 같은 순번(없으면 마지막) 행의 같은 열로.
+**Phase 2 3-3 구현 메모 (Addendum A-10·A-12~A-15)**
+- Insert: 활성 행 바로 아래에 행 추가(A-15) 후 새 행의 첫 편집 가능 셀로. Ctrl+Delete: 선택 범위의 행을 서버 호출 1회로 삭제, 활성 셀은 같은 순번(없으면 마지막) 행의 같은 열로.
 - 툴바용 그리드 메서드 `CopySelectedRows()`·`DeleteSelectedRows()`: 선택 범위는 JS 소유라 JS에서 행 키를 받아 처리합니다.
 - 행 복사: 표시 순서대로 각 원래 행 바로 아래에 `Inserted`로. 복사 행도 `OnRowAdding(SourceRowKey)`를 거칩니다 (샘플은 여기서 행 번호를 새로 줌).
-- `OnSelectionChanged`: 앱이 구독했을 때만 JS가 보냅니다(`init` 옵션). 활성 행이 멈춘 뒤 100ms(잠정).
+- `OnSelectionChanged`: 앱이 구독했을 때만 JS가 보냅니다(`init` 옵션). 활성 행이 멈춘 뒤 100ms (A-13).
 - `QuroColumn`의 `Required`·`Min`·`Max`는 컬럼 등록·변경 시 `DataSet.SetRule`로 넘깁니다.
-- `OnRowDeleted`(제안 A-14): Spec 목록에 없지만, JS에서 시작한 삭제 뒤 앱 화면(변경 수 등)을 갱신할 시점이 없어 추가했습니다. 승인 대기.
+- `OnRowDeleted`(A-14): 삭제 호출 1회에 한 번, 실제 삭제된 행 키. JS에서 시작한 삭제 뒤 앱 화면(변경 수 등)을 갱신하는 시점입니다.
 
 **Phase 2 3-2 구현 메모 (Addendum A-03·A-04·A-06)**
 - 부족 행 자동 추가 `AddRowsOnPaste` 기본 켬. 추가 행도 `OnRowAdding`/`OnRowAdded`를 거칩니다. 열이 넘치면 버립니다.

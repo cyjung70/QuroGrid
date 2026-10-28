@@ -44,7 +44,25 @@
         Assert.Null(source);
     }
 
-    /// <summary>GS-047: 삭제 후 OnRowDeleted 1회 — 실제 삭제된 행만 (취소 행 제외, 제안 A-14)</summary>
+    /// <summary>GS-045: 행 추가 위치 지정 — 활성 행 바로 아래 (A-15). 원본이 아니므로 SourceRowKey 없음</summary>
+    [Fact]
+    public async Task GS_045_AddRow_BelowGivenRow()
+    {
+        var ds = TestData.ThreeLines();
+        var (r1, r2, r3) = (ds.RowKeys[0], ds.RowKeys[1], ds.RowKeys[2]);
+        int? source = -99;
+        var cut = Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" OnRowAdding="(RowAddingArgs<PoLine> e) => source = e.SourceRowKey">
+                                               <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" />
+                                           </QuroGrid>);
+
+        var key = await cut.InvokeAsync(() => cut.Instance.AddRow(r1));
+
+        Assert.Equal([r1, key, r2, r3], ds.RowKeys);
+        Assert.Null(source);
+        Assert.NotEqual("A1001", ds.GetValue(key, "ItemCode"));      // 복사가 아님: 위 행 값을 가져오지 않는다
+    }
+
+    /// <summary>GS-047: 삭제 후 OnRowDeleted 1회 — 실제 삭제된 행만 (취소 행 제외, A-14)</summary>
     [Fact]
     public async Task GS_047_DeleteRows_RaisesDeletedOnce()
     {

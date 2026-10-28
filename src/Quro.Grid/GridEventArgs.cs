@@ -51,7 +51,7 @@ public sealed class RowAddedArgs<TItem>(int rowKey, TItem item) where TItem : cl
     public TItem Item { get; } = item;
 }
 
-/// <summary>행 삭제 후 (OnRowDeleted, 제안 A-14). 삭제 호출 1회에 한 번, 실제 삭제된 행 키(취소 행 제외).</summary>
+/// <summary>행 삭제 후 (OnRowDeleted, Addendum A-14). 삭제 호출 1회에 한 번, 실제 삭제된 행 키(취소 행 제외).</summary>
 public sealed class RowDeletedArgs(IReadOnlyList<int> rowKeys)
 {
     public IReadOnlyList<int> RowKeys { get; } = rowKeys;

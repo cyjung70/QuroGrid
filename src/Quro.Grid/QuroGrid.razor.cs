@@ -62,7 +62,7 @@ public partial class QuroGrid<TItem> where TItem : class
     [Parameter] public EventCallback<RowAddedArgs<TItem>> OnRowAdded { get; set; }
     [Parameter] public EventCallback<RowDeletingArgs<TItem>> OnRowDeleting { get; set; }
 
-    /// <summary>삭제 후 (제안 A-14 — Spec 이벤트 목록에 없음). 삭제 호출 1회에 한 번.</summary>
+    /// <summary>삭제 후 (Addendum A-14). 삭제 호출 1회에 한 번.</summary>
     [Parameter] public EventCallback<RowDeletedArgs> OnRowDeleted { get; set; }
     [Parameter] public EventCallback<PastingArgs> OnPasting { get; set; }
 
@@ -165,11 +165,14 @@ public partial class QuroGrid<TItem> where TItem : class
 
     // ── 행 추가·삭제·붙여넣기 (단축키·메뉴에서 호출, 일괄 처리는 호출 1회: R3) ──
 
-    /// <summary>행 추가. OnRowAdding에서 기본값을 넣고, 추가 후 OnRowAdded.</summary>
+    /// <summary>
+    /// 행 추가. OnRowAdding에서 기본값을 넣고, 추가 후 OnRowAdded.
+    /// <paramref name="afterRowKey"/>가 있으면 그 행 바로 아래 (Insert 키: 활성 행 아래, A-15), 없으면 목록 끝.
+    /// </summary>
     [JSInvokable]
-    public async Task<int> AddRow()
+    public async Task<int> AddRow(int? afterRowKey = null)
     {
-        var key = await AddRowCore();
+        var key = await AddRowCore(after: afterRowKey);
         StateHasChanged();
         return key;
     }
@@ -183,7 +186,7 @@ public partial class QuroGrid<TItem> where TItem : class
     {
         var copies = new List<int>();
         foreach (var source in DataSet.RowKeys.Where(rowKeys.Contains).ToList())
-            copies.Add(await AddRowCore(DataSet.CopyOf(source), source));
+            copies.Add(await AddRowCore(DataSet.CopyOf(source), source, after: source));
 
         StateHasChanged();
         return copies;
@@ -198,12 +201,12 @@ public partial class QuroGrid<TItem> where TItem : class
     private async Task<IReadOnlyList<int>> SelectedRowKeys() =>
         _module is null ? [] : await _module.InvokeAsync<int[]>("selectedRowKeys", _root);
 
-    private async Task<int> AddRowCore(TItem? item = null, int? source = null)
+    private async Task<int> AddRowCore(TItem? item = null, int? source = null, int? after = null)
     {
         item ??= Activator.CreateInstance<TItem>();
         await OnRowAdding.InvokeAsync(new RowAddingArgs<TItem>(item, source));
 
-        var key = DataSet.AddRow(item, afterRowKey: source);
+        var key = DataSet.AddRow(item, afterRowKey: after);
         await OnRowAdded.InvokeAsync(new RowAddedArgs<TItem>(key, DataSet.GetItem(key)));
         return key;
     }
