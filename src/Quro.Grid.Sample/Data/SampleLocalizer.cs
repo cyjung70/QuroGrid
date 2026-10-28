@@ -14,7 +14,15 @@ public sealed class SampleLocalizer : IStringLocalizer
         ["mm.unit_price"] = ("단가", "Unit Price"),
         ["mm.amount"] = ("금액", "Amount"),
         ["sample.po_lines.title"] = ("구매오더 라인", "Purchase Order Lines"),
+        ["mm.due_date"] = ("납기일", "Due Date"),
         ["sample.changes"] = ("변경 행", "Changed rows"),
+        ["sample.pastes"] = ("붙여넣기", "Pastes"),
+        ["sample.paste_skipped"] = ("건너뛴 셀", "Skipped cells"),
+        ["sample.message"] = ("안내", "Message"),
+        ["sample.payload"] = ("저장 payload", "Save payload"),
+        ["quro.paste.readonly"] = ("읽기 전용 셀은 건너뛰었습니다", "Read-only cells were skipped"),
+        ["quro.paste.invalid"] = ("형식이 맞지 않는 값은 건너뛰었습니다", "Invalid values were skipped"),
+        ["quro.paste.cancelled"] = ("변경이 취소된 셀이 있습니다", "Some changes were cancelled"),
     };
 
     public LocalizedString this[string name] =>

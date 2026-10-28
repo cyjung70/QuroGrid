@@ -8,5 +8,6 @@ public sealed class PoLine
     public decimal Qty { get; set; }
     public decimal UnitPrice { get; set; }
     public decimal Amount { get; set; }
+    public DateOnly? DueDate { get; set; }
     public int Version { get; set; }
 }

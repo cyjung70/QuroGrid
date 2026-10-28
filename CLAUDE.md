@@ -1,7 +1,7 @@
 # CLAUDE.md — QuroGrid
 
 QuroERP Community용 공통 그리드 컴포넌트 **QuroGrid** 저장소입니다.
-기준 문서: `docs/QuroGrid_FeatureMatrix_Spec_v1.pdf` (Spec v1 초안, 2026-10-28). 이 파일과 Spec이 충돌하면 **Spec이 우선**이며, 충돌 사실을 보고합니다.
+기준 문서: `docs/QuroGrid_FeatureMatrix_Spec_v1.pdf` (Spec v1 초안, 2026-10-28)와 보완 문서 `docs/QuroGrid_Spec_v1_Addendum.pdf` (결정 사항, Spec 본문보다 우선). 이 파일과 Spec이 충돌하면 **Spec이 우선**이며, 충돌 사실을 보고합니다. 새 결정은 보완 문서에 추가합니다.
 
 ---
 

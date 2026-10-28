@@ -1,5 +1,6 @@
 // quro-grid.js — QuroGrid의 얇은 JS 층 (Spec 4.2).
-// 소유: 활성 셀(포커스)·키보드 이동·편집 중 키 입력 (R1). 서버 호출은 편집 시작·커밋·취소·행 추가 때만 (R2).
+// 소유: 활성 셀(포커스)·범위 선택·키보드 이동·편집 중 키 입력·클립보드 (R1).
+// 서버 호출은 편집 시작·커밋·취소·행 추가·붙여넣기(1회, R3) 때만 (R2).
 // 셀마다 핸들러를 달지 않고 그리드 루트 하나에서 이벤트를 받아 data-row / data-field로 좌표를 해석한다 (R5).
 
 const grids = new Map();
@@ -15,7 +16,9 @@ export function init(root, dotnet, options) {
 
     const s = {
         root, dotnet, options, id, style,
-        active: null,      // { row: number, field: string }
+        active: null,      // { row: number, field: string } — 선택 범위의 움직이는 끝
+        anchor: null,      // 선택 범위의 고정 끝 (Shift+이동·드래그)
+        dragging: false,
         editing: null,     // { row, field, input }
         queue: Promise.resolve(),
         pending: 0,        // 처리 대기 중인 동작 수 (서버 응답 대기 포함)
@@ -24,10 +27,19 @@ export function init(root, dotnet, options) {
     s.onMouseDown = e => onMouseDown(s, e);
     s.onDblClick = e => onDblClick(s, e);
     s.onFocusOut = e => onFocusOut(s, e);
+    s.onMouseMove = e => onMouseMove(s, e);
+    s.onMouseUp = () => { s.dragging = false; };
+    s.onCopy = e => onCopy(s, e);
+    s.onPaste = e => onPaste(s, e);
     root.addEventListener('keydown', s.onKeyDown);
     root.addEventListener('mousedown', s.onMouseDown);
+    root.addEventListener('mousemove', s.onMouseMove);
     root.addEventListener('dblclick', s.onDblClick);
     root.addEventListener('focusout', s.onFocusOut);
+    // 포커스된 div에는 copy·paste 이벤트가 오지 않을 수 있어 문서에서 받고 그리드 포커스 여부로 거른다
+    document.addEventListener('mouseup', s.onMouseUp);
+    document.addEventListener('copy', s.onCopy);
+    document.addEventListener('paste', s.onPaste);
     grids.set(root, s);
 }
 
@@ -38,6 +50,10 @@ export function dispose(root) {
     root.removeEventListener('mousedown', s.onMouseDown);
     root.removeEventListener('dblclick', s.onDblClick);
     root.removeEventListener('focusout', s.onFocusOut);
+    root.removeEventListener('mousemove', s.onMouseMove);
+    document.removeEventListener('mouseup', s.onMouseUp);
+    document.removeEventListener('copy', s.onCopy);
+    document.removeEventListener('paste', s.onPaste);
     s.style.remove();
     grids.delete(root);
 }
@@ -61,14 +77,53 @@ function onKeyDown(s, e) {
 }
 
 function onMouseDown(s, e) {
-    if (e.target.closest('.quro-editor')) return;
+    if (e.button !== 0 || e.target.closest('.quro-editor')) return;
     const cell = e.target.closest('.quro-body [role=gridcell][data-field]');
     if (!cell) return;
     const target = position(cell);
+    const extend = e.shiftKey && !!s.anchor;
+    s.dragging = true;
     enqueue(s, async () => {
         if (s.editing && !(await commit(s))) return;
-        activate(s, target.row, target.field);
+        activate(s, target.row, target.field, extend);
     });
+}
+
+/** 드래그로 범위 선택 (서버 호출 없음) */
+function onMouseMove(s, e) {
+    if (!s.dragging || !(e.buttons & 1) || s.editing) return;
+    const cell = e.target.closest('.quro-body [role=gridcell][data-field]');
+    if (!cell) return;
+    const target = position(cell);
+    if (same(target, s.active)) return;
+    enqueue(s, () => { if (!s.editing) activate(s, target.row, target.field, true); });
+}
+
+function hasFocus(s) {
+    return !s.editing && s.root.contains(document.activeElement);
+}
+
+/** Ctrl+C: 선택 범위의 표시 값을 엑셀 형식(탭·줄바꿈)으로 */
+function onCopy(s, e) {
+    if (!hasFocus(s) || !s.active) return;
+    const { rowEls, fields } = selection(s);
+    const text = rowEls
+        .map(rowEl => fields
+            .map(f => quote(rowEl.querySelector(`:scope > [data-field="${CSS.escape(f)}"]`)?.textContent.trim() ?? ''))
+            .join('\t'))
+        .join('\r\n');
+    e.clipboardData.setData('text/plain', text);
+    e.preventDefault();
+}
+
+/** Ctrl+V: 엑셀 형식을 행 × 열로 나눠 선택 범위 왼쪽 위부터. 서버 호출 1회 (R3) */
+function onPaste(s, e) {
+    if (!hasFocus(s) || !s.active) return;
+    const cells = parseTsv(e.clipboardData.getData('text/plain'));
+    e.preventDefault();
+    if (cells.length === 0) return;
+    const { top, left } = selection(s);
+    enqueue(s, () => s.dotnet.invokeMethodAsync('Paste', top, left, cells));
 }
 
 function onDblClick(s, e) {
@@ -126,10 +181,10 @@ async function handleKey(s, k) {
             if (s.editing && !(await commit(s))) return;
             moveToEditable(s, k.shift ? -1 : 1);
             return;
-        case 'ArrowUp': return moveBy(s, -1, 0);
-        case 'ArrowDown': return moveBy(s, 1, 0);
-        case 'ArrowLeft': return moveBy(s, 0, -1);
-        case 'ArrowRight': return moveBy(s, 0, 1);
+        case 'ArrowUp': return moveBy(s, -1, 0, k.shift);
+        case 'ArrowDown': return moveBy(s, 1, 0, k.shift);
+        case 'ArrowLeft': return moveBy(s, 0, -1, k.shift);
+        case 'ArrowRight': return moveBy(s, 0, 1, k.shift);
     }
 }
 
@@ -172,14 +227,14 @@ function appendText(input, text) {
 
 // ── 이동 (서버 호출 없음) ──
 
-function moveBy(s, dRow, dCol) {
+function moveBy(s, dRow, dCol, extend) {
     const all = rows(s);
     const r = all.findIndex(el => rowKey(el) === s.active.row);
     const cells = cellsOf(all[r]);
     const c = cells.findIndex(el => el.dataset.field === s.active.field);
     const nr = Math.min(Math.max(r + dRow, 0), all.length - 1);
     const target = cellsOf(all[nr])[Math.min(Math.max(c + dCol, 0), cells.length - 1)];
-    activate(s, rowKey(all[nr]), target.dataset.field);
+    activate(s, rowKey(all[nr]), target.dataset.field, extend);
 }
 
 /** Tab 순서: 편집 가능한 셀만, 행 끝에서 다음 행 첫 셀. 끝이면 제자리. 이동했으면 true. */
@@ -213,15 +268,70 @@ async function moveEnter(s) {
     }
 }
 
-function activate(s, row, field) {
+/** 활성 셀 이동. extend면 고정 끝(anchor)을 두고 범위를 넓힌다. 아니면 범위는 한 셀로 줄어든다. */
+function activate(s, row, field, extend = false) {
     s.active = { row, field };
+    if (!extend || !s.anchor) s.anchor = { row, field };
+
+    const sel = selection(s);
     s.root.setAttribute('data-active-row', String(row));
     s.root.setAttribute('data-active-field', field);
-    s.style.textContent =
-        `[data-quro-grid="${s.id}"] [role=row][data-row="${row}"] > [data-field="${CSS.escape(field)}"]` +
-        `{outline:2px solid var(--quro-active,#2e6be6);outline-offset:-2px}`;
+    s.root.setAttribute('data-selection', `${sel.top},${sel.left},${sel.bottom},${sel.right}`);
+
+    // 서버 렌더가 셀 class를 바꿔도 지워지지 않도록 별도 style 규칙으로 그린다
+    const scope = `[data-quro-grid="${s.id}"]`;
+    let css = `${scope} ${cellSelector(row, field)}{outline:2px solid var(--quro-active,#2e6be6);outline-offset:-2px}`;
+    if (sel.rowEls.length > 1 || sel.fields.length > 1) {
+        const selectors = sel.rowEls.flatMap(r => sel.fields.map(f => `${scope} ${cellSelector(rowKey(r), f)}`));
+        css += `${selectors.join(',')}{background:var(--quro-selected,#dbe7fd)}`;
+    }
+    s.style.textContent = css;
     currentCell(s)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     if (!s.editing && document.activeElement !== s.root) s.root.focus({ preventScroll: true });
+}
+
+// ── 선택 범위 ──
+
+/** anchor와 active를 꼭짓점으로 하는 사각형 (표시 순서 기준). top·left·bottom·right는 행 키·필드. */
+function selection(s) {
+    const all = rows(s);
+    const fieldsAll = cellsOf(all[0]).map(c => c.dataset.field);
+    const r1 = all.findIndex(el => rowKey(el) === s.anchor.row);
+    const r2 = all.findIndex(el => rowKey(el) === s.active.row);
+    const c1 = fieldsAll.indexOf(s.anchor.field);
+    const c2 = fieldsAll.indexOf(s.active.field);
+    const rowEls = all.slice(Math.min(r1, r2), Math.max(r1, r2) + 1);
+    const fields = fieldsAll.slice(Math.min(c1, c2), Math.max(c1, c2) + 1);
+    return {
+        rowEls, fields,
+        top: rowKey(rowEls[0]), bottom: rowKey(rowEls[rowEls.length - 1]),
+        left: fields[0], right: fields[fields.length - 1],
+    };
+}
+
+// ── 클립보드 (엑셀 형식: 탭·줄바꿈, 특수 문자가 있으면 큰따옴표) ──
+
+function quote(text) {
+    return /[\t\r\n"]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function parseTsv(text) {
+    const result = [];
+    let row = [], cell = '', quoted = false;
+    text = text.replace(/\r\n?/g, '\n');
+    for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (quoted) {
+            if (ch !== '"') cell += ch;
+            else if (text[i + 1] === '"') { cell += '"'; i++; }
+            else quoted = false;
+        } else if (ch === '"' && cell === '') quoted = true;
+        else if (ch === '\t') { row.push(cell); cell = ''; }
+        else if (ch === '\n') { row.push(cell); result.push(row); row = []; cell = ''; }
+        else cell += ch;
+    }
+    if (cell !== '' || row.length > 0) { row.push(cell); result.push(row); }   // 마지막 줄바꿈은 빈 행이 아님
+    return result;
 }
 
 // ── DOM 좌표 ──
@@ -234,8 +344,12 @@ function cellsOf(row) {
     return row ? [...row.querySelectorAll('[role=gridcell][data-field]')] : [];
 }
 
+function cellSelector(row, field) {
+    return `[role=row][data-row="${row}"] > [data-field="${CSS.escape(field)}"]`;
+}
+
 function cellAt(s, row, field) {
-    return s.root.querySelector(`.quro-body [role=row][data-row="${row}"] > [data-field="${CSS.escape(field)}"]`);
+    return s.root.querySelector(`.quro-body ${cellSelector(row, field)}`);
 }
 
 function currentCell(s) {

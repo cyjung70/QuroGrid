@@ -18,6 +18,13 @@ if (!app.Environment.IsDevelopment())
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
 
+// 화면 언어: 요청(쿠키·Accept-Language)에 따라 ko/en. 회로도 연결 요청의 언어를 따른다.
+string[] languages = ["ko-KR", "en-US"];
+app.UseRequestLocalization(o => o
+    .SetDefaultCulture(languages[0])
+    .AddSupportedCultures(languages)
+    .AddSupportedUICultures(languages));
+
 app.UseAntiforgery();
 
 app.MapStaticAssets();

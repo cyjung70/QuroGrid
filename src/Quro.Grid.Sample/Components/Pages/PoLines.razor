@@ -1,5 +1,6 @@
 @page "/po-lines"
 @rendermode InteractiveServer
+@using System.Globalization
 @using Quro.Grid.Data
 @using Quro.Grid.Sample.Data
 
@@ -7,29 +8,60 @@
 
 <h1>@L["sample.po_lines.title"]</h1>
 
-<QuroGrid TItem="PoLine" DataSet="_lines" Localizer="L" Culture="Culture" ShowFooter="true" FrozenColumns="1"
+<QuroGrid TItem="PoLine" DataSet="_lines" Localizer="L" Culture="_culture" ShowFooter="true" FrozenColumns="1"
           EnterDirection="@(Enter == "down" ? EnterDirection.Down : EnterDirection.Right)"
           AddRowOnLastEnter="@(NewRow == 1)"
-          OnCellValueChanged="RecalcAmount">
+          AddRowsOnPaste="@(PasteRows != 0)"
+          OnCellValueChanged="RecalcAmount"
+          OnPasting="() => _pastes++"
+          OnPasted="ShowPasteResult">
     <QuroColumn Field="LineNo" HeaderKey="mm.line_no" Type="CellType.Number" ReadOnly="true" Width="60" />
     <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" />
     <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" Aggregate="Aggregate.Sum" />
     <QuroColumn Field="UnitPrice" HeaderKey="mm.unit_price" Type="CellType.Number" />
+    @if (Dates == 1)
+    {
+        <QuroColumn Field="DueDate" HeaderKey="mm.due_date" Type="CellType.Date" />
+    }
     <QuroColumn Field="Amount" HeaderKey="mm.amount" Type="CellType.Number" ReadOnly="true" Aggregate="Aggregate.Sum" />
 </QuroGrid>
 
-<p>@L["sample.changes"]: <span data-testid="changes">@ChangedRows</span></p>
+@* 화면 쪽 안내 (Addendum A-04: 표시 방식은 앱이 정한다). E2E 확인용 값도 함께 보여 준다. *@
+<dl class="sample-status">
+    <dt>@L["sample.changes"]</dt>
+    <dd data-testid="changes">@ChangedRows</dd>
+    <dt>@L["sample.pastes"]</dt>
+    <dd data-testid="pastes">@_pastes</dd>
+    <dt>@L["sample.paste_skipped"]</dt>
+    <dd data-testid="paste-skipped">@_skipped</dd>
+    <dt>@L["sample.message"]</dt>
+    <dd data-testid="paste-message">@_pasteMessage</dd>
+    <dt>@L["sample.payload"]</dt>
+    <dd><code data-testid="json">@_lines.GetChanges().ToJson()</code></dd>
+</dl>
 
 @code {
     private static readonly SampleLocalizer L = new();
-    private static readonly System.Globalization.CultureInfo Culture = new("en-US");
     private readonly QuroDataSet<PoLine> _lines = new();
+    private CultureInfo _culture = new("en-US");
+    private int _pastes;
+    private int _skipped;
+    private string _pasteMessage = "";
 
-    /// <summary>Enter 이동 방향 (right | down). E2E에서 옵션 확인용.</summary>
+    /// <summary>Enter 이동 방향 (right | down).</summary>
     [SupplyParameterFromQuery] public string? Enter { get; set; }
 
     /// <summary>1이면 마지막 셀 Enter 시 새 행 추가.</summary>
     [SupplyParameterFromQuery] public int? NewRow { get; set; }
+
+    /// <summary>0이면 붙여넣기 부족 행 자동 추가 끔.</summary>
+    [SupplyParameterFromQuery] public int? PasteRows { get; set; }
+
+    /// <summary>1이면 납기일(Date) 열 표시.</summary>
+    [SupplyParameterFromQuery] public int? Dates { get; set; }
+
+    /// <summary>표시·입력 로캘 (기본 en-US).</summary>
+    [SupplyParameterFromQuery(Name = "culture")] public string? CultureName { get; set; }
 
     private int ChangedRows
     {
@@ -42,6 +74,9 @@
 
     protected override void OnInitialized()
     {
+        if (!string.IsNullOrEmpty(CultureName))
+            _culture = new CultureInfo(CultureName);
+
         PoLine[] rows =
         [
             new() { LineNo = 1, ItemCode = "A1001", Qty = 10m, UnitPrice = 2500m, Version = 7 },
@@ -58,5 +93,11 @@
     {
         if (e.Field is nameof(PoLine.Qty) or nameof(PoLine.UnitPrice))
             _lines.SetValue(e.RowKey, nameof(PoLine.Amount), e.Item.Qty * e.Item.UnitPrice);
+    }
+
+    private void ShowPasteResult(PastedArgs e)
+    {
+        _skipped = e.Skipped.Count;
+        _pasteMessage = e.Skipped.Count == 0 ? "" : L[e.Skipped[0].MessageKey];
     }
 }

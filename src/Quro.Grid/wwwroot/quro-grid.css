@@ -19,6 +19,11 @@
     display: flex;
 }
 
+/* 드래그 범위 선택 중 글자 선택이 생기지 않도록 */
+.quro-body {
+    user-select: none;
+}
+
 .quro-cell {
     box-sizing: border-box;
     flex: none;
