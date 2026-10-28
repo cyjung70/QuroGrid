@@ -12,6 +12,8 @@ public sealed class PoLine
     public decimal Amount { get; set; }
     public string CurrencyCode { get; set; } = "KRW";
     public DateOnly? DueDate { get; set; }
+    public string Unit { get; set; } = "EA";        // Combo (단위 공통코드)
+    public string Urgent { get; set; } = "N";       // Check (Y/N 매핑)
     public int Version { get; set; }
 }
 

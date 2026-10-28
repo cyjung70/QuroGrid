@@ -24,6 +24,9 @@ public partial class QuroGrid<TItem> where TItem : class
     private IJSObjectReference? _module;
     private DotNetObjectReference<QuroGrid<TItem>>? _self;
     private bool _ensureActive;   // 행 삭제 후 JS에 활성 셀을 남은 행으로 옮기게 한다 (렌더 반영 뒤)
+    private bool _endEdit;        // 선택 목록에서 골라 서버가 편집을 끝냈을 때 JS 편집 상태를 정리한다 (렌더 반영 뒤)
+    private (int RowKey, string Field)? _picker;   // 열린 선택 목록 (Date 달력·Combo 목록, Addendum A-17)
+    private DateTime? _pickerDate;
 
     [Inject] private IJSRuntime JS { get; set; } = default!;
 
@@ -54,7 +57,7 @@ public partial class QuroGrid<TItem> where TItem : class
     /// <summary>붙여넣기 행이 모자라면 자동 추가 (Spec 4.7, Addendum A-03: 기본 켬).</summary>
     [Parameter] public bool AddRowsOnPaste { get; set; } = true;
 
-    // ── 이벤트 (Spec 4.10). OnPopupRequested·OnSelectionChanged는 JS 층과 함께 추가한다. ──
+    // ── 이벤트 (Spec 4.10, Addendum A-04·A-13·A-14·A-16·A-19) ──
 
     [Parameter] public EventCallback<CellValueChangingArgs<TItem>> OnCellValueChanging { get; set; }
     [Parameter] public EventCallback<CellValueChangedArgs<TItem>> OnCellValueChanged { get; set; }
@@ -71,6 +74,12 @@ public partial class QuroGrid<TItem> where TItem : class
 
     /// <summary>활성 행 변경 (Addendum A-13). 구독한 경우에만 JS가 보낸다.</summary>
     [Parameter] public EventCallback<SelectionChangedArgs<TItem>> OnSelectionChanged { get; set; }
+
+    /// <summary>코드도움 요청 (Spec 4.10, Addendum A-16). 앱이 팝업을 띄우고 <see cref="PopupRequestedArgs{TItem}.Value"/>로 결과를 돌려준다.</summary>
+    [Parameter] public EventCallback<PopupRequestedArgs<TItem>> OnPopupRequested { get; set; }
+
+    /// <summary>Button 셀 클릭 (Addendum A-19).</summary>
+    [Parameter] public EventCallback<CellButtonClickArgs<TItem>> OnCellButtonClick { get; set; }
 
     internal IReadOnlyList<QuroColumn> Columns => _columns;
     internal CultureInfo EffectiveCulture => Culture ?? CultureInfo.CurrentCulture;
@@ -105,10 +114,18 @@ public partial class QuroGrid<TItem> where TItem : class
                 NotifySelection: OnSelectionChanged.HasDelegate);
             await _module.InvokeVoidAsync("init", _root, _self, options);
         }
-        else if (_ensureActive && _module is not null)
+        else if (_module is not null)
         {
-            _ensureActive = false;
-            await _module.InvokeVoidAsync("ensureActive", _root);
+            if (_ensureActive)
+            {
+                _ensureActive = false;
+                await _module.InvokeVoidAsync("ensureActive", _root);
+            }
+            if (_endEdit)
+            {
+                _endEdit = false;
+                await _module.InvokeVoidAsync("endEdit", _root);
+            }
         }
     }
 
@@ -131,15 +148,16 @@ public partial class QuroGrid<TItem> where TItem : class
 
     // ── 편집 (quro-grid.js가 호출) ──
 
-    /// <summary>편집 시작. 읽기 전용 컬럼이나 삭제 표시 행이면 false.</summary>
+    /// <summary>편집 시작. 읽기 전용 컬럼, 삭제 표시 행, 에디터가 없는 셀(Check·Button)이면 false.</summary>
     [JSInvokable]
     public bool BeginEdit(int rowKey, string field)
     {
         var col = Column(field);
-        if (col.ReadOnly || DataSet.GetState(rowKey) == RowState.Deleted)
+        if (!Editable(rowKey, col) || col.Type is CellType.Check or CellType.Button)
             return false;
 
         _editing = (rowKey, col.Field);
+        _picker = null;
         StateHasChanged();
         return true;
     }
@@ -149,19 +167,193 @@ public partial class QuroGrid<TItem> where TItem : class
     /// 해석에 실패하면 값을 바꾸지 않고 편집 상태를 유지한 채 false.
     /// 값이 그대로면 이벤트 없이 편집만 닫는다. OnCellValueChanging에서 취소해도 false.
     /// </summary>
+    /// <remarks>
+    /// Popup 셀은 먼저 컬럼 Lookup으로 조회한다 (GS-006, Addendum A-16): 1건이면 그 코드로 확정,
+    /// 여러 건이면 OnPopupRequested로 앱이 고른 코드로 확정(고르지 않으면 편집 유지), 0건이면 편집 유지 (A-05).
+    /// 빈 입력은 조회 없이 확정한다 (코드 지우기, 잠정).
+    /// </remarks>
     [JSInvokable]
     public async Task<bool> CommitEdit(int rowKey, string field, string? text)
     {
         var col = Column(field);
-        if (col.ReadOnly
-            || !DataSet.TryParseText(col.Field, text, EffectiveCulture, out var value)
+        if (col.ReadOnly)
+            return false;
+
+        if (col.Type == CellType.Popup && col.Lookup is not null && !string.IsNullOrEmpty(text))
+        {
+            var matches = await col.Lookup(text);
+            text = matches.Count switch
+            {
+                0 => null,
+                1 => matches[0],
+                _ => await RaisePopup(rowKey, col, text, matches, PopupTrigger.Commit),
+            };
+            if (text is null)
+                return false;
+        }
+
+        if (!TryParseCell(col, text, out var value) || !await ApplyValue(rowKey, col.Field, value))
+            return false;
+
+        EndEditing();
+        return true;
+    }
+
+    /// <summary>
+    /// F4 코드도움 (GS-046). Popup 셀이면 Lookup 결과(후보)와 함께 OnPopupRequested를 발생시킨다.
+    /// 1건 일치여도 자동 확정하지 않는다. 앱이 고른 코드로 확정했으면 true (편집 중이었다면 편집 종료).
+    /// </summary>
+    [JSInvokable]
+    public async Task<bool> RequestPopup(int rowKey, string field, string? text)
+    {
+        var col = Column(field);
+        if (col.Type != CellType.Popup || !Editable(rowKey, col))
+            return false;
+
+        text ??= "";
+        var matches = col.Lookup is null ? [] : await col.Lookup(text);
+        var chosen = await RaisePopup(rowKey, col, text, matches, PopupTrigger.F4);
+        if (chosen is null
+            || !TryParseCell(col, chosen, out var value)
             || !await ApplyValue(rowKey, col.Field, value))
             return false;
 
-        _editing = null;
+        EndEditing();
+        return true;
+    }
+
+    private async Task<string?> RaisePopup(int rowKey, QuroColumn col, string text, IReadOnlyList<string> matches, PopupTrigger trigger)
+    {
+        var args = new PopupRequestedArgs<TItem>(rowKey, col.Field, DataSet.GetItem(rowKey), text, matches, trigger);
+        await OnPopupRequested.InvokeAsync(args);
+        return args.Value;
+    }
+
+    /// <summary>
+    /// 편집 중 선택 목록 열기 (Alt+↓, Addendum A-17): Date는 달력(MudDatePicker), Combo는 목록(MudList).
+    /// 직접 입력은 브라우저 에디터에서 하고(R2), 목록에서 고르면 바로 확정한다.
+    /// </summary>
+    [JSInvokable]
+    public bool OpenPicker(int rowKey, string field, string? text)
+    {
+        var col = Column(field);
+        if (col.Type is not (CellType.Date or CellType.Combo) || !Editable(rowKey, col))
+            return false;
+
+        if (col.Type == CellType.Date)
+        {
+            // 입력 중인 문자열을 우선, 해석할 수 없으면 현재 값으로 달력을 연다
+            var value = DataSet.TryParseText(col.Field, text, EffectiveCulture, out var typed) && typed is not null
+                ? typed
+                : DataSet.GetValue(rowKey, col.Field);
+            _pickerDate = value switch
+            {
+                DateOnly d => d.ToDateTime(TimeOnly.MinValue),
+                DateTime d => d,
+                _ => null,
+            };
+        }
+
+        _editing = (rowKey, col.Field);
+        _picker = (rowKey, col.Field);
         StateHasChanged();
         return true;
     }
+
+    internal DateTime? PickerDate => _pickerDate;
+
+    internal Task PickDate(DateTime? date)
+    {
+        if (_picker is not { } p)
+            return Task.CompletedTask;
+        object? value = null;
+        if (date is { } d)
+            DataSet.TryParseText(p.Field, d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), CultureInfo.InvariantCulture, out value);
+        return PickValue(value);
+    }
+
+    internal Task PickOption(int index) =>
+        _picker is { } p && Column(p.Field).Options is { } options && index >= 0 && index < options.Count
+            ? PickValue(options[index].Value)
+            : Task.CompletedTask;
+
+    private async Task PickValue(object? value)
+    {
+        var (rowKey, field) = _picker!.Value;
+        _picker = null;
+        if (await ApplyValue(rowKey, field, value))
+        {
+            _editing = null;
+            _endEdit = true;
+        }
+        StateHasChanged();
+    }
+
+    /// <summary>Check 셀 토글 (클릭·Space, GS-062). 매핑 값(CheckedValue/UncheckedValue)을 저장한다.</summary>
+    [JSInvokable]
+    public async Task<bool> ToggleCheck(int rowKey, string field)
+    {
+        var col = Column(field);
+        if (col.Type != CellType.Check || !Editable(rowKey, col))
+            return false;
+
+        var ok = await ApplyValue(rowKey, col.Field, IsChecked(rowKey, col) ? col.UncheckedValue : col.CheckedValue);
+        StateHasChanged();
+        return ok;
+    }
+
+    /// <summary>Button 셀 클릭 (클릭·Enter·Space, GS-063). 삭제 표시 행에서는 발생하지 않는다.</summary>
+    [JSInvokable]
+    public async Task<bool> ClickButton(int rowKey, string field)
+    {
+        var col = Column(field);
+        if (col.Type != CellType.Button || DataSet.GetState(rowKey) == RowState.Deleted)
+            return false;
+
+        await OnCellButtonClick.InvokeAsync(new CellButtonClickArgs<TItem>(rowKey, col.Field, DataSet.GetItem(rowKey)));
+        return true;
+    }
+
+    private bool Editable(int rowKey, QuroColumn col) =>
+        !col.ReadOnly && col.Type != CellType.Button && DataSet.GetState(rowKey) != RowState.Deleted;
+
+    private void EndEditing()
+    {
+        _editing = null;
+        _picker = null;
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// 입력·붙여넣기 문자열을 셀 값으로. Combo는 코드나 명칭, Check는 매핑 값이나 true/false (대소문자 무시),
+    /// 그 밖은 DataSet이 사용자 로캘로 해석한다.
+    /// </summary>
+    private bool TryParseCell(QuroColumn col, string? text, out object? value)
+    {
+        value = null;
+        switch (col.Type)
+        {
+            case CellType.Button:
+                return false;
+            case CellType.Combo when !string.IsNullOrEmpty(text):
+                var option = col.Options?.FirstOrDefault(o => Same(o.Value?.ToString(), text) || Same(o.Text, text));
+                value = option?.Value;
+                return option is not null;
+            case CellType.Check:
+                if (Same(text, col.CheckedValue?.ToString()) || Same(text, bool.TrueString))
+                    value = col.CheckedValue;
+                else if (Same(text, col.UncheckedValue?.ToString()) || Same(text, bool.FalseString) || string.IsNullOrEmpty(text))
+                    value = col.UncheckedValue;
+                else
+                    return false;
+                return true;
+            default:
+                return DataSet.TryParseText(col.Field, text, EffectiveCulture, out value);
+        }
+    }
+
+    private static bool Same(string? a, string? b) =>
+        a is not null && b is not null && string.Equals(a.Trim(), b.Trim(), StringComparison.OrdinalIgnoreCase);
 
     // ── 행 추가·삭제·붙여넣기 (단축키·메뉴에서 호출, 일괄 처리는 호출 1회: R3) ──
 
@@ -294,9 +486,9 @@ public partial class QuroGrid<TItem> where TItem : class
     /// <summary>셀 하나를 붙여넣는다. 건너뛰면 사유 리소스 키, 반영했으면 null.</summary>
     private async Task<string?> PasteCell(int rowKey, QuroColumn col, string text)
     {
-        if (col.ReadOnly || DataSet.GetState(rowKey) == RowState.Deleted)
+        if (!Editable(rowKey, col))
             return PasteKeys.ReadOnly;
-        if (!DataSet.TryParseText(col.Field, text, EffectiveCulture, out var value))
+        if (!TryParseCell(col, text, out var value))
             return PasteKeys.Invalid;
         return await ApplyValue(rowKey, col.Field, value) ? null : PasteKeys.Cancelled;
     }
@@ -320,11 +512,7 @@ public partial class QuroGrid<TItem> where TItem : class
     }
 
     [JSInvokable]
-    public void CancelEdit()
-    {
-        _editing = null;
-        StateHasChanged();
-    }
+    public void CancelEdit() => EndEditing();
 
     /// <summary>앱이 DataSet을 직접 바꾼 뒤 (예: SetCellMark) 화면에 반영한다. 바뀐 행만 다시 그린다.</summary>
     public void Refresh() => StateHasChanged();
@@ -347,7 +535,8 @@ public partial class QuroGrid<TItem> where TItem : class
     /// <summary>컬럼의 Required·Min·Max를 DataSet 규칙 API로 넘긴다 (Addendum A-10).</summary>
     private void RegisterRule(QuroColumn col)
     {
-        if (col.Required || col.Min is not null || col.Max is not null)
+        if (col.Type != CellType.Button && (col.Required || col.Min is not null || col.Max is not null)
+)
             DataSet.SetRule(col.Field, new FieldRule { Required = col.Required, Min = col.Min, Max = col.Max });
     }
 
@@ -383,16 +572,57 @@ public partial class QuroGrid<TItem> where TItem : class
 
     internal string DisplayText(int rowKey, QuroColumn col)
     {
+        if (col.Type is CellType.Button or CellType.Check)
+            return "";   // Button은 바인딩 값이 없고, Check는 체크 표시로 그린다
+
         var value = DataSet.GetValue(rowKey, col.Field);
-        return col.Type == CellType.Currency
-            ? FormatNumber(value, CurrencyFormat(col, rowKey))
-            : Format(value, col);
+        return col.Type switch
+        {
+            CellType.Currency => FormatNumber(value, CurrencyFormat(col, rowKey)),
+            CellType.Combo => OptionText(col, value),
+            _ => Format(value, col),
+        };
     }
 
-    /// <summary>에디터 초기 값. 천 단위 구분 없이 사용자 로캘로.</summary>
+    internal bool IsPickerOpen(int rowKey) => _picker?.RowKey == rowKey;
+
+    internal int PickerIndex(QuroColumn col) =>
+        _picker is { } p && col.Options is { } options
+            ? options.ToList().FindIndex(o => Equals(o.Value, DataSet.GetValue(p.RowKey, col.Field)))
+            : -1;
+
+    internal bool IsChecked(int rowKey, QuroColumn col) => Equals(DataSet.GetValue(rowKey, col.Field), col.CheckedValue);
+
+    /// <summary>복사(Ctrl+C)용 값. 표시 문자열과 다른 셀(Check·Button)만, 그 밖은 null.</summary>
+    internal string? CopyText(int rowKey, QuroColumn col) => col.Type switch
+    {
+        CellType.Check => DataSet.GetValue(rowKey, col.Field)?.ToString() ?? "",
+        CellType.Button => "",
+        _ => null,
+    };
+
+    /// <summary>JS가 셀 종류별 키 처리(Space 토글, F4, Alt+↓)를 하도록 표시. Text·Number·Currency는 없음.</summary>
+    internal string? TypeAttribute(QuroColumn col) => col.Type switch
+    {
+        CellType.Date => "date",
+        CellType.Combo => "combo",
+        CellType.Check => "check",
+        CellType.Popup => "popup",
+        CellType.Button => "button",
+        _ => null,
+    };
+
+    internal CellMark? Mark(int rowKey, QuroColumn col) =>
+        col.Type == CellType.Button ? null : DataSet.GetCellMark(rowKey, col.Field);
+
+    private static string OptionText(QuroColumn col, object? value) =>
+        col.Options?.FirstOrDefault(o => Equals(o.Value, value))?.Text ?? value?.ToString() ?? "";
+
+    /// <summary>에디터 초기 값. 천 단위 구분 없이 사용자 로캘로. Combo는 명칭.</summary>
     internal string EditText(int rowKey, QuroColumn col) =>
         DataSet.GetValue(rowKey, col.Field) switch
         {
+            var v when col.Type == CellType.Combo => OptionText(col, v),
             null => "",
             var date when date is DateOnly or DateTime => Format(date, col),
             IFormattable f => f.ToString(null, EffectiveCulture),

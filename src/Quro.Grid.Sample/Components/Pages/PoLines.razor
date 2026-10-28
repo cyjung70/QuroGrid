@@ -8,6 +8,11 @@
 
 <h1>@L["sample.po_lines.title"]</h1>
 
+@* MudBlazor 테마와 다이얼로그(코드도움 팝업)를 이 대화형 화면에서 쓴다 *@
+<MudThemeProvider />
+<MudPopoverProvider />
+<MudDialogProvider />
+
 @* 툴바는 그리드 바깥 (Spec 4.2: MudBlazor 영역). 선택 범위는 그리드(JS)가 소유하므로 그리드 메서드로 처리한다. *@
 <div class="sample-toolbar">
     <button type="button" data-testid="copy-rows" @onclick="() => _grid.CopySelectedRows()">@L["sample.copy_rows"]</button>
@@ -23,12 +28,22 @@
           OnPasted="ShowPasteResult"
           OnRowAdding="SetLineNo"
           OnRowDeleted="RefreshStatus"
+          OnPopupRequested="OpenItemHelp"
+          OnCellButtonClick="e => _buttonRow = e.RowKey"
           OnSelectionChanged="@(Selection == 1 ? EventCallback.Factory.Create<SelectionChangedArgs<PoLine>>(this, ShowSelection) : default)">
     <QuroColumn Field="LineNo" HeaderKey="mm.line_no" Type="CellType.Number" ReadOnly="true" Width="60" />
-    <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" />
+    <QuroColumn Field="ItemCode" HeaderKey="mm.item.code"
+                Type="@(Types == 1 ? CellType.Popup : CellType.Text)" Lookup="FindItems" />
     <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" Aggregate="Aggregate.Sum" />
     <QuroColumn Field="UnitPrice" HeaderKey="mm.unit_price" Type="CellType.Number" />
-    @if (Dates == 1)
+    @if (Types == 1)
+    {
+        <QuroColumn Field="Unit" HeaderKey="mm.unit" Type="CellType.Combo" Options="_units" />
+        <QuroColumn Field="Urgent" HeaderKey="mm.urgent" Type="CellType.Check" CheckedValue="@("Y")" UncheckedValue="@("N")" Width="70" />
+        <QuroColumn Field="DueDate" HeaderKey="mm.due_date" Type="CellType.Date" />
+        <QuroColumn Field="Detail" HeaderKey="mm.detail" Type="CellType.Button" TextKey="mm.detail.open" Width="80" />
+    }
+    else if (Dates == 1)
     {
         <QuroColumn Field="DueDate" HeaderKey="mm.due_date" Type="CellType.Date" />
     }
@@ -45,6 +60,10 @@
     <dd data-testid="paste-skipped">@_skipped</dd>
     <dt>@L["sample.message"]</dt>
     <dd data-testid="paste-message">@_pasteMessage</dd>
+    <dt>@L["sample.popup_text"]</dt>
+    <dd data-testid="popup-text">@_popupText</dd>
+    <dt>@L["sample.button_row"]</dt>
+    <dd data-testid="button-row">@_buttonRow</dd>
     <dt>@L["sample.selected_row"]</dt>
     <dd data-testid="selected-row">@_selectedRow</dd>
     <dt>@L["sample.payload"]</dt>
@@ -55,6 +74,21 @@
     private static readonly SampleLocalizer L = new();
     private readonly QuroDataSet<PoLine> _lines = new();
     private QuroGrid<PoLine> _grid = default!;
+    private string _popupText = "";
+    private int? _buttonRow;
+
+    /// <summary>품목 마스터 (샘플). 실제 앱은 조회 API를 부른다.</summary>
+    private static readonly string[] Items = ["A1001", "A1002", "A1003", "B2001", "B2002", "C3001"];
+
+    /// <summary>단위 공통코드. 명칭은 화면 언어로.</summary>
+    private readonly ComboOption[] _units =
+    [
+        new("EA", L["sample.unit.ea"]),
+        new("BOX", L["sample.unit.box"]),
+        new("KG", L["sample.unit.kg"]),
+    ];
+
+    [Inject] private IDialogService Dialogs { get; set; } = default!;
     private int? _selectedRow;
     private CultureInfo _culture = new("en-US");
     private int _pastes;
@@ -72,6 +106,9 @@
 
     /// <summary>1이면 납기일(Date) 열 표시.</summary>
     [SupplyParameterFromQuery] public int? Dates { get; set; }
+
+    /// <summary>1이면 셀 타입 열 표시: ItemCode Popup, Unit Combo, Urgent Check, DueDate Date, Detail Button.</summary>
+    [SupplyParameterFromQuery] public int? Types { get; set; }
 
     /// <summary>1이면 OnSelectionChanged 구독 (활성 행 표시).</summary>
     [SupplyParameterFromQuery] public int? Selection { get; set; }
@@ -101,6 +138,8 @@
         ];
         foreach (var r in rows)
             r.Amount = r.Qty * r.UnitPrice;
+        if (Types == 1)
+            rows[0].DueDate = new DateOnly(2026, 11, 2);
         _lines.Load(rows);
     }
 
@@ -111,14 +150,35 @@
             _lines.SetValue(e.RowKey, nameof(PoLine.Amount), e.Item.Qty * e.Item.UnitPrice);
     }
 
-    /// <summary>새 행·복사 행에 다음 행 번호를 준다 (복사 행은 원본 번호를 쓰면 안 됨, A-12)</summary>
     /// <summary>삭제 후 변경 수 표시 갱신 (이벤트 처리 뒤 페이지가 다시 그려진다)</summary>
     private static void RefreshStatus(RowDeletedArgs e) { }
 
+    /// <summary>새 행·복사 행에 다음 행 번호를 준다 (복사 행은 원본 번호를 쓰면 안 됨, A-12)</summary>
     private void SetLineNo(RowAddingArgs<PoLine> e) =>
         e.Item.LineNo = _lines.RowKeys.Select(k => _lines.GetItem(k).LineNo).DefaultIfEmpty().Max() + 1;
 
     private void ShowSelection(SelectionChangedArgs<PoLine> e) => _selectedRow = e.RowKey;
+
+    /// <summary>품목 조회: 정확히 일치하면 그 코드만, 아니면 앞부분 일치 (대소문자 무시). 판정(1/0/여러 건)은 그리드가 한다.</summary>
+    private static Task<IReadOnlyList<string>> FindItems(string text)
+    {
+        var exact = Items.Where(c => c.Equals(text, StringComparison.OrdinalIgnoreCase)).ToList();
+        IReadOnlyList<string> hits = exact.Count > 0
+            ? exact
+            : Items.Where(c => c.StartsWith(text, StringComparison.OrdinalIgnoreCase)).ToList();
+        return Task.FromResult(hits);
+    }
+
+    /// <summary>코드도움 팝업 (여러 건 일치 또는 F4). 고른 코드를 그리드에 돌려준다.</summary>
+    private async Task OpenItemHelp(PopupRequestedArgs<PoLine> e)
+    {
+        _popupText = e.Text;
+        var codes = e.Matches.Count > 0 ? e.Matches : Items;
+        var dialog = await Dialogs.ShowAsync<ItemHelpDialog>(L["sample.item_help"],
+            new DialogParameters<ItemHelpDialog> { { d => d.Codes, codes } });
+        if (await dialog.Result is { Canceled: false, Data: string code })
+            e.Value = code;
+    }
 
     private void ShowPasteResult(PastedArgs e)
     {

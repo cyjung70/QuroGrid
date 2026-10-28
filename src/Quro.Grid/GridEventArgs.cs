@@ -37,6 +37,37 @@ public sealed class RowAddingArgs<TItem>(TItem item, int? sourceRowKey = null) w
     public int? SourceRowKey { get; } = sourceRowKey;
 }
 
+/// <summary>
+/// 코드도움 요청 (OnPopupRequested, Spec 4.10 · Addendum A-16). 앱은 팝업(MudDialog 등)을 띄우고
+/// 고른 코드를 <see cref="Value"/>에 넣는다. null이면 확정하지 않고 편집을 유지한다.
+/// </summary>
+public sealed class PopupRequestedArgs<TItem>(int rowKey, string field, TItem item, string text,
+    IReadOnlyList<string> matches, PopupTrigger trigger) where TItem : class
+{
+    public int RowKey { get; } = rowKey;
+    public string Field { get; } = field;
+    public TItem Item { get; } = item;
+
+    /// <summary>입력 문자열</summary>
+    public string Text { get; } = text;
+
+    /// <summary>컬럼 Lookup 결과 (Lookup이 없으면 빈 목록)</summary>
+    public IReadOnlyList<string> Matches { get; } = matches;
+
+    public PopupTrigger Trigger { get; } = trigger;
+
+    /// <summary>앱이 고른 코드. null이면 확정하지 않는다.</summary>
+    public string? Value { get; set; }
+}
+
+/// <summary>Button 셀 클릭 (OnCellButtonClick, Addendum A-19).</summary>
+public sealed class CellButtonClickArgs<TItem>(int rowKey, string field, TItem item) where TItem : class
+{
+    public int RowKey { get; } = rowKey;
+    public string Field { get; } = field;
+    public TItem Item { get; } = item;
+}
+
 /// <summary>활성 행 변경 (OnSelectionChanged, Addendum A-13).</summary>
 public sealed class SelectionChangedArgs<TItem>(int rowKey, TItem item) where TItem : class
 {

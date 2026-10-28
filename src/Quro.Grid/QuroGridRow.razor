@@ -7,16 +7,47 @@
     @for (var i = 0; i < Grid.Columns.Count; i++)
     {
         var col = Grid.Columns[i];
-        var mark = Grid.DataSet.GetCellMark(RowKey, col.Field);
+        var mark = Grid.Mark(RowKey, col);
         <div class="@MarkClass(Grid.CellClass(i, "quro-body-cell"), mark)" style="@Grid.CellStyle(i)" role="gridcell"
-             aria-colindex="@(i + 1)" data-field="@col.Field"
-             aria-readonly="@(col.ReadOnly ? "true" : null)"
+             aria-colindex="@(i + 1)" data-field="@col.Field" data-type="@Grid.TypeAttribute(col)"
+             data-copy="@Grid.CopyText(RowKey, col)"
+             aria-readonly="@(col.ReadOnly || col.Type == CellType.Button ? "true" : null)"
              aria-invalid="@(mark?.Level == CellMarkLevel.Error ? "true" : null)"
              title="@(mark is null ? null : Grid.Text(mark.MessageKey))">
             @if (EditingField == col.Field)
             {
                 @* 키 입력은 브라우저에서만 처리한다 (R2). 값은 quro-grid.js가 셀 이탈 시 CommitEdit로 1회 보낸다. *@
                 <input class="quro-editor" value="@Grid.EditText(RowKey, col)" />
+                @if (PickerOpen)
+                {
+                    @* 선택 목록 (Addendum A-17): 고르면 바로 확정. 편집 중인 셀 하나에만 있다. *@
+                    <div class="quro-picker">
+                        @if (col.Type == CellType.Date)
+                        {
+                            <MudDatePicker PickerVariant="PickerVariant.Static" ShowToolbar="false" Culture="Grid.EffectiveCulture"
+                                           Date="Grid.PickerDate" DateChanged="Grid.PickDate" />
+                        }
+                        else
+                        {
+                            @* 현재 값은 선택 표시만. 같은 항목을 다시 골라도 확정되도록 항목 클릭으로 받는다. *@
+                            <MudList T="int" Dense="true" SelectionMode="SelectionMode.SingleSelection" SelectedValue="Grid.PickerIndex(col)">
+                                @for (var o = 0; o < col.Options?.Count; o++)
+                                {
+                                    var index = o;
+                                    <MudListItem T="int" Value="index" Text="@col.Options[index].Text" OnClick="() => Grid.PickOption(index)" />
+                                }
+                            </MudList>
+                        }
+                    </div>
+                }
+            }
+            else if (col.Type == CellType.Check)
+            {
+                <span class="quro-check" role="checkbox" aria-checked="@(Grid.IsChecked(RowKey, col) ? "true" : "false")"></span>
+            }
+            else if (col.Type == CellType.Button)
+            {
+                <span class="quro-button" role="button">@Grid.Text(col.TextKey ?? "")</span>
             }
             else
             {
@@ -27,7 +58,7 @@
 </div>
 
 @code {
-    private (int Revision, int Epoch, int RowIndex, string? EditingField)? _rendered;
+    private (int Revision, int Epoch, int RowIndex, string? EditingField, bool PickerOpen)? _rendered;
 
     [Parameter, EditorRequired] public QuroGrid<TItem> Grid { get; set; } = default!;
     [Parameter, EditorRequired] public int RowKey { get; set; }
@@ -35,11 +66,12 @@
     [Parameter] public int Revision { get; set; }
     [Parameter] public int Epoch { get; set; }
     [Parameter] public string? EditingField { get; set; }
+    [Parameter] public bool PickerOpen { get; set; }
 
-    /// <summary>행 단위 렌더 (R4): 행 리비전·편집 셀·위치·그리드 epoch가 바뀐 행만 다시 그린다.</summary>
+    /// <summary>행 단위 렌더 (R4): 행 리비전·편집 셀·선택 목록·위치·그리드 epoch가 바뀐 행만 다시 그린다.</summary>
     protected override bool ShouldRender()
     {
-        var now = (Revision, Epoch, RowIndex, EditingField);
+        var now = (Revision, Epoch, RowIndex, EditingField, PickerOpen);
         if (_rendered == now)
             return false;
         _rendered = now;
@@ -47,7 +79,7 @@
     }
 
     // 첫 렌더는 ShouldRender를 거치지 않으므로 여기서 기록한다.
-    protected override void OnInitialized() => _rendered = (Revision, Epoch, RowIndex, EditingField);
+    protected override void OnInitialized() => _rendered = (Revision, Epoch, RowIndex, EditingField, PickerOpen);
 
     private static string MarkClass(string cls, CellMark? mark) => mark?.Level switch
     {

@@ -13,12 +13,14 @@ internal sealed class FakeLocalizer : IStringLocalizer
             ["mm.item.code"] = "품목코드",
             ["mm.qty"] = "수량",
             ["app.stock.minus"] = "가용 재고를 초과했습니다",
+            ["mm.detail.open"] = "열기",
         },
         ["en"] = new()
         {
             ["mm.item.code"] = "Item Code",
             ["mm.qty"] = "Quantity",
             ["app.stock.minus"] = "Exceeds available stock",
+            ["mm.detail.open"] = "Open",
         },
     };
 

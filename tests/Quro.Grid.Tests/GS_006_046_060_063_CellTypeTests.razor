@@ -1,0 +1,411 @@
+@inherits GridTestContext
+
+@code {
+    // GS-006 · GS-046 (코드도움), GS-060 ~ GS-063 (Date·Combo·Check·Button 셀) — Addendum A-16 ~ A-19
+
+    private static readonly CultureInfo En = new("en-US");
+
+    private static readonly string[] Items = ["A1001", "A1002", "A1003", "B2001", "B2002", "C3001"];
+
+    /// <summary>샘플과 같은 조회 규칙: 정확히 일치하면 그 코드만, 아니면 앞부분 일치 (대소문자 무시)</summary>
+    private static Task<IReadOnlyList<string>> FindItems(string text)
+    {
+        var exact = Items.Where(c => c.Equals(text, StringComparison.OrdinalIgnoreCase)).ToList();
+        IReadOnlyList<string> hits = exact.Count > 0 ? exact : Items.Where(c => c.StartsWith(text, StringComparison.OrdinalIgnoreCase)).ToList();
+        return Task.FromResult(hits);
+    }
+
+    private static readonly ComboOption[] Units = [new("EA", "Each"), new("BOX", "Box"), new("KG", "Kilogram")];
+
+    private IRenderedComponent<QuroGrid<PoLine>> RenderGrid(QuroDataSet<PoLine> ds,
+        Action<PopupRequestedArgs<PoLine>>? popup = null, Action<CellButtonClickArgs<PoLine>>? button = null,
+        bool readOnlyCheck = false) =>
+        Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" Culture="En" Localizer="new FakeLocalizer()"
+                                            OnPopupRequested="(PopupRequestedArgs<PoLine> e) => popup?.Invoke(e)"
+                                            OnCellButtonClick="(CellButtonClickArgs<PoLine> e) => button?.Invoke(e)">
+                                     <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" Type="CellType.Popup" Lookup="FindItems" />
+                                     <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" />
+                                     <QuroColumn Field="Unit" HeaderKey="mm.unit" Type="CellType.Combo" Options="Units" />
+                                     <QuroColumn Field="Urgent" HeaderKey="mm.urgent" Type="CellType.Check"
+                                                 CheckedValue="@("Y")" UncheckedValue="@("N")" ReadOnly="readOnlyCheck" />
+                                     <QuroColumn Field="DueDate" HeaderKey="mm.due_date" Type="CellType.Date" />
+                                     <QuroColumn Field="Detail" HeaderKey="mm.detail" Type="CellType.Button" TextKey="mm.detail.open" />
+                                 </QuroGrid>);
+
+    private static AngleSharp.Dom.IElement Cell(IRenderedComponent<QuroGrid<PoLine>> cut, int rowKey, string field) =>
+        cut.Find($"[role=row][data-row='{rowKey}'] [data-field='{field}']");
+
+    private static Task<bool> Commit(IRenderedComponent<QuroGrid<PoLine>> cut, int rowKey, string field, string text)
+    {
+        cut.InvokeAsync(() => cut.Instance.BeginEdit(rowKey, field));
+        return cut.InvokeAsync(() => cut.Instance.CommitEdit(rowKey, field, text));
+    }
+
+    // ── GS-006: Popup 셀 코드 입력 후 확정 ──
+
+    /// <summary>GS-006: 1건 일치 → 자동 확정 (조회 결과의 코드로), 팝업 요청 없음</summary>
+    [Fact]
+    public async Task GS_006_PopupTab_SingleMatch_AutoCommits()
+    {
+        var ds = TestData.ThreeLines();
+        var popups = 0;
+        var cut = RenderGrid(ds, popup: _ => popups++);
+        var row = ds.RowKeys[0];
+
+        Assert.True(await Commit(cut, row, "ItemCode", "c3"));
+
+        Assert.Equal("C3001", ds.GetValue(row, "ItemCode"));
+        Assert.Equal(0, popups);
+        Assert.Empty(cut.FindAll(".quro-editor"));
+    }
+
+    /// <summary>GS-006: 0건 → 팝업 없음, 확정하지 않고 편집 유지 (A-05)</summary>
+    [Fact]
+    public async Task GS_006_PopupTab_NoMatch_KeepsEditing()
+    {
+        var ds = TestData.ThreeLines();
+        var popups = 0;
+        var cut = RenderGrid(ds, popup: _ => popups++);
+        var row = ds.RowKeys[0];
+
+        Assert.False(await Commit(cut, row, "ItemCode", "zz"));
+
+        Assert.Equal("A1001", ds.GetValue(row, "ItemCode"));
+        Assert.Equal(0, popups);
+        Assert.Single(cut.FindAll(".quro-editor"));
+    }
+
+    /// <summary>GS-006: 여러 건 → OnPopupRequested(입력 문자열·후보), 앱이 고른 코드로 확정</summary>
+    [Fact]
+    public async Task GS_006_PopupTab_MultipleMatches_UsesChosenCode()
+    {
+        var ds = TestData.ThreeLines();
+        PopupRequestedArgs<PoLine>? seen = null;
+        var cut = RenderGrid(ds, popup: e => { seen = e; e.Value = "B2002"; });
+        var row = ds.RowKeys[0];
+
+        Assert.True(await Commit(cut, row, "ItemCode", "b2"));
+
+        Assert.Equal("b2", seen!.Text);
+        Assert.Equal(["B2001", "B2002"], seen.Matches);
+        Assert.Equal(PopupTrigger.Commit, seen.Trigger);
+        Assert.Equal(row, seen.RowKey);
+        Assert.Equal("B2002", ds.GetValue(row, "ItemCode"));
+    }
+
+    /// <summary>GS-006: 여러 건에서 팝업을 닫으면(값 없음) 편집 유지</summary>
+    [Fact]
+    public async Task GS_006_PopupTab_MultipleMatches_Cancelled_KeepsEditing()
+    {
+        var ds = TestData.ThreeLines();
+        var cut = RenderGrid(ds, popup: _ => { });
+        var row = ds.RowKeys[0];
+
+        Assert.False(await Commit(cut, row, "ItemCode", "b2"));
+
+        Assert.Equal("A1001", ds.GetValue(row, "ItemCode"));
+        Assert.Single(cut.FindAll(".quro-editor"));
+    }
+
+    /// <summary>GS-006: 빈 입력은 조회 없이 그대로 확정 (코드 지우기, 잠정)</summary>
+    [Fact]
+    public async Task GS_006_PopupTab_Empty_CommitsWithoutLookup()
+    {
+        var ds = TestData.ThreeLines();
+        var popups = 0;
+        var cut = RenderGrid(ds, popup: _ => popups++);
+        var row = ds.RowKeys[0];
+
+        Assert.True(await Commit(cut, row, "ItemCode", ""));
+
+        Assert.Equal("", ds.GetValue(row, "ItemCode"));
+        Assert.Equal(0, popups);
+    }
+
+    // ── GS-046: F4 코드도움 ──
+
+    /// <summary>GS-046: F4 → OnPopupRequested(입력 문자열, 후보, F4). 앱이 고르면 확정</summary>
+    [Fact]
+    public async Task GS_046_F4_RaisesPopupWithText()
+    {
+        var ds = TestData.ThreeLines();
+        PopupRequestedArgs<PoLine>? seen = null;
+        var cut = RenderGrid(ds, popup: e => { seen = e; e.Value = "A1003"; });
+        var row = ds.RowKeys[0];
+        await cut.InvokeAsync(() => cut.Instance.BeginEdit(row, "ItemCode"));
+
+        Assert.True(await cut.InvokeAsync(() => cut.Instance.RequestPopup(row, "ItemCode", "a1")));
+
+        Assert.Equal(PopupTrigger.F4, seen!.Trigger);
+        Assert.Equal("a1", seen.Text);
+        Assert.Equal(["A1001", "A1002", "A1003"], seen.Matches);
+        Assert.Equal("A1003", ds.GetValue(row, "ItemCode"));
+        Assert.Empty(cut.FindAll(".quro-editor"));
+    }
+
+    /// <summary>GS-046: F4는 1건 일치여도 팝업을 띄운다(자동 확정 안 함). 고르지 않으면 값 그대로</summary>
+    [Fact]
+    public async Task GS_046_F4_SingleMatch_StillRequests_NoValueKeeps()
+    {
+        var ds = TestData.ThreeLines();
+        var popups = 0;
+        var cut = RenderGrid(ds, popup: _ => popups++);
+        var row = ds.RowKeys[0];
+
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.RequestPopup(row, "ItemCode", "A1001")));
+
+        Assert.Equal(1, popups);
+        Assert.Equal("A1001", ds.GetValue(row, "ItemCode"));
+    }
+
+    /// <summary>GS-046: Popup 셀이 아니면 F4는 아무 일도 하지 않는다</summary>
+    [Fact]
+    public async Task GS_046_F4_NonPopupColumn_Ignored()
+    {
+        var ds = TestData.ThreeLines();
+        var popups = 0;
+        var cut = RenderGrid(ds, popup: _ => popups++);
+
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.RequestPopup(ds.RowKeys[0], "Qty", "1")));
+        Assert.Equal(0, popups);
+    }
+
+    // ── GS-060: Date 셀 달력 선택 ──
+
+    /// <summary>GS-060: 편집 중 달력 열기 → 그 셀에만 달력, 날짜 고르면 바로 확정 (ISO 저장, A-17)</summary>
+    [Fact]
+    public async Task GS_060_DatePicker_PickCommits()
+    {
+        var module = JSInterop.SetupModule(ModulePath);
+        module.Mode = JSRuntimeMode.Loose;
+        var ds = TestData.ThreeLines();
+        var cut = RenderGrid(ds);
+        var row = ds.RowKeys[0];
+        await cut.InvokeAsync(() => cut.Instance.BeginEdit(row, "DueDate"));
+
+        Assert.True(await cut.InvokeAsync(() => cut.Instance.OpenPicker(row, "DueDate", "11/2/2026")));
+
+        var picker = Assert.Single(cut.FindAll(".quro-picker"));
+        Assert.Same(picker, Cell(cut, row, "DueDate").QuerySelector(".quro-picker"));
+        var date = cut.FindComponent<MudBlazor.MudDatePicker>();
+        Assert.Equal(new DateTime(2026, 11, 2), date.Instance.Date);   // 입력 중인 문자열을 사용자 로캘로 해석
+
+        await cut.InvokeAsync(() => date.Instance.DateChanged.InvokeAsync(new DateTime(2026, 11, 20)));
+
+        Assert.Equal(new DateOnly(2026, 11, 20), ds.GetValue(row, "DueDate"));
+        Assert.Empty(cut.FindAll(".quro-picker"));
+        Assert.Empty(cut.FindAll(".quro-editor"));
+        Assert.Contains(module.Invocations, i => i.Identifier == "endEdit");   // JS 편집 상태 정리
+        Assert.Contains("2026-11-20", ds.GetChanges().ToJson());
+    }
+
+    /// <summary>GS-060: Date·Combo가 아닌 셀은 선택 목록이 없다</summary>
+    [Fact]
+    public async Task GS_060_Picker_OnlyForDateAndCombo()
+    {
+        var ds = TestData.ThreeLines();
+        var cut = RenderGrid(ds);
+
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.OpenPicker(ds.RowKeys[0], "Qty", "1")));
+        Assert.Empty(cut.FindAll(".quro-picker"));
+    }
+
+    // ── GS-061: Combo 셀 ──
+
+    /// <summary>GS-061: 코드 대신 명칭 표시</summary>
+    [Fact]
+    public void GS_061_Combo_ShowsOptionText()
+    {
+        var ds = TestData.ThreeLines();
+        var cut = RenderGrid(ds);
+
+        Assert.Equal("Each", Cell(cut, ds.RowKeys[0], "Unit").TextContent.Trim());
+    }
+
+    /// <summary>GS-061: 직접 입력은 코드나 명칭 (대소문자 무시), 목록에 없으면 편집 유지</summary>
+    [Theory]
+    [InlineData("box", true, "BOX")]
+    [InlineData("Kilogram", true, "KG")]
+    [InlineData("liter", false, "EA")]
+    public async Task GS_061_Combo_TypedCodeOrText(string text, bool committed, string expected)
+    {
+        var ds = TestData.ThreeLines();
+        var cut = RenderGrid(ds);
+        var row = ds.RowKeys[0];
+
+        Assert.Equal(committed, await Commit(cut, row, "Unit", text));
+        Assert.Equal(expected, ds.GetValue(row, "Unit"));
+    }
+
+    /// <summary>GS-061: 목록 열기 → 항목 고르면 바로 확정</summary>
+    [Fact]
+    public async Task GS_061_Combo_PickFromList()
+    {
+        var ds = TestData.ThreeLines();
+        var cut = RenderGrid(ds);
+        var row = ds.RowKeys[0];
+        await cut.InvokeAsync(() => cut.Instance.BeginEdit(row, "Unit"));
+        await cut.InvokeAsync(() => cut.Instance.OpenPicker(row, "Unit", "Each"));
+
+        var items = cut.FindAll(".quro-picker .mud-list-item");
+        Assert.Equal(["Each", "Box", "Kilogram"], items.Select(i => i.TextContent.Trim()));
+        await cut.InvokeAsync(() => items[2].Click());
+
+        Assert.Equal("KG", ds.GetValue(row, "Unit"));
+        Assert.Empty(cut.FindAll(".quro-picker"));
+        Assert.Equal("Kilogram", Cell(cut, row, "Unit").TextContent.Trim());
+    }
+
+    /// <summary>GS-061: 현재 값과 같은 항목을 골라도 목록이 닫히고 편집이 끝난다 (값 변경 없음)</summary>
+    [Fact]
+    public async Task GS_061_Combo_PickCurrentItem_Closes()
+    {
+        var ds = TestData.ThreeLines();
+        var cut = RenderGrid(ds);
+        var row = ds.RowKeys[0];
+        await cut.InvokeAsync(() => cut.Instance.BeginEdit(row, "Unit"));
+        await cut.InvokeAsync(() => cut.Instance.OpenPicker(row, "Unit", "Each"));
+
+        await cut.InvokeAsync(() => cut.FindAll(".quro-picker .mud-list-item")[0].Click());
+
+        Assert.Empty(cut.FindAll(".quro-picker"));
+        Assert.Empty(cut.FindAll(".quro-editor"));
+        Assert.Equal(RowState.Normal, ds.GetState(row));
+    }
+
+    /// <summary>GS-061: 붙여넣기도 코드·명칭으로 해석</summary>
+    [Fact]
+    public async Task GS_061_Combo_Paste()
+    {
+        var ds = TestData.ThreeLines();
+        var cut = RenderGrid(ds);
+        var (r1, r2) = (ds.RowKeys[0], ds.RowKeys[1]);
+
+        await cut.InvokeAsync(() => cut.Instance.Paste(r1, "Unit", [["Box"], ["kg"]]));
+
+        Assert.Equal("BOX", ds.GetValue(r1, "Unit"));
+        Assert.Equal("KG", ds.GetValue(r2, "Unit"));
+    }
+
+    // ── GS-062: Check 셀 ──
+
+    /// <summary>GS-062: 셀 안 체크 표시 (Y/N 매핑), 복사용 원래 값, 에디터 없음</summary>
+    [Fact]
+    public async Task GS_062_Check_RendersMappedState()
+    {
+        var ds = TestData.ThreeLines();
+        ds.SetValue(ds.RowKeys[1], "Urgent", "Y");
+        ds.AcceptChanges();
+        var cut = RenderGrid(ds);
+
+        var off = Cell(cut, ds.RowKeys[0], "Urgent");
+        var on = Cell(cut, ds.RowKeys[1], "Urgent");
+        Assert.Equal("false", off.QuerySelector("[role=checkbox]")!.GetAttribute("aria-checked"));
+        Assert.Equal("true", on.QuerySelector("[role=checkbox]")!.GetAttribute("aria-checked"));
+        Assert.Equal("Y", on.GetAttribute("data-copy"));
+        Assert.Equal("check", on.GetAttribute("data-type"));
+
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.BeginEdit(ds.RowKeys[0], "Urgent")));
+        Assert.Empty(cut.FindAll(".quro-editor"));
+    }
+
+    /// <summary>GS-062: 토글 → 매핑 값 저장, 다시 토글하면 원래 값(Normal 복귀)</summary>
+    [Fact]
+    public async Task GS_062_Check_ToggleStoresMappedValue()
+    {
+        var ds = TestData.ThreeLines();
+        var cut = RenderGrid(ds);
+        var row = ds.RowKeys[0];
+
+        Assert.True(await cut.InvokeAsync(() => cut.Instance.ToggleCheck(row, "Urgent")));
+        Assert.Equal("Y", ds.GetValue(row, "Urgent"));
+        Assert.Equal(RowState.Updated, ds.GetState(row));
+        Assert.Equal("true", Cell(cut, row, "Urgent").QuerySelector("[role=checkbox]")!.GetAttribute("aria-checked"));
+
+        Assert.True(await cut.InvokeAsync(() => cut.Instance.ToggleCheck(row, "Urgent")));
+        Assert.Equal("N", ds.GetValue(row, "Urgent"));
+        Assert.Equal(RowState.Normal, ds.GetState(row));
+    }
+
+    /// <summary>GS-062: 읽기 전용이면 토글 안 됨</summary>
+    [Fact]
+    public async Task GS_062_Check_ReadOnly_NoToggle()
+    {
+        var ds = TestData.ThreeLines();
+        var cut = RenderGrid(ds, readOnlyCheck: true);
+
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.ToggleCheck(ds.RowKeys[0], "Urgent")));
+        Assert.Equal("N", ds.GetValue(ds.RowKeys[0], "Urgent"));
+    }
+
+    /// <summary>GS-062: 붙여넣기는 매핑 값(대소문자 무시)이나 true/false, 그 밖은 건너뜀</summary>
+    [Fact]
+    public async Task GS_062_Check_Paste()
+    {
+        var ds = TestData.ThreeLines();
+        PastedArgs? pasted = null;
+        var cut = Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" Culture="En" OnPasted="(PastedArgs e) => pasted = e">
+                                               <QuroColumn Field="Urgent" HeaderKey="mm.urgent" Type="CellType.Check"
+                                                           CheckedValue="@("Y")" UncheckedValue="@("N")" />
+                                           </QuroGrid>);
+        var (r1, r2, r3) = (ds.RowKeys[0], ds.RowKeys[1], ds.RowKeys[2]);
+
+        await cut.InvokeAsync(() => cut.Instance.Paste(r1, "Urgent", [["y"], ["TRUE"], ["x"]]));
+
+        Assert.Equal("Y", ds.GetValue(r1, "Urgent"));
+        Assert.Equal("Y", ds.GetValue(r2, "Urgent"));
+        Assert.Equal("N", ds.GetValue(r3, "Urgent"));
+        Assert.Equal(new PasteSkip(r3, "Urgent", PasteKeys.Invalid), Assert.Single(pasted!.Skipped));
+    }
+
+    // ── GS-063: Button 셀 ──
+
+    /// <summary>GS-063: 리소스 키 문구의 버튼, 값을 읽지 않음(바인딩 필드 없음), 편집 안 됨</summary>
+    [Fact]
+    public async Task GS_063_Button_RendersLabel_NotEditable()
+    {
+        var ds = TestData.ThreeLines();
+        var cut = RenderGrid(ds);
+        var cell = Cell(cut, ds.RowKeys[0], "Detail");
+
+        Assert.Equal(new FakeLocalizer()["mm.detail.open"].Value, cell.QuerySelector("[role=button]")!.TextContent.Trim());
+        Assert.False(new FakeLocalizer()["mm.detail.open"].ResourceNotFound);
+        Assert.Equal("button", cell.GetAttribute("data-type"));
+        Assert.Equal("true", cell.GetAttribute("aria-readonly"));
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.BeginEdit(ds.RowKeys[0], "Detail")));
+    }
+
+    /// <summary>GS-063: 클릭 → OnCellButtonClick(행 키·행 객체), 값 변경 없음</summary>
+    [Fact]
+    public async Task GS_063_Button_Click_RaisesEvent()
+    {
+        var ds = TestData.ThreeLines();
+        CellButtonClickArgs<PoLine>? seen = null;
+        var cut = RenderGrid(ds, button: e => seen = e);
+        var row = ds.RowKeys[1];
+
+        Assert.True(await cut.InvokeAsync(() => cut.Instance.ClickButton(row, "Detail")));
+
+        Assert.Equal(row, seen!.RowKey);
+        Assert.Equal("Detail", seen.Field);
+        Assert.Equal("A1002", seen.Item.ItemCode);
+        Assert.True(ds.GetChanges().IsEmpty);
+    }
+
+    /// <summary>GS-063: 삭제 표시 행·Button이 아닌 셀은 클릭 이벤트 없음, 붙여넣기는 건너뜀</summary>
+    [Fact]
+    public async Task GS_063_Button_DeletedRowOrOtherColumn_Ignored()
+    {
+        var ds = TestData.ThreeLines();
+        var clicks = 0;
+        var cut = RenderGrid(ds, button: _ => clicks++);
+        ds.DeleteRow(ds.RowKeys[2]);
+
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.ClickButton(ds.RowKeys[2], "Detail")));
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.ClickButton(ds.RowKeys[0], "Qty")));
+        Assert.Equal(0, clicks);
+
+        await cut.InvokeAsync(() => cut.Instance.Paste(ds.RowKeys[0], "Detail", [["x"]]));
+        Assert.True(ds.GetChanges().Updated.Count == 0);
+    }
+}

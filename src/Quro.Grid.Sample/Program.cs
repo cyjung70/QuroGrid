@@ -1,3 +1,4 @@
+using MudBlazor.Services;
 using Quro.Grid.Sample.Components;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -5,6 +6,9 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+// 그리드 바깥 UI (툴바·다이얼로그·코드도움 팝업)와 셀 선택 목록 (Spec 4.2)
+builder.Services.AddMudServices();
 
 var app = builder.Build();
 

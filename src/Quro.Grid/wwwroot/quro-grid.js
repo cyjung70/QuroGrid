@@ -1,6 +1,7 @@
 // quro-grid.js — QuroGrid의 얇은 JS 층 (Spec 4.2).
 // 소유: 활성 셀(포커스)·범위 선택·키보드 이동·편집 중 키 입력·클립보드 (R1).
-// 서버 호출은 편집 시작·커밋·취소·행 추가·행 삭제·붙여넣기(1회, R3)·활성 행 변경(구독 시) 때만 (R2).
+// 서버 호출은 편집 시작·커밋·취소·행 추가·행 삭제·붙여넣기(1회, R3)·활성 행 변경(구독 시)·
+// 코드도움(F4)·선택 목록 열기(Alt+↓)·체크 토글·버튼 클릭 때만 (R2).
 // 셀마다 핸들러를 달지 않고 그리드 루트 하나에서 이벤트를 받아 data-row / data-field로 좌표를 해석한다 (R5).
 
 const grids = new Map();
@@ -30,6 +31,7 @@ export function init(root, dotnet, options) {
     s.onMouseMove = e => onMouseMove(s, e);
     s.onMouseUp = () => { s.dragging = false; };
     s.onCopy = e => onCopy(s, e);
+    s.onScroll = () => placePicker(s);
     s.onPaste = e => onPaste(s, e);
     root.addEventListener('keydown', s.onKeyDown);
     root.addEventListener('mousedown', s.onMouseDown);
@@ -40,6 +42,7 @@ export function init(root, dotnet, options) {
     document.addEventListener('mouseup', s.onMouseUp);
     document.addEventListener('copy', s.onCopy);
     document.addEventListener('paste', s.onPaste);
+    document.addEventListener('scroll', s.onScroll, true);   // 그리드·페이지 스크롤 시 선택 목록 위치를 따라간다
     grids.set(root, s);
 }
 
@@ -54,6 +57,7 @@ export function dispose(root) {
     document.removeEventListener('mouseup', s.onMouseUp);
     document.removeEventListener('copy', s.onCopy);
     document.removeEventListener('paste', s.onPaste);
+    document.removeEventListener('scroll', s.onScroll, true);
     clearTimeout(s.notifyTimer);
     s.style.remove();
     grids.delete(root);
@@ -61,7 +65,7 @@ export function dispose(root) {
 
 // ── 이벤트 ──
 
-const HANDLED = new Set(['Enter', 'Tab', 'Escape', 'F2', 'Insert', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
+const HANDLED = new Set(['Enter', 'Tab', 'Escape', 'F2', 'F4', 'Insert', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 
 function isChar(e) {
     return e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey;
@@ -71,26 +75,47 @@ function isRowDelete(e) {
     return e.key === 'Delete' && e.ctrlKey;
 }
 
+function isPickerKey(e) {
+    return e.key === 'ArrowDown' && e.altKey;
+}
+
 function onKeyDown(s, e) {
+    // 선택 목록(달력·Combo 목록, MudBlazor) 안의 키는 목록이 받는다. Esc만 편집 취소.
+    if (e.target.closest('.quro-picker')) {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            enqueue(s, () => s.editing ? cancel(s) : null);
+        }
+        return;
+    }
     // 편집 중이고 밀린 동작이 없으면 문자·화살표는 에디터가 그대로 받는다 (서버 호출 없음, R2)
-    if (s.editing && s.pending === 0 && !['Enter', 'Tab', 'Escape'].includes(e.key)) return;
+    if (s.editing && s.pending === 0 && !['Enter', 'Tab', 'Escape', 'F4'].includes(e.key) && !isPickerKey(e)) return;
     if (!HANDLED.has(e.key) && !isChar(e) && !isRowDelete(e)) return;
 
     e.preventDefault();
-    const key = { key: isRowDelete(e) ? 'RowDelete' : e.key, shift: e.shiftKey, char: isChar(e) };
+    const key = { key: isRowDelete(e) ? 'RowDelete' : e.key, shift: e.shiftKey, alt: e.altKey, char: isChar(e) };
     enqueue(s, () => handleKey(s, key));
 }
 
 function onMouseDown(s, e) {
+    if (e.target.closest('.quro-picker')) {
+        // 목록 항목은 포커스를 받지 않을 수 있어(relatedTarget 없음) 셀 이탈로 보지 않게 한다
+        s.pickerMouseDown = true;
+        setTimeout(() => { s.pickerMouseDown = false; });
+        return;
+    }
     if (e.button !== 0 || e.target.closest('.quro-editor')) return;
     const cell = e.target.closest('.quro-body [role=gridcell][data-field]');
     if (!cell) return;
     const target = position(cell);
     const extend = e.shiftKey && !!s.anchor;
+    // 셀 안 체크 표시·버튼을 누르면 활성화 후 바로 동작 (셀마다 핸들러를 달지 않는다, R5)
+    const type = e.target.closest('.quro-check') ? 'check' : e.target.closest('.quro-button') ? 'button' : null;
     s.dragging = true;
     enqueue(s, async () => {
         if (s.editing && !(await commit(s))) return;
         activate(s, target.row, target.field, extend);
+        if (type) await cellAction(s, type);
     });
 }
 
@@ -108,13 +133,14 @@ function hasFocus(s) {
     return !s.editing && s.root.contains(document.activeElement);
 }
 
-/** Ctrl+C: 선택 범위의 표시 값을 엑셀 형식(탭·줄바꿈)으로 */
+/** Ctrl+C: 선택 범위의 표시 값을 엑셀 형식(탭·줄바꿈)으로. 표시와 값이 다른 셀(Check·Button)은 data-copy. */
 function onCopy(s, e) {
     if (!hasFocus(s) || !s.active) return;
     const { rowEls, fields } = selection(s);
+    const copyText = cell => cell ? (cell.dataset.copy ?? cell.textContent.trim()) : '';
     const text = rowEls
         .map(rowEl => fields
-            .map(f => quote(rowEl.querySelector(`:scope > [data-field="${CSS.escape(f)}"]`)?.textContent.trim() ?? ''))
+            .map(f => quote(copyText(rowEl.querySelector(`:scope > [data-field="${CSS.escape(f)}"]`))))
             .join('\t'))
         .join('\r\n');
     e.clipboardData.setData('text/plain', text);
@@ -132,8 +158,9 @@ function onPaste(s, e) {
 }
 
 function onDblClick(s, e) {
+    if (e.target.closest('.quro-picker')) return;
     const cell = e.target.closest('.quro-body [role=gridcell][data-field]');
-    if (!cell) return;
+    if (!cell || !hasEditor(cell)) return;
     const target = position(cell);
     enqueue(s, async () => {
         activate(s, target.row, target.field);
@@ -142,8 +169,15 @@ function onDblClick(s, e) {
 }
 
 function onFocusOut(s, e) {
-    // 그리드 밖을 클릭하면 편집 중인 값을 커밋한다 (셀 이탈)
-    if (s.editing && !s.root.contains(e.relatedTarget)) enqueue(s, () => s.editing ? commit(s) : null);
+    // 그리드 밖을 클릭하면 편집 중인 값을 커밋한다 (셀 이탈). 에디터에서 포커스가 나간 경우만 본다.
+    // 건너뛰는 경우: 처리 중인 동작이 있음(커밋·F4 중 앱의 코드도움 팝업이 포커스를 가져감),
+    // 선택 목록을 누름(목록 항목은 포커스를 받지 않을 수 있음), 그리드 안으로 이동.
+    const input = e.target;
+    if (!s.editing || input !== s.editing.input || s.pending > 0 || s.pickerMouseDown || s.root.contains(e.relatedTarget)) return;
+    // 서버가 편집을 끝내며 에디터를 지울 때(선택 목록에서 고름)도 focusout이 온다. 지워진 에디터는 커밋하지 않는다.
+    setTimeout(() => {
+        if (input.isConnected && s.editing?.input === input) enqueue(s, () => s.editing?.input === input ? commit(s) : null);
+    });
 }
 
 /** 키·클릭 동작을 순서대로 처리한다. 서버 응답을 기다리는 동안 들어온 입력도 유실 없이 이어서 처리된다. */
@@ -165,25 +199,31 @@ async function handleKey(s, k) {
         return;
     }
 
+    const type = cellType(currentCell(s));
     if (k.char) {
         if (s.editing) appendText(s.editing.input, k.key);
-        else if (editable(currentCell(s))) await beginEdit(s, k.key);   // 문자 입력: 덮어쓰기
+        else if (type === 'check' || type === 'button') { if (k.key === ' ') await cellAction(s, type); }   // Space: 토글·클릭
+        else if (hasEditor(currentCell(s))) await beginEdit(s, k.key);   // 문자 입력: 덮어쓰기
         return;
     }
 
     switch (k.key) {
         case 'F2':
-            if (!s.editing && editable(currentCell(s))) await beginEdit(s, null);   // 기존 값 유지
+            if (!s.editing && hasEditor(currentCell(s))) await beginEdit(s, null);   // 기존 값 유지
+            return;
+        case 'F4':
+            if (type === 'popup') await requestPopup(s);
             return;
         case 'Escape':
             if (s.editing) await cancel(s);
             return;
         case 'Enter':
-            if (s.editing && !(await commit(s))) return;
+            if (!s.editing && type === 'button') return cellAction(s, type);   // Button 셀: 클릭, 이동 없음
+            if (s.editing && !(await commit(s, true))) return;
             await moveEnter(s);
             return;
         case 'Tab':
-            if (s.editing && !(await commit(s))) return;
+            if (s.editing && !(await commit(s, true))) return;
             moveToEditable(s, k.shift ? -1 : 1);
             return;
         case 'Insert':
@@ -194,7 +234,7 @@ async function handleKey(s, k) {
             if (!s.editing) await s.dotnet.invokeMethodAsync('DeleteRows', selectedKeys(s));
             return;
         case 'ArrowUp': return moveBy(s, -1, 0, k.shift);
-        case 'ArrowDown': return moveBy(s, 1, 0, k.shift);
+        case 'ArrowDown': return k.alt ? openPicker(s) : moveBy(s, 1, 0, k.shift);
         case 'ArrowLeft': return moveBy(s, 0, -1, k.shift);
         case 'ArrowRight': return moveBy(s, 0, 1, k.shift);
     }
@@ -215,15 +255,74 @@ async function beginEdit(s, initialText) {
     return true;
 }
 
-async function commit(s) {
+/** 셀 이탈 커밋. byKey(Enter·Tab)면 Popup 셀 코드도움 팝업이 닫힌 뒤에도 포커스를 그리드로 되찾는다. */
+async function commit(s, byKey = false) {
     const { row, field, input } = s.editing;
     if (!(await s.dotnet.invokeMethodAsync('CommitEdit', row, field, input.value))) {
-        input.focus();   // 해석 실패·OnCellValueChanging 취소: 편집 유지
+        input.focus();   // 해석 실패·OnCellValueChanging 취소·0건·팝업 취소: 편집 유지
+        if (byKey) reclaimFocus(s, input);
         return false;
     }
     s.editing = null;
     s.root.focus({ preventScroll: true });
+    if (byKey) reclaimFocus(s, s.root);
     return true;
+}
+
+/**
+ * 앱이 띄운 팝업(MudDialog 등)이 닫히면서 포커스가 문서(body)로 빠지는 경우가 있어,
+ * 잠시(500ms) 지켜보며 포커스가 아무 곳에도 없으면 그리드로 되돌린다. 사용자가 다른 요소를 고른 경우는 건드리지 않는다.
+ */
+function reclaimFocus(s, el) {
+    const until = performance.now() + 500;
+    const tick = () => {
+        const a = document.activeElement;
+        if (el.isConnected && a !== el && (!a || a === document.body)) el.focus({ preventScroll: true });
+        if (performance.now() < until) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+}
+
+/** F4 코드도움 (GS-046). 앱이 팝업에서 코드를 고르면 서버가 확정하고 true. 이동하지 않는다. */
+async function requestPopup(s) {
+    const { row, field } = s.active;
+    const text = s.editing ? s.editing.input.value : (currentCell(s)?.textContent.trim() ?? '');
+    const chosen = await s.dotnet.invokeMethodAsync('RequestPopup', row, field, text);
+    if (s.editing && !chosen) {
+        s.editing.input.focus();   // 팝업을 닫았으면 입력을 이어 간다
+        reclaimFocus(s, s.editing.input);
+        return;
+    }
+    s.editing = null;
+    s.root.focus({ preventScroll: true });
+    reclaimFocus(s, s.root);
+}
+
+/** Alt+↓: Date 달력·Combo 목록 (Addendum A-17). 편집 중이 아니면 편집을 시작하고 연다. 고르면 서버가 확정 후 endEdit. */
+async function openPicker(s) {
+    const cell = currentCell(s);
+    const type = cellType(cell);
+    if ((type !== 'date' && type !== 'combo') || !editable(cell)) return;
+    if (!s.editing && !(await beginEdit(s, null))) return;
+    if (!(await s.dotnet.invokeMethodAsync('OpenPicker', s.editing.row, s.editing.field, s.editing.input.value))) return;
+    await waitFor(() => s.root.querySelector('.quro-picker'));
+    placePicker(s);
+}
+
+/** 선택 목록을 편집 셀 바로 아래(공간이 없으면 위)에 둔다. 화면 기준(fixed)이라 그리드 스크롤 영역에 잘리지 않는다. */
+function placePicker(s) {
+    const picker = s.root.querySelector('.quro-picker');
+    const cell = picker?.closest('[role=gridcell]');
+    if (!cell) return;
+    const r = cell.getBoundingClientRect();
+    const below = r.bottom + picker.offsetHeight <= window.innerHeight;
+    picker.style.left = `${Math.max(0, Math.min(r.left, window.innerWidth - picker.offsetWidth))}px`;
+    picker.style.top = `${below ? r.bottom : Math.max(0, r.top - picker.offsetHeight)}px`;
+}
+
+/** Check 토글 · Button 클릭 (서버 호출 1회) */
+function cellAction(s, type) {
+    return s.dotnet.invokeMethodAsync(type === 'check' ? 'ToggleCheck' : 'ClickButton', s.active.row, s.active.field);
 }
 
 async function cancel(s) {
@@ -334,6 +433,14 @@ export function selectedRowKeys(root) {
     return s ? selectedKeys(s) : [];
 }
 
+/** 선택 목록에서 골라 서버가 값을 확정하고 편집을 끝냈을 때 서버가 호출한다 (Addendum A-17). */
+export function endEdit(root) {
+    const s = grids.get(root);
+    if (!s) return;
+    s.editing = null;
+    s.root.focus({ preventScroll: true });
+}
+
 /** 행 삭제 렌더 뒤 서버가 호출한다: 활성 셀이 사라졌으면 같은 순번(없으면 마지막) 행의 같은 열로. */
 export function ensureActive(root) {
     const s = grids.get(root);
@@ -430,6 +537,17 @@ function same(a, b) {
 
 function editable(cell) {
     return !!cell && cell.getAttribute('aria-readonly') !== 'true';
+}
+
+/** 셀 종류 (서버가 data-type으로 표시: date·combo·check·popup·button, Text·Number·Currency는 없음) */
+function cellType(cell) {
+    return cell?.dataset.type ?? null;
+}
+
+/** 에디터를 여는 셀인지 (Check·Button은 에디터 없이 토글·클릭) */
+function hasEditor(cell) {
+    const type = cellType(cell);
+    return editable(cell) && type !== 'check' && type !== 'button';
 }
 
 /** 서버 렌더 결과가 DOM에 반영될 때까지 기다린다 (최대 3초). */
