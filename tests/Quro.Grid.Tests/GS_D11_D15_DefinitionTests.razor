@@ -7,9 +7,13 @@
     private static readonly CultureInfo En = new("en-US");
 
     private IRenderedComponent<QuroGrid<SoLine>> RenderGrid(QuroDataSet<SoLine> ds, GridDef def,
-        EventCallback<CellValueChangedArgs<SoLine>> changed = default) =>
+        EventCallback<CellValueChangedArgs<SoLine>> changed = default,
+        Func<string, string, Task<IReadOnlyList<string>>>? lookupFor = null,
+        Func<string, IReadOnlyList<ComboOption>?>? optionsFor = null,
+        EventCallback<PopupRequestedArgs<SoLine>> popup = default) =>
         Render<QuroGrid<SoLine>>(@<QuroGrid DataSet="ds" Definition="def" Culture="En" Localizer="new FakeLocalizer()"
-                                            OnCellValueChanged="changed" />);
+                                            OnCellValueChanged="changed" LookupFor="lookupFor" OptionsFor="optionsFor"
+                                            OnPopupRequested="popup" />);
 
     private static AngleSharp.Dom.IElement Cell(IRenderedComponent<QuroGrid<SoLine>> cut, int rowKey, string field) =>
         cut.Find($"[role=row][data-row='{rowKey}'] [data-field='{field}']");
@@ -132,10 +136,72 @@
         Assert.Equal(3, ds.RowKeys.Count);
         Assert.All(ds.RowKeys, k => Assert.Equal(RowState.Inserted, ds.GetState(k)));
         Assert.Equal(3, cut.FindAll("[role=row][data-row]").Count);
+        Assert.False(ds.HasChanges);           // untouched blank rows are not changes
+        Assert.True(ds.Validate().IsValid);    // itemCd is required, but nobody typed in these rows
+        Assert.Empty(ds.GetChanges().Inserted);
+        Assert.Null(cut.Find("[role=grid]").GetAttribute("data-dirty"));
+
+        ds.SetValue(ds.RowKeys[0], nameof(SoLine.Qty), 1m);
+        Assert.Single(ds.GetChanges().Inserted);
+        Assert.False(ds.Validate().IsValid);
 
         var loaded = GoldenScreen.OneLine();
         RenderGrid(loaded, def);
         Assert.Single(loaded.RowKeys);
+    }
+
+    /// <summary>GS-D11: lookup columns search through LookupFor with the definition's lookup id</summary>
+    [Fact]
+    public async Task GS_D11_LookupFor()
+    {
+        var ds = GoldenScreen.OneLine();
+        var asked = new List<(string Id, string Text)>();
+        Task<IReadOnlyList<string>> Find(string id, string text)
+        {
+            asked.Add((id, text));
+            return Task.FromResult<IReadOnlyList<string>>(id == "item" ? ["I-200"] : ["D-1", "D-2"]);
+        }
+        PopupRequestedArgs<SoLine>? seen = null;
+        var cut = RenderGrid(ds, GoldenScreen.Lines(), lookupFor: Find,
+            popup: EventCallback.Factory.Create<PopupRequestedArgs<SoLine>>(this, e => { seen = e; e.Value = "D-2"; }));
+        var row = ds.RowKeys[0];
+
+        await cut.InvokeAsync(() => cut.Instance.BeginEdit(row, "itemCd"));
+        Assert.True(await cut.InvokeAsync(() => cut.Instance.CommitEdit(row, "itemCd", "i-2")));
+        await cut.InvokeAsync(() => cut.Instance.BeginEdit(row, "dcCode"));
+        Assert.True(await cut.InvokeAsync(() => cut.Instance.CommitEdit(row, "dcCode", "d")));
+
+        Assert.Equal([("item", "i-2"), ("discount", "d")], asked);
+        Assert.Equal("I-200", ds.GetItem(row).ItemCd);
+        Assert.Equal(["D-1", "D-2"], seen!.Matches);
+        Assert.Equal("D-2", ds.GetItem(row).DcCode);
+    }
+
+    /// <summary>GS-D11: select columns get their list from OptionsFor with the definition's source</summary>
+    [Fact]
+    public void GS_D11_OptionsFor()
+    {
+        var ds = GoldenScreen.OneLine();
+        ds.SetValue(ds.RowKeys[0], nameof(SoLine.DcCode), "D10");
+        var lines = GoldenScreen.Lines();
+        var def = lines with
+        {
+            Columns = lines.Columns.Select(c => c.Id == "dcCode"
+                ? c with { Type = ColumnType.Select, Lookup = null, DataSource = "code:S910" } : c).ToList(),
+        };
+        var sources = new List<string>();
+        IReadOnlyList<ComboOption>? Options(string source)
+        {
+            sources.Add(source);
+            return [new("D10", "Ten percent"), new("D20", "Twenty percent")];
+        }
+
+        var cut = RenderGrid(ds, def, optionsFor: Options);
+        cut.Render();
+
+        Assert.Equal("combo", Cell(cut, ds.RowKeys[0], "dcCode").GetAttribute("data-type"));
+        Assert.Equal("Ten percent", Cell(cut, ds.RowKeys[0], "dcCode").TextContent.Trim());
+        Assert.Equal(["code:S910"], sources);   // asked once, not on every render
     }
 
     /// <summary>GS-D15 (G-03): clipboard: false turns off copy and paste</summary>

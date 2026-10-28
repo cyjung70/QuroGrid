@@ -373,4 +373,5 @@ D-1 → D-2 → D-3 → D-4 → D-5 → D-6. 시나리오는 `GS-D.md`, 설계�
 - D-2 (구조 검사 V-04~V-18, `FieldModeResolver`): GS-D03(구조)·GS-D05·GS-D07 — **완료**. lockWhen 필드 검사는 D-4
 - D-3 (카탈로그 검사 V-19~V-32, `ScreenDefValidator`·`IQuroDefinitionCatalog`): GS-D03(키)·GS-D04·GS-D06 — **완료**. 테스트 카탈로그 `Golden/catalog.json`
 - D-4 (`RuleExpression`·`LockExpression`, lockWhen·식 V-18): GS-D08~GS-D10 — **완료**
-- D-5 (`<QuroGrid Definition>`, G-01~G-04, A-45): GS-D11~GS-D15 — **완료**. 다음 D-6은 T-12 결정 후
+- D-5 (`<QuroGrid Definition>`, G-01~G-04, A-45): GS-D11~GS-D15 — **완료**
+- D-5a (빈 행 `AddBlankRow`, `LookupFor`·`OptionsFor`, A-46): GS-D11·GS-D15 보강 — **완료**. 다음 D-6 (`quro-deflint`, GS-D16)

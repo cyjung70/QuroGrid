@@ -2,7 +2,7 @@
 
 > 기준: `docs/QuroGrid_TOON_ScreenDef_v0.2.md` (이하 **설계서**). TOBE 입력: QuroERP TO BE 설계서 v0.1 5장 H1~H8 (QuroHarness 보관, 비공개).
 > 테스트 이름: `GS_D0x_<What>` (예: `GS_D01_LoadSalesOrderScreen_Counts`). 테스트를 먼저 쓰고 실패를 확인한 뒤 구현한다.
-> 상태: 설계서 6.1절 확정 (Addendum A-44), T-11 = `<QuroGrid Definition>`. **GS-D11~GS-D15는 갭 G-01~G-04의 공개 API 승인 후, GS-D16은 T-12 결정 후 착수.**
+> 상태: 설계서 6.1절 확정 (Addendum A-44), T-11 = `<QuroGrid Definition>`. GS-D11~GS-D15 완료 (A-45·A-46). T-12 결정 (A-46): GS-D16 착수.
 
 ## 1. Harness H1~H8 ↔ 이 저장소
 
@@ -57,13 +57,13 @@ TOBE의 Harness 8개 중 QuroGrid가 판정할 수 있는 것은 여기서, Quro
 
 | ID | 시나리오 | 입력 | 기대 결과 | H |
 |---|---|---|---|---|
-| GS-D11 | 열 매핑 | 골든 `lines` 그리드를 `<QuroGrid Definition>`으로 연결 | 보이는 열 10, 헤더는 `label` 키의 문구, `amount`는 읽기 전용·합계 행 있음, `itemCd`는 Popup 셀, `qty` 표시는 `fmt` + 사용자 로캘 | H6 |
+| GS-D11 | 열 매핑 | 골든 `lines` 그리드를 `<QuroGrid Definition>`으로 연결 | 보이는 열 10, 헤더는 `label` 키의 문구, `amount`는 읽기 전용·합계 행 있음, `itemCd`는 Popup 셀, `qty` 표시는 `fmt` + 사용자 로캘. `LookupFor`는 lookup id(`item`, `discount`)로, `OptionsFor`는 source로 열마다 1회 (A-46) | H6 |
 | GS-D12 | `edit=new` (G-01) | `itemCd`를 `edit=new`로 바꾼 정의, 기존 행 1 + 추가 행 1 | 추가 행에서만 편집기 열림. 기존 행 F2·커밋·붙여넣기는 무시, `aria-readonly` | H6 |
 | GS-D13 | 규칙 calc 연결 | qty 2 → 5 입력 커밋 | `amount` 즉시 갱신 (서버 왕복 1회, R2: 표시용), `OnCellValueChanged` 1회. 계산은 앱이 `RuleExpression`으로 (A-44) | H8 |
 | GS-D14 | validate `gt 0` (G-02) | qty 0 커밋 | 메시지 키 `msg.qty.zero`가 `Validate()` 결과에 포함, 앱이 그 결과로 `SetCellMark` → 셀 오류 표시 (Data: `GS_D14_*` 배타 범위·ne·`MessageKey`·camelCase 필드) | H6 |
-| GS-D15 | 그리드 옵션 | `initRows: 3` / `clipboard: false` (G-03) / `frozen: 2` | 빈 행 3 (그리기 1회, R3, DataSet이 비었을 때만) / Ctrl+V·복사 무시 / 왼쪽 2열 고정. 열 옵션 `Filterable`·`Sortable`·`Groupable=false` (G-04) | H6 |
+| GS-D15 | 그리드 옵션 | `initRows: 3` / `clipboard: false` (G-03) / `frozen: 2` | 빈 행 3 (그리기 1회, R3, DataSet이 비었을 때만, `AddBlankRow`: 손대기 전에는 `HasChanges`·`Validate`·`GetChanges` 대상 아님, Data `GS_D15_*`) / Ctrl+V·복사 무시 / 왼쪽 2열 고정. 열 옵션 `Filterable`·`Sortable`·`Groupable=false` (G-04) | H6 |
 
-### 3.4 CLI (xUnit) — 묶음 D-6, T-12 결정 후
+### 3.4 CLI (xUnit) — 묶음 D-6 (T-12 결정: A-46)
 
 | ID | 시나리오 | 입력 | 기대 결과 | H |
 |---|---|---|---|---|

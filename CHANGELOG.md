@@ -4,6 +4,8 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 소비자(QuroERP)는 버전을 올리기 전에 이 파일을 읽는다.
 
 ## Unreleased
+- Added: `QuroGrid.LookupFor`·`OptionsFor` — 정의 열(`lookup`·`select`)의 코드 조회 함수·목록을 앱이 준다 (A-46)
+- Added: `QuroDataSet.AddBlankRow` — 손대지 않은 동안 `Validate`·`GetChanges`·`HasChanges`가 건너뛰는 입력용 빈 행. `initRows`가 이것을 쓴다 (A-46)
 - Added: `<QuroGrid Definition="@gridDef">` (T-11, GS-D11~GS-D15, A-45) — 정의에서 열·고정 열·삭제 행 표시·클립보드·합계 행·페이지 크기·검증 규칙·`initRows`. `Quro.Grid`가 `Quro.Grid.Definition`을 참조
 - Added: `QuroGrid.Clipboard` (G-03), `QuroColumn.NewRowOnly` (G-01), `QuroColumn.Filterable`·`Sortable`·`Groupable` (G-04)
 - Added: `FieldRule.MinExclusive`·`MaxExclusive`·`NotEqual`·`MessageKey`, `ValidationKeys.MinExclusive`·`MaxExclusive`·`NotEqual` (G-02). 소비자 조치: 새 리소스 키 3개 `quro.validation.minExclusive`·`maxExclusive`·`notEqual`의 문구를 `IStringLocalizer`에 추가

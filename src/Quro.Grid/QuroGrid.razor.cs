@@ -586,7 +586,7 @@ public partial class QuroGrid<TItem> where TItem : class
     private async Task<IReadOnlyList<int>> SelectedRowKeys() =>
         _module is null ? [] : await _module.InvokeAsync<int[]>("selectedRowKeys", _root);
 
-    private async Task<int> AddRowCore(TItem? item = null, int? source = null, int? after = null)
+    private async Task<int> AddRowCore(TItem? item = null, int? source = null, int? after = null, bool blank = false)
     {
         item ??= Activator.CreateInstance<TItem>();
         await OnRowAdding.InvokeAsync(new RowAddingArgs<TItem>(item, source));
@@ -594,7 +594,7 @@ public partial class QuroGrid<TItem> where TItem : class
         if (Paging)
             after = null;   // 페이징 중 추가 행은 맨 위에 모은다 (A-24)
         OrderedRowKeys();   // 화면 순서를 맞춘 뒤 넣는다
-        var key = DataSet.AddRow(item, afterRowKey: after);
+        var key = blank ? DataSet.AddBlankRow(item) : DataSet.AddRow(item, afterRowKey: after);
         PlaceInOrder(key, after);
         if (Grouped && after is { } a && _groupOf.TryGetValue(a, out var group))
             _groupOf[key] = group;   // 행 아래 추가·복사한 행은 그 행의 그룹에 (GS-075)

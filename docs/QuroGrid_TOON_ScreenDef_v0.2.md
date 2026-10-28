@@ -124,7 +124,7 @@ TOBE 2.4·2.7을 기준으로 하고, QuroGrid 그리드 기능에 맞춰 열 �
 | `id` | 예 | 화면 안 유일 | `<QuroGrid>` 식별 |
 | `bind` | 예 | 저장 DTO 컬렉션 이름 | H2 계약 테스트 키 (QuroERP) |
 | `rowKey` | 예 | 서버 행 키 필드 | 열에 없어도 됨 (숨은 키). DataSet 업무 키 (7.2) |
-| `initRows` | 아니오 (0) | 처음 빈 행 수 | `AddRows(initRows)` |
+| `initRows` | 아니오 (0) | 처음 빈 행 수 | `AddBlankRow` × initRows, 그리기 1회 (A-46) |
 | `clipboard` | 아니오 (true) | 복사·붙여넣기 허용 | `Clipboard` (G-03 ✅) |
 | `pageSize`★ | 아니오 (0) | 0 = 메모리 모드, >0 = 서버 페이징 (A-24) | `ItemsProvider` 사용 여부 |
 | `frozen`★ | 아니오 (0) | 왼쪽 고정 열 수 | `FrozenColumns` |
@@ -259,7 +259,7 @@ Critical(아키텍처·공개 API·데이터 모델) 항목은 확정 전까지 
 | T-08 | `lookup.toon` 스키마 | v0.3로 미룸. v0.2는 lookup id 존재만 검사 |
 | T-09 | `select` 값 | 값=코드, 표시=언어별 명칭 (TOBE 3.5). 이름 저장 금지 |
 | T-10 | 할인 식 부호 (TOBE D4·R3) | 업무 결정 사항. QuroGrid는 식을 그대로 평가할 뿐 — 골든 파일은 차감식 |
-| T-12 | 검증 CLI | `dotnet quro-deflint <폴더>` dotnet tool (I-02와 함께 결정) |
+| T-12 | 검증 CLI | **결정 (A-46)**: `dotnet quro-deflint <폴더>` dotnet tool |
 | T-13 | 계산 결과 반올림 | 그리드 표시는 `fmt`, 저장값은 서버 규약 |
 
 ---
@@ -272,11 +272,11 @@ Critical(아키텍처·공개 API·데이터 모델) 항목은 확정 전까지 
 |---|---|---|
 | `id` | `Field` | |
 | `label` | `HeaderKey` | |
-| `type=text` | `Type=Text` | `lookup`이 있으면 `Type=Popup` + `Lookup`(앱이 `lookupId`로 만든 함수) |
+| `type=text` | `Type=Text` | `lookup`이 있으면 `Type=Popup` + `Lookup` = 앱의 `LookupFor(lookupId, 입력)` (A-46) |
 | `type=number` | `Type=Number` | |
 | `type=money` | `Number` (`currency` 없음) / `Currency` (`currency` 있음 → `CurrencyField`) | |
 | `type=date` | `Type=Date` | |
-| `type=select` | `Type=Combo`, `Options` = 앱이 `source`로 만든 목록 | |
+| `type=select` | `Type=Combo`, `Options` = 앱의 `OptionsFor(source)` (A-46) | |
 | `type=checkbox` | `Type=Check` | |
 | `type=button` | `Type=Button`, `TextKey`=`label` | |
 | `width` | `Width` | |
@@ -291,7 +291,7 @@ Critical(아키텍처·공개 API·데이터 모델) 항목은 확정 전까지 
 
 ### 7.2 그리드 → `QuroGrid` · `QuroDataSet`
 - `rowKey`: QuroDataSet의 내부 행 키(int)와 별개인 **업무 키**. 저장 payload에 그대로 실림. 추가 행은 null (서버 채번, R6)
-- `initRows` → `AddRows(initRows)` 1회 (R3)
+- `initRows` → `AddBlankRow` × initRows, 그리기 1회 (R3). 손대지 않은 빈 행은 저장·검증·이탈 경고 대상이 아니다 (A-46)
 - `pageSize>0` → `ItemsProvider`; `rules`의 `sum`은 서버 `Totals`로 (A-24)
 - `validate gt/ge/lt/le/ne` → `DataSet.SetRule` (G-02 ✅): `MinExclusive`·`MaxExclusive`·`NotEqual`, 메시지 = `msg` (`FieldRule.MessageKey`)
 
