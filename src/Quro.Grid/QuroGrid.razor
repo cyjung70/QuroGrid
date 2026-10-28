@@ -27,8 +27,11 @@
                 @for (var i = 0; i < _columns.Count; i++)
                 {
                     var col = _columns[i];
+                    var sort = SortOf(col);
+                    @* 헤더 클릭(정렬)·경계 드래그(리사이즈)는 quro-grid.js가 받는다 (R5, A-22·A-23) *@
                     <div class="@CellClass(i, "quro-header")" style="@CellStyle(i)" role="columnheader"
-                         aria-colindex="@(i + 1)" data-field="@col.Field">@Text(col.HeaderKey)</div>
+                         aria-colindex="@(i + 1)" data-field="@col.Field" aria-sort="@AriaSort(sort)">@Text(col.HeaderKey)@if (sort is not null)
+                         {<span class="quro-sort" aria-hidden="true" data-dir="@(sort.Direction == SortDirection.Ascending ? "asc" : "desc")" data-order="@SortOrder(col)"></span>}<span class="quro-resize" aria-hidden="true"></span></div>
                 }
             </div>
         </div>

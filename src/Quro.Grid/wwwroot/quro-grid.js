@@ -71,6 +71,7 @@ export function dispose(root) {
     document.removeEventListener('click', s.onLinkClick, true);
     clearTimeout(s.notifyTimer);
     s.style.remove();
+    s.resizeStyle?.remove();
     grids.delete(root);
 }
 
@@ -128,6 +129,23 @@ function onMouseDown(s, e) {
         return;
     }
     if (e.button !== 0 || e.target.closest('.quro-editor')) return;
+    const handle = e.target.closest('.quro-head .quro-resize');
+    if (handle) {
+        startResize(s, handle.closest('[role=columnheader]'), e);
+        return;
+    }
+    const header = e.target.closest('.quro-head [role=columnheader][data-field]');
+    if (header) {
+        // 헤더 클릭 정렬 (A-22): 편집 중이면 먼저 커밋. 포커스는 그리드에 둔다.
+        e.preventDefault();
+        const field = header.dataset.field;
+        const additive = e.shiftKey;
+        enqueue(s, async () => {
+            if (s.editing && !(await commit(s))) return;
+            await s.dotnet.invokeMethodAsync('Sort', field, additive);
+        });
+        return;
+    }
     const cell = e.target.closest('.quro-body [role=gridcell][data-field]');
     if (!cell) return;
     const target = position(cell);
@@ -140,6 +158,58 @@ function onMouseDown(s, e) {
         activate(s, target.row, target.field, extend);
         if (type) await cellAction(s, type);
     });
+}
+
+// ── 컬럼 리사이즈 (GS-053, A-23): 드래그 중에는 브라우저에서만 그리고, 끝날 때 서버 1회 (R1) ──
+
+const MIN_WIDTH = 40;
+
+function startResize(s, header, e) {
+    e.preventDefault();
+    const field = header.dataset.field;
+    const startX = e.clientX;
+    const startWidth = Math.round(header.getBoundingClientRect().width);
+    // 오른쪽에 있는 고정 열은 너비가 바뀐 만큼 위치(left)도 옮긴다
+    const headers = [...header.parentElement.children];
+    const frozenAfter = header.classList.contains('quro-frozen')
+        ? headers.slice(headers.indexOf(header) + 1).filter(h => h.classList.contains('quro-frozen'))
+            .map(h => ({ field: h.dataset.field, left: parseFloat(getComputedStyle(h).left) || 0 }))
+        : [];
+    let width = startWidth;
+
+    const move = ev => {
+        width = Math.max(MIN_WIDTH, Math.round(startWidth + ev.clientX - startX));
+        drawResize(s, field, width, frozenAfter.map(f => ({ ...f, left: f.left + width - startWidth })));
+    };
+    const up = () => {
+        document.removeEventListener('mousemove', move, true);
+        document.removeEventListener('mouseup', up, true);
+        if (width === startWidth) {
+            drawResize(s, null);
+            return;
+        }
+        enqueue(s, async () => {
+            await s.dotnet.invokeMethodAsync('ColumnResized', field, width);
+            drawResize(s, null);   // 이제 서버가 그린 너비를 쓴다
+        });
+    };
+    document.addEventListener('mousemove', move, true);
+    document.addEventListener('mouseup', up, true);
+}
+
+/** 드래그 중 너비를 별도 style 규칙으로 덮는다 (서버 렌더와 충돌하지 않게). field가 null이면 지운다. */
+function drawResize(s, field, width, shifted = []) {
+    s.resizeStyle ??= document.head.appendChild(document.createElement('style'));
+    if (!field) {
+        s.resizeStyle.textContent = '';
+        return;
+    }
+    const grid = `[data-quro-grid="${s.id}"]`;
+    const cells = f => `${grid} [data-field="${CSS.escape(f)}"], ${grid} [data-footer-field="${CSS.escape(f)}"]`;
+    s.resizeStyle.textContent = [
+        `${cells(field)} { width: ${width}px !important; }`,
+        ...shifted.map(f => `${cells(f.field)} { left: ${f.left}px !important; }`),
+    ].join('\n');
 }
 
 /** 드래그로 범위 선택 (서버 호출 없음) */

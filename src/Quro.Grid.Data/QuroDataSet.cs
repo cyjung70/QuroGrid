@@ -30,10 +30,14 @@ public sealed class QuroDataSet<T> where T : class
         _byKey.Clear();
         _nextLoadedKey = 1;
         _nextInsertedKey = -1;
+        Generation++;
 
         foreach (var item in rows)
             Append(new Row(_nextLoadedKey++, item, RowState.Normal, Snapshot(item)));
     }
+
+    /// <summary>Load 때마다 바뀐다. 화면이 다시 조회됐는지 알 때 쓴다 (정렬 재적용, Addendum A-22).</summary>
+    public int Generation { get; private set; }
 
     /// <summary>현재 목록에 있는 행 키 (표시 순서). Deleted 행도 포함한다 (화면 처리는 O-02).</summary>
     public IReadOnlyList<int> RowKeys => _rows.Select(r => r.Key).ToList();

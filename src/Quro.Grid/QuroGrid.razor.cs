@@ -29,6 +29,11 @@ public partial class QuroGrid<TItem> where TItem : class
     private readonly string _instanceId = Guid.NewGuid().ToString("N");   // 재연결 후 같은 회로인지 JS가 확인 (A-21)
     private (int RowKey, string Field)? _picker;   // 열린 선택 목록 (Date 달력·Combo 목록, Addendum A-17)
     private DateTime? _pickerDate;
+    private readonly List<SortColumn> _sort = [];
+    private List<int>? _order;           // 정렬한 화면 순서 (null = 조회 순서). 편집·추가해도 다시 정렬하지 않는다 (A-22)
+    private int _orderGeneration;        // 정렬한 시점의 DataSet.Generation. 다시 조회되면 정렬을 다시 적용한다
+    private readonly Dictionary<string, int> _widths = [];   // 사용자가 리사이즈한 너비 (A-23)
+    private const int MinColumnWidth = 40;
 
     [Inject] private IJSRuntime JS { get; set; } = default!;
 
@@ -91,6 +96,15 @@ public partial class QuroGrid<TItem> where TItem : class
 
     /// <summary>앱 안 화면 이동 확인을 앱이 직접 할 때 구독한다 (Addendum A-20).</summary>
     [Parameter] public EventCallback<LeavingArgs> OnLeaving { get; set; }
+
+    /// <summary>사용자가 헤더를 눌러 정렬을 바꾼 뒤 (Addendum A-22).</summary>
+    [Parameter] public EventCallback<SortChangedArgs> OnSortChanged { get; set; }
+
+    /// <summary>컬럼 경계 드래그가 끝난 뒤 (Addendum A-23).</summary>
+    [Parameter] public EventCallback<ColumnResizedArgs> OnColumnResized { get; set; }
+
+    /// <summary>현재 정렬 (1차·2차… 순서). 비어 있으면 조회 순서.</summary>
+    public IReadOnlyList<SortColumn> SortColumns => _sort.ToList();
 
     internal IReadOnlyList<QuroColumn> Columns => _columns;
     internal CultureInfo EffectiveCulture => Culture ?? CultureInfo.CurrentCulture;
@@ -389,7 +403,7 @@ public partial class QuroGrid<TItem> where TItem : class
     public async Task<IReadOnlyList<int>> CopyRows(IReadOnlyList<int> rowKeys)
     {
         var copies = new List<int>();
-        foreach (var source in DataSet.RowKeys.Where(rowKeys.Contains).ToList())
+        foreach (var source in OrderedRowKeys().Where(rowKeys.Contains).ToList())
             copies.Add(await AddRowCore(DataSet.CopyOf(source), source, after: source));
 
         StateHasChanged();
@@ -410,7 +424,9 @@ public partial class QuroGrid<TItem> where TItem : class
         item ??= Activator.CreateInstance<TItem>();
         await OnRowAdding.InvokeAsync(new RowAddingArgs<TItem>(item, source));
 
+        OrderedRowKeys();   // 화면 순서를 맞춘 뒤 넣는다
         var key = DataSet.AddRow(item, afterRowKey: after);
+        PlaceInOrder(key, after);
         await OnRowAdded.InvokeAsync(new RowAddedArgs<TItem>(key, DataSet.GetItem(key)));
         return key;
     }
@@ -526,6 +542,149 @@ public partial class QuroGrid<TItem> where TItem : class
     [JSInvokable]
     public void CancelEdit() => EndEditing();
 
+    // ── 정렬 (GS-050, Addendum A-22): 적재된 행의 화면 순서만 바꾼다. DataSet 순서·상태는 그대로 ──
+
+    /// <summary>
+    /// 헤더 클릭 (JS가 호출, 호출 1회). 오름 → 내림 → 해제 순환.
+    /// <paramref name="additive"/>(Shift+클릭)면 기존 정렬에 2차·3차로 더하거나 그 컬럼만 순환한다.
+    /// </summary>
+    [JSInvokable]
+    public async Task Sort(string field, bool additive)
+    {
+        if (Column(field).Type == CellType.Button)
+            return;
+
+        var index = _sort.FindIndex(s => s.Field == field);
+        SortColumn? next = index < 0 ? new(field, SortDirection.Ascending)
+            : _sort[index].Direction == SortDirection.Ascending ? new(field, SortDirection.Descending)
+            : null;
+
+        if (!additive)
+        {
+            _sort.Clear();
+            if (next is not null)
+                _sort.Add(next);
+        }
+        else if (index < 0)
+            _sort.Add(next!);
+        else if (next is null)
+            _sort.RemoveAt(index);
+        else
+            _sort[index] = next;
+
+        ApplySort();
+        await OnSortChanged.InvokeAsync(new SortChangedArgs(SortColumns));
+        StateHasChanged();
+    }
+
+    /// <summary>앱에서 정렬을 지정한다 (OnSortChanged는 발생하지 않음). 빈 목록이면 조회 순서.</summary>
+    public void SetSort(IReadOnlyList<SortColumn> sort)
+    {
+        _sort.Clear();
+        _sort.AddRange(sort.Where(s => Column(s.Field).Type != CellType.Button));
+        ApplySort();
+        StateHasChanged();
+    }
+
+    public void ClearSort() => SetSort([]);
+
+    private void ApplySort()
+    {
+        _orderGeneration = DataSet.Generation;
+        _order = _sort.Count == 0
+            ? null
+            : DataSet.RowKeys.OrderBy(k => k, Comparer<int>.Create(CompareRows)).ToList();   // 안정 정렬: 같으면 조회 순서
+    }
+
+    private int CompareRows(int a, int b)
+    {
+        foreach (var s in _sort)
+        {
+            var col = Column(s.Field);
+            var result = CompareValues(SortValue(a, col), SortValue(b, col));
+            if (result != 0)
+                return s.Direction == SortDirection.Ascending ? result : -result;
+        }
+        return 0;
+    }
+
+    /// <summary>Combo는 화면에 보이는 명칭으로, 그 밖은 값으로 정렬한다.</summary>
+    private object? SortValue(int rowKey, QuroColumn col)
+    {
+        var value = DataSet.GetValue(rowKey, col.Field);
+        return col.Type == CellType.Combo ? OptionText(col, value) : value;
+    }
+
+    /// <summary>빈 값이 가장 작다. 문자열은 표시 로캘 기준(대소문자 무시).</summary>
+    private int CompareValues(object? x, object? y) => (x, y) switch
+    {
+        (null, null) => 0,
+        (null, _) => -1,
+        (_, null) => 1,
+        (string sx, string sy) => EffectiveCulture.CompareInfo.Compare(sx, sy, CompareOptions.IgnoreCase),
+        _ => Comparer<object>.Default.Compare(x, y),
+    };
+
+    /// <summary>
+    /// 화면 순서의 행 키 (삭제 표시 행 포함). 정렬 중이면 정렬한 순서를 유지하고, 사라진 행은 빼고,
+    /// 그리드 밖에서 추가된 행은 끝에 둔다. 다시 조회되면 정렬을 다시 적용한다.
+    /// </summary>
+    private List<int> OrderedRowKeys()
+    {
+        if (_order is null)
+            return DataSet.RowKeys.ToList();
+        if (_orderGeneration != DataSet.Generation)
+            ApplySort();
+
+        var current = DataSet.RowKeys;
+        var exists = current.ToHashSet();
+        _order!.RemoveAll(k => !exists.Contains(k));
+        var known = _order.ToHashSet();
+        _order.AddRange(current.Where(k => !known.Contains(k)));
+        return _order;
+    }
+
+    /// <summary>그리드가 추가한 행을 화면 순서에도 넣는다: <paramref name="after"/> 바로 아래, 없으면 끝.</summary>
+    private void PlaceInOrder(int rowKey, int? after)
+    {
+        if (_order is null)
+            return;
+        _order.Remove(rowKey);
+        var index = after is { } a ? _order.IndexOf(a) : -1;
+        if (index < 0)
+            _order.Add(rowKey);
+        else
+            _order.Insert(index + 1, rowKey);
+    }
+
+    internal SortColumn? SortOf(QuroColumn col) => _sort.Find(s => s.Field == col.Field);
+
+    private static string? AriaSort(SortColumn? sort) => sort?.Direction switch
+    {
+        SortDirection.Ascending => "ascending",
+        SortDirection.Descending => "descending",
+        _ => null,
+    };
+
+    internal string? SortOrder(QuroColumn col) =>
+        _sort.Count > 1 ? (_sort.FindIndex(s => s.Field == col.Field) + 1).ToString(CultureInfo.InvariantCulture) : null;
+
+    // ── 컬럼 리사이즈 (GS-053, Addendum A-23): 드래그는 JS가, 끝날 때 1회 호출 (R1) ──
+
+    /// <summary>경계 드래그가 끝났을 때 JS가 호출한다. 최소 40px.</summary>
+    [JSInvokable]
+    public async Task ColumnResized(string field, int width)
+    {
+        var col = Column(field);
+        width = Math.Max(MinColumnWidth, width);
+        _widths[col.Field] = width;
+        _epoch++;   // 모든 행의 셀 너비가 바뀐다
+        await OnColumnResized.InvokeAsync(new ColumnResizedArgs(col.Field, width));
+        StateHasChanged();
+    }
+
+    internal int WidthOf(QuroColumn col) => _widths.TryGetValue(col.Field, out var width) ? width : col.Width;
+
     /// <summary>재연결 후 JS가 호출한다. 같은 회로(같은 그리드 인스턴스)면 init 때 받은 값과 같다 (A-21).</summary>
     [JSInvokable]
     public string InstanceId() => _instanceId;
@@ -594,8 +753,8 @@ public partial class QuroGrid<TItem> where TItem : class
 
     private IEnumerable<int> VisibleRowKeys() =>
         DeletedRows == DeletedRowDisplay.Hide
-            ? DataSet.RowKeys.Where(k => DataSet.GetState(k) != RowState.Deleted)
-            : DataSet.RowKeys;
+            ? OrderedRowKeys().Where(k => DataSet.GetState(k) != RowState.Deleted)
+            : OrderedRowKeys();
 
     internal string Text(string key) => Localizer is null ? key : Localizer[key].Value;
 
@@ -604,10 +763,10 @@ public partial class QuroGrid<TItem> where TItem : class
 
     internal string CellStyle(int index)
     {
-        var width = $"width:{_columns[index].Width}px";
+        var width = $"width:{WidthOf(_columns[index])}px";
         if (index >= FrozenColumns)
             return width;
-        var left = _columns.Take(index).Sum(c => c.Width);
+        var left = _columns.Take(index).Sum(WidthOf);
         return $"{width};left:{left}px";
     }
 
