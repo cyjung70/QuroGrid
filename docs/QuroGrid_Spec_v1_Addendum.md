@@ -1,6 +1,6 @@
 # QuroGrid Spec v1 보완 문서 (Addendum A)
 
-- 대상: `docs/QuroGrid_FeatureMatrix_Spec_v1.pdf` (Spec v1 초안 Draft v0.2, 2026-10-28 — 4.9 본문 개정)
+- 대상: `docs/QuroGrid_FeatureMatrix_Spec_v1.pdf` (Spec v1 초안 Draft v0.2, 2026-10-28 — 4.9·5장 본문 개정)
 - 문서 상태: A.12 (2026-10-28) · 스테이블영 결정 사항 반영
 - 이 문서는 Spec v1의 일부입니다. **아래 항목은 Spec 본문보다 우선합니다.** 본문에 없는 내용은 "보완", 본문과 다른 내용은 "변경"으로 표시합니다.
 
@@ -18,7 +18,7 @@
 | A-06 | 4.8 | 보완 | 붙여넣기 로캘 해석은 숫자와 **날짜**에 모두 적용 (예: de-DE `28.10.2026` → `2026-10-28`) | 2026-10-28 |
 | A-07 | 4.9 | 변경 | Minus 재고 판정·셀 오류·저장 차단은 **앱(윗단 애플리케이션)**이 한다. 그리드는 앱이 지정한 셀 표시(`CellMark`: 오류·경고 + 툴팁 리소스 키)만 그린다 (구 본문: "그리드 검증 훅"). **Spec 본문 4.9 개정 완료 (Draft v0.2)** | 2026-10-28 |
 | A-08 | 4.2, 4.4 | 변경 | **저장 API는 QuroGrid와 분리된 서버**이며, QuroDataSet이 저장 API와 통신한다 (`SaveAsync`). 2xx면 `AcceptChanges`, 409는 충돌, 그 밖은 실패로 돌려주고 변경분을 유지한다. 저장 성공 후 키·버전은 **앱이 재조회**해 갱신한다 | 2026-10-28 |
-| A-09 | 5 | 변경 | API 통합 테스트(xUnit + PostgreSQL)는 저장 API 쪽 범위. QuroGrid 저장소는 DataSet의 저장 호출을 가짜 HTTP 핸들러로 단위 테스트한다 | 2026-10-28 |
+| A-09 | 5 | 변경 | API 통합 테스트(xUnit + PostgreSQL)는 저장 API 쪽 범위. QuroGrid 저장소는 DataSet의 저장 호출을 가짜 HTTP 핸들러로 단위 테스트한다. **Spec 본문 5장 개정 완료 (Draft v0.2)** | 2026-10-28 |
 | A-10 | 4.4, 4.5 | 보완 | 검증 규칙은 DataSet 규칙 API `SetRule(field, FieldRule)`로 등록하고, `QuroColumn`의 `Required`·`Min`·`Max`는 이 API로 넘긴다 | 2026-10-28 |
 | A-11 | 4.4 | 보완 | `Inserted` 행에 `RevertRow`를 호출하면 행을 제거한다 | 2026-10-28 |
 | A-12 | 3-B, R3 | 보완 | **행 복사**: 선택한 행을 같은 값의 새 행(`Inserted`)으로 복제하고, 새 행은 **각 원래 행 바로 아래**에 넣는다. 여러 행도 서버 호출 1회. 복사 행도 `OnRowAdding`을 거치며(`SourceRowKey`로 원본 전달) 앱이 키·버전 등을 정리한다 | 2026-10-28 |

@@ -1,7 +1,7 @@
 # QuroGrid 시나리오 목록 (GS-xxx)
 
-- 기준: `docs/QuroGrid_FeatureMatrix_Spec_v1.pdf` (Draft v0.2, 2026-10-28 — 4.9 개정)
-- 문서 상태: 정리본 v1.7 (2026-10-28, Spec 4.9 개정·A-29 반영) · 스테이블영 검토 대상
+- 기준: `docs/QuroGrid_FeatureMatrix_Spec_v1.pdf` (Draft v0.2, 2026-10-28 — 4.9·5장 개정)
+- 문서 상태: 정리본 v1.7 (2026-10-28, Spec 4.9·5장 개정·A-29 반영) · 스테이블영 검토 대상
 - 테스트 이름은 시나리오 ID로 시작한다: `GS_004_ExcelPaste_3x4` (CLAUDE.md 3장)
 
 Spec 5.1절의 목록은 **발췌 10건**이고, Phase 0 완료 기준은 **시나리오 50건 이상**(Spec 6장)입니다.
