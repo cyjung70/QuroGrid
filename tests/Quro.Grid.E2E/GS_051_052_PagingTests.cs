@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using Microsoft.Playwright;
 
 namespace Quro.Grid.E2E;
 
@@ -19,6 +20,9 @@ public class GS_051_052_PagingTests(SampleServer server) : GridPageTest(server)
         await Expect(Status("loaded-rows")).ToHaveAttributeAsync("data-refresh", (refreshes + 1).ToString());
         return int.Parse(await Status(id).TextContentAsync() ?? "", NumberStyles.Any, En);
     }
+
+    private ILocator RowWithLineNo(int lineNo) =>
+        Page.Locator(".quro-body [role=row]", new() { Has = Page.Locator($"[data-field=LineNo]:text-is('{lineNo}')") });
 
     private Task ScrollAsync(string where) =>
         Grid.EvaluateAsync(where == "end" ? "g => g.scrollTop = g.scrollHeight" : "g => g.scrollTop = 0");
@@ -91,6 +95,39 @@ public class GS_051_052_PagingTests(SampleServer server) : GridPageTest(server)
         await Grid.FocusAsync();
         await Page.Keyboard.PressAsync("ArrowDown");
         await ExpectActiveAsync(2, "Qty");
+    }
+
+    /// <summary>GS-047 + 페이징: 행 1 선택 → 스크롤 → Shift+클릭 행 600 → Ctrl+Delete = 600행 삭제 (A-25)</summary>
+    [Fact]
+    public async Task GS_047_Paging_ShiftClickBeyondScreen_CtrlDelete()
+    {
+        await OpenAsync("?large=1");
+        await Cell(1, "Qty").ClickAsync();
+
+        await Grid.EvaluateAsync("g => g.scrollTop = 590 * 28");
+        var row600 = RowWithLineNo(600);
+        await row600.Locator("[data-field=Qty]").ClickAsync(new() { Modifiers = [Microsoft.Playwright.KeyboardModifier.Shift] });
+        await Page.Keyboard.PressAsync("Control+Delete");
+
+        await Expect(Status("changes")).ToHaveTextAsync("600");
+        await Expect(row600).ToHaveClassAsync(new System.Text.RegularExpressions.Regex("quro-deleted"));
+        await ScrollAsync("top");
+        await Expect(Page.Locator("[role=row][data-row='1']")).ToHaveClassAsync(new System.Text.RegularExpressions.Regex("quro-deleted"));
+    }
+
+    /// <summary>툴바 일괄 삭제도 같은 위치 범위 (A-25)</summary>
+    [Fact]
+    public async Task GS_047_Paging_ToolbarDelete_UsesRange()
+    {
+        await OpenAsync("?large=1");
+        await Cell(1, "Qty").ClickAsync();
+        await Grid.EvaluateAsync("g => g.scrollTop = 290 * 28");
+        var row300 = RowWithLineNo(300);
+        await row300.Locator("[data-field=Qty]").ClickAsync(new() { Modifiers = [Microsoft.Playwright.KeyboardModifier.Shift] });
+
+        await Status("delete-rows").ClickAsync();
+
+        await Expect(Status("changes")).ToHaveTextAsync("300");
     }
 
     [Fact]

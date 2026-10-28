@@ -460,8 +460,31 @@ public partial class QuroGrid<TItem> where TItem : class
     /// <summary>선택 범위(JS 소유)의 행을 복사한다. 툴바 버튼 등 그리드 밖에서 호출.</summary>
     public async Task<IReadOnlyList<int>> CopySelectedRows() => await CopyRows(await SelectedRowKeys());
 
-    /// <summary>선택 범위(JS 소유)의 행을 삭제한다. 툴바 버튼 등 그리드 밖에서 호출.</summary>
-    public async Task<int> DeleteSelectedRows() => await DeleteRows(await SelectedRowKeys());
+    /// <summary>
+    /// 화면 위치 범위 [<paramref name="fromIndex"/>, <paramref name="toIndex"/>]의 행을 삭제한다 (호출 1회, R3, Addendum A-25).
+    /// 페이징 중 적재되지 않은 범위는 조회한 뒤 삭제한다.
+    /// </summary>
+    [JSInvokable]
+    public async Task<int> DeleteRowRange(int fromIndex, int toIndex)
+    {
+        var (from, to) = (Math.Min(fromIndex, toIndex), Math.Max(fromIndex, toIndex));
+        var keys = Paging
+            ? await PagedRowsBetween(from, to)
+            : VisibleRowKeys().Skip(from).Take(to - from + 1).ToList();
+        return await DeleteRows(keys);
+    }
+
+    /// <summary>
+    /// 선택 범위(JS 소유)의 행을 삭제한다. 툴바 버튼 등 그리드 밖에서 호출.
+    /// 페이징 중에는 화면 밖까지 이어진 범위도 위치로 받아 삭제한다 (A-25).
+    /// </summary>
+    public async Task<int> DeleteSelectedRows()
+    {
+        if (!Paging)
+            return await DeleteRows(await SelectedRowKeys());
+        var range = _module is null ? null : await _module.InvokeAsync<int[]?>("selectedRange", _root);
+        return range is [var from, var to] ? await DeleteRowRange(from, to) : 0;
+    }
 
     private async Task<IReadOnlyList<int>> SelectedRowKeys() =>
         _module is null ? [] : await _module.InvokeAsync<int[]>("selectedRowKeys", _root);
@@ -830,11 +853,16 @@ public partial class QuroGrid<TItem> where TItem : class
     {
         if (!_rowIndex.TryGetValue(startRowKey, out var start))
             throw new ArgumentException($"행 키 {startRowKey}가 화면에 없습니다.", nameof(startRowKey));
+        return await PagedRowsBetween(start, start + count - 1);
+    }
 
+    /// <summary>페이징 중 화면 위치 [first, last]의 행 키. 적재되지 않은 범위는 조회한다.</summary>
+    private async Task<List<int>> PagedRowsBetween(int first, int last)
+    {
         var inserted = InsertedRowKeys();
-        var keys = inserted.Skip(start).Take(count).ToList();
-        var from = Math.Max(0, start - inserted.Count);
-        var to = start + count - inserted.Count;
+        var keys = inserted.Skip(first).Take(last - first + 1).ToList();
+        var from = Math.Max(0, first - inserted.Count);
+        var to = last + 1 - inserted.Count;
         if (to > from)
         {
             await EnsureLoaded(from, to, CancellationToken.None);
