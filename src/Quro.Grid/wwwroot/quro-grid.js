@@ -251,7 +251,30 @@ function onPaste(s, e) {
     e.preventDefault();
     if (cells.length === 0) return;
     const { top, left } = selection(s);
-    enqueue(s, () => s.dotnet.invokeMethodAsync('Paste', top, left, cells));
+    enqueue(s, () => sendPaste(s, top, left, cells));
+}
+
+// SignalR 한 메시지 크기 제한(Blazor Server 기본 32KB)보다 충분히 작게
+const PASTE_INLINE_BYTES = 16 * 1024;
+
+/**
+ * 붙여넣기 전송 (호출 1회, R3). 큰 붙여넣기(500행 × 10열 등)는 메시지 크기 제한에 걸려 연결이 끊길 수 있으므로,
+ * 값을 담아 두고 서버가 스트림으로 가져가게 한다 (PasteStream → pasteData).
+ */
+async function sendPaste(s, top, left, cells) {
+    const data = new TextEncoder().encode(JSON.stringify(cells));
+    if (data.length <= PASTE_INLINE_BYTES) return s.dotnet.invokeMethodAsync('Paste', top, left, cells);
+    s.pasteData = data;
+    try {
+        return await s.dotnet.invokeMethodAsync('PasteStream', top, left);
+    } finally {
+        s.pasteData = null;
+    }
+}
+
+/** 서버가 큰 붙여넣기 값을 스트림으로 가져간다 (IJSStreamReference). */
+export function pasteData(root) {
+    return grids.get(root)?.pasteData ?? new Uint8Array();
 }
 
 function onDblClick(s, e) {

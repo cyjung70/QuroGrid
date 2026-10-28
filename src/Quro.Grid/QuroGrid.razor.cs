@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Routing;
 using Microsoft.AspNetCore.Components.Web.Virtualization;
@@ -27,6 +28,7 @@ public partial class QuroGrid<TItem> where TItem : class
     private DotNetObjectReference<QuroGrid<TItem>>? _self;
     private bool _ensureActive;   // 행 삭제 후 JS에 활성 셀을 남은 행으로 옮기게 한다 (렌더 반영 뒤)
     private bool _endEdit;        // 선택 목록에서 골라 서버가 편집을 끝냈을 때 JS 편집 상태를 정리한다 (렌더 반영 뒤)
+    private int _batch;   // 일괄 처리(붙여넣기·여러 행 삭제·행 복사) 중이면 그리드를 다시 그리지 않는다 (R4)
     private readonly string _instanceId = Guid.NewGuid().ToString("N");   // 재연결 후 같은 회로인지 JS가 확인 (A-21)
     private (int RowKey, string Field)? _picker;   // 열린 선택 목록 (Date 달력·Combo 목록, Addendum A-17)
     private DateTime? _pickerDate;
@@ -164,6 +166,9 @@ public partial class QuroGrid<TItem> where TItem : class
             _epoch++;
         }
     }
+
+    /// <summary>일괄 처리 중에는 그리지 않는다. 끝나면 처리한 쪽이 StateHasChanged로 한 번 그린다 (R4).</summary>
+    protected override bool ShouldRender() => _batch == 0;
 
     // ── JS 층 등록 (R1·R5): 키보드·포커스·클릭은 quro-grid.js가 그리드 루트 하나에서 받는다 ──
 
@@ -450,8 +455,16 @@ public partial class QuroGrid<TItem> where TItem : class
     public async Task<IReadOnlyList<int>> CopyRows(IReadOnlyList<int> rowKeys)
     {
         var copies = new List<int>();
-        foreach (var source in OrderedRowKeys().Where(rowKeys.Contains).ToList())
-            copies.Add(await AddRowCore(DataSet.CopyOf(source), source, after: source));
+        _batch++;
+        try
+        {
+            foreach (var source in OrderedRowKeys().Where(rowKeys.Contains).ToList())
+                copies.Add(await AddRowCore(DataSet.CopyOf(source), source, after: source));
+        }
+        finally
+        {
+            _batch--;
+        }
 
         StateHasChanged();
         return copies;
@@ -514,20 +527,28 @@ public partial class QuroGrid<TItem> where TItem : class
     public async Task<int> DeleteRows(IReadOnlyList<int> rowKeys)
     {
         var deleted = new List<int>();
-        foreach (var key in rowKeys)
+        _batch++;
+        try
         {
-            if (DataSet.GetState(key) == RowState.Deleted)
-                continue;
+            foreach (var key in rowKeys)
+            {
+                if (DataSet.GetState(key) == RowState.Deleted)
+                    continue;
 
-            var args = new RowDeletingArgs<TItem>(key, DataSet.GetItem(key));
-            await OnRowDeleting.InvokeAsync(args);
-            if (args.Cancel)
-                continue;
+                var args = new RowDeletingArgs<TItem>(key, DataSet.GetItem(key));
+                await OnRowDeleting.InvokeAsync(args);
+                if (args.Cancel)
+                    continue;
 
-            DataSet.DeleteRow(key);
-            if (_editing?.RowKey == key)
-                _editing = null;
-            deleted.Add(key);
+                DataSet.DeleteRow(key);
+                if (_editing?.RowKey == key)
+                    _editing = null;
+                deleted.Add(key);
+            }
+        }
+        finally
+        {
+            _batch--;
         }
 
         if (deleted.Count > 0)
@@ -561,28 +582,54 @@ public partial class QuroGrid<TItem> where TItem : class
 
         var added = new List<int>();
         var skipped = new List<PasteSkip>();
-        for (var r = 0; r < cells.Length; r++)
+        _batch++;   // 셀마다 이벤트를 받은 앱 화면이 다시 그려져도 그리드는 끝날 때 한 번만 그린다 (R4)
+        try
         {
-            int rowKey;
-            if (firstRow + r < rows.Count)
-                rowKey = rows[firstRow + r];
-            else if (AddRowsOnPaste)
-                added.Add(rowKey = await AddRowCore());
-            else
-                break;
-
-            for (var c = 0; c < cells[r].Length && firstCol + c < _columns.Count; c++)
+            for (var r = 0; r < cells.Length; r++)
             {
-                var field = _columns[firstCol + c].Field;
-                var reason = await PasteCell(rowKey, _columns[firstCol + c], cells[r][c]);
-                if (reason is not null)
-                    skipped.Add(new PasteSkip(rowKey, field, reason));
+                int rowKey;
+                if (firstRow + r < rows.Count)
+                    rowKey = rows[firstRow + r];
+                else if (AddRowsOnPaste)
+                    added.Add(rowKey = await AddRowCore());
+                else
+                    break;
+
+                for (var c = 0; c < cells[r].Length && firstCol + c < _columns.Count; c++)
+                {
+                    var field = _columns[firstCol + c].Field;
+                    var reason = await PasteCell(rowKey, _columns[firstCol + c], cells[r][c]);
+                    if (reason is not null)
+                        skipped.Add(new PasteSkip(rowKey, field, reason));
+                }
             }
+        }
+        finally
+        {
+            _batch--;
         }
 
         await OnPasted.InvokeAsync(new PastedArgs(startRowKey, startField, added, skipped));
         StateHasChanged();
         return true;
+    }
+
+    /// <summary>큰 붙여넣기 값의 최대 크기 (스트림).</summary>
+    private const long MaxPasteBytes = 20 * 1024 * 1024;
+
+    /// <summary>
+    /// 큰 붙여넣기 (quro-grid.js가 1회 호출, R3). 값은 SignalR 메시지 크기 제한을 피해 스트림으로 가져온 뒤
+    /// <see cref="Paste"/>와 같이 처리한다 (GS-057).
+    /// </summary>
+    [JSInvokable]
+    public async Task<bool> PasteStream(int startRowKey, string startField)
+    {
+        if (_module is null)
+            return false;
+        var data = await _module.InvokeAsync<IJSStreamReference>("pasteData", _root);
+        await using var stream = await data.OpenReadStreamAsync(MaxPasteBytes);
+        var cells = await JsonSerializer.DeserializeAsync<string[][]>(stream) ?? [];
+        return await Paste(startRowKey, startField, cells);
     }
 
     /// <summary>셀 하나를 붙여넣는다. 건너뛰면 사유 리소스 키, 반영했으면 null.</summary>
