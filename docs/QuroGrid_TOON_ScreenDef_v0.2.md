@@ -390,13 +390,15 @@ public sealed record DefinitionError(string Code, string File, int Line, string 
 public sealed class DefinitionResult<T> { public T? Value { get; } public IReadOnlyList<DefinitionError> Errors { get; } }
 public static class ScreenDefLoader
 {
-    public static DefinitionResult<ScreenDef> Load(string path, string text);   // strict 파싱(V-01) + 키(V-02) + 값·열거값(V-03)
+    public static DefinitionResult<ScreenDef> Load(string path, string text);   // strict 파싱(V-01) + 키(V-02) + 값·열거값(V-03) + 구조(V-04~V-18, D-2)
 }
 
-// D-2 — 구조 검사 V-04~V-18, 모드 리졸버
+// ✅ D-2 — 구조 검사 V-04~V-18은 Load 안에서 (V-01~V-03이 없을 때만 — 연쇄 오류 방지). 모드 리졸버
 public enum FormState { New, Loaded, Locked }
 public readonly record struct FieldState(bool Visible, bool Editable, bool Required);
 public static class FieldModeResolver { public static FieldState Resolve(FieldMode mode, FormState state, bool permReadOnly); }
+// 열 edit·req → mode 환산(5.2)은 internal ModeOf. D-5 그리드 연결에서 Quro.Grid가 쓴다 (InternalsVisibleTo)
+// lockWhen 필드 존재(V-18)는 D-4 LockExpression과 함께
 
 // D-3 — 카탈로그 검사 V-19~V-32
 public sealed class ScreenDefValidator(IQuroDefinitionCatalog catalog)

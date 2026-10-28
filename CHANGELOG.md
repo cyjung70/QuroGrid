@@ -5,8 +5,8 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 
 ## Unreleased
 - Added: `Quro.Grid.Definition` 패키지 (GS-D01·GS-D02, A-44) — `ScreenDefLoader.Load`, `DefinitionResult<T>`, `DefinitionError`, `SourceInfo`, 모델 `ScreenDef`·`PermDef`·`FormDef`·`FieldDef`·`ReadOnlyRule`·`GridDef`·`ColumnDef`·`RuleDef`·`ValidateDef`, 열거형 `ScreenLayout`·`ToolbarCommand`·`FieldType`·`FieldMode`·`CaseRule`·`ColumnType`·`ColumnEdit`·`ColumnAlign`·`RuleAction`·`DeletedRowsMode`. strict TOON 서브셋(설계서 3장), 오류 V-01~V-03. 소비자 조치: 없음 (새 패키지)
+- Added: `FieldModeResolver.Resolve`, `FormState`, `FieldState` (GS-D07). `ScreenDefLoader.Load`가 구조 검사 V-04~V-18도 보고 (GS-D03·GS-D05, lockWhen 필드는 D-4). 소비자 조치: 없음
 - Changed: 화면 정의(TOON) 계약을 v0.2 스키마로 (문서만, Addendum A-44) — consumer-contract 4·6장. `Quro.Grid.Definition`·`<QuroGrid Definition>`은 구현 예정이라 아직 API 변화 없음
-- Added: `Quro.Grid.Definition` 패키지 골격 (TOON 화면 정의 파서·검증기) — I-02 결정 대기
 
 ## 0.1.0-alpha.1 — 2026-10-29
 첫 배포. `Quro.Grid.Data`, `Quro.Grid` (P0 + P1 전체). `Quro.Grid.Definition`은 아직 없음 (I-02)

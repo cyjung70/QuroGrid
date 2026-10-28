@@ -16,7 +16,7 @@ form:
   cols: 3
   fields[22]{id,label,type,mode,max,case,default,source,span,on}:
     soNo,sd.so.soNo,text,auto,18,upper,"","lookup:salesOrder",1,""
-    customer,sd.so.customer,select,req,40,"","","lookup:customer",2,loadCustomer
+    customer,sd.so.customer,select,req,"","","","lookup:customer",2,loadCustomer
     totalAmt,sd.so.totalAmt,money,ro,"","",0,"",1,""
     salesRep,sd.so.salesRep,select,req,"","","","code:S200",1,""
     terms,sd.so.terms,select,opt,"","","","code:A300",1,calcDueDate
