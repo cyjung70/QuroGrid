@@ -26,7 +26,11 @@ public sealed class SampleServer : IAsyncLifetime
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            Environment = { ["ASPNETCORE_ENVIRONMENT"] = "Development" },
+            Environment =
+            {
+                ["ASPNETCORE_ENVIRONMENT"] = "Development",
+                ["Circuit__RetentionSeconds"] = "5",   // GS-048: 끊긴 회로를 빨리 버려 회로 소멸을 재현
+            },
         }) ?? throw new InvalidOperationException("샘플 앱을 시작하지 못했습니다.");
         _process.BeginOutputReadLine();
         _process.BeginErrorReadLine();

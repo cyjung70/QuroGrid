@@ -1,0 +1,131 @@
+@using Microsoft.AspNetCore.Components
+@using Microsoft.Extensions.DependencyInjection
+@inherits GridTestContext
+
+@code {
+    // GS-010 · GS-048 · GS-049 (그리드 쪽): 연결 끊김 안내 마크업, 미저장 표시, 화면 이동 확인 (R7, Addendum A-20·A-21)
+    // 연결 끊김 중 입력 잠금·재연결은 브라우저 동작이라 E2E에서 확인한다.
+
+    private IRenderedComponent<QuroGrid<PoLine>> RenderGrid(QuroDataSet<PoLine> ds, bool confirmLeave = true,
+        EventCallback<LeavingArgs> onLeaving = default) =>
+        Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" ConfirmLeave="confirmLeave" OnLeaving="onLeaving">
+                                     <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" />
+                                 </QuroGrid>);
+
+    private NavigationManager Nav => Services.GetRequiredService<NavigationManager>();
+
+    /// <summary>GS-049: 미저장 변경이 있으면 그리드 루트에 data-dirty (JS가 이탈·끊김 경고에 쓴다)</summary>
+    [Fact]
+    public async Task GS_049_DirtyAttribute_FollowsChanges()
+    {
+        var ds = TestData.ThreeLines();
+        var cut = RenderGrid(ds);
+        Assert.Null(cut.Find("[role=grid]").GetAttribute("data-dirty"));
+
+        await cut.InvokeAsync(() => cut.Instance.CommitEdit(ds.RowKeys[0], "Qty", "99"));
+        Assert.Equal("true", cut.Find("[role=grid]").GetAttribute("data-dirty"));
+
+        ds.RevertRow(ds.RowKeys[0]);
+        await cut.InvokeAsync(() => cut.Instance.Refresh());
+        Assert.Null(cut.Find("[role=grid]").GetAttribute("data-dirty"));
+    }
+
+    /// <summary>GS-049: 링크 이동 확인 문구는 ConfirmLeave일 때만 루트에 둔다 (향상된 탐색은 JS가 확인)</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void GS_049_LeaveMessageAttribute(bool confirmLeave)
+    {
+        var cut = RenderGrid(TestData.ThreeLines(), confirmLeave);
+
+        Assert.Equal(confirmLeave ? GridKeys.LeaveUnsaved : null, cut.Find("[role=grid]").GetAttribute("data-leave-message"));
+    }
+
+    /// <summary>GS-010 · GS-048: 연결 끊김 중에는 서버가 그릴 수 없으므로 안내 문구를 미리 그려 둔다 (리소스 키)</summary>
+    [Fact]
+    public void GS_010_ConnectionNotices_PreRenderedFromResourceKeys()
+    {
+        var cut = RenderGrid(TestData.ThreeLines());
+
+        Assert.Contains(GridKeys.ConnectionOffline, cut.Find(".quro-notice-offline").TextContent);
+        Assert.Contains(GridKeys.ConnectionUnsaved, cut.Find(".quro-notice-offline .quro-notice-unsaved").TextContent);
+        Assert.Contains(GridKeys.ChangesLost, cut.Find(".quro-notice-lost").TextContent);
+        Assert.All(cut.FindAll(".quro-notice"), n => Assert.Equal("alert", n.GetAttribute("role")));
+    }
+
+    /// <summary>GS-049: 변경 있음 + 확인창에서 취소 → 앱 안 화면 이동 막음</summary>
+    [Fact]
+    public async Task GS_049_InternalNavigation_Dirty_Declined_Stays()
+    {
+        var module = JSInterop.SetupModule(ModulePath);
+        module.Mode = JSRuntimeMode.Loose;
+        var confirm = module.Setup<bool>("confirmLeave", _ => true);
+        confirm.SetResult(false);
+        var ds = TestData.ThreeLines();
+        var cut = RenderGrid(ds);
+        await cut.InvokeAsync(() => cut.Instance.CommitEdit(ds.RowKeys[0], "Qty", "99"));
+        var start = Nav.Uri;
+
+        await cut.InvokeAsync(() => Nav.NavigateTo("/other"));
+
+        Assert.Equal(start, Nav.Uri);
+        Assert.Equal(GridKeys.LeaveUnsaved, Assert.Single(confirm.Invocations).Arguments[1]);   // Localizer 없음 → 키 그대로
+    }
+
+    /// <summary>GS-049: 확인창에서 확인 → 이동</summary>
+    [Fact]
+    public async Task GS_049_InternalNavigation_Dirty_Accepted_Navigates()
+    {
+        var module = JSInterop.SetupModule(ModulePath);
+        module.Mode = JSRuntimeMode.Loose;
+        module.Setup<bool>("confirmLeave", _ => true).SetResult(true);
+        var ds = TestData.ThreeLines();
+        var cut = RenderGrid(ds);
+        await cut.InvokeAsync(() => cut.Instance.CommitEdit(ds.RowKeys[0], "Qty", "99"));
+
+        await cut.InvokeAsync(() => Nav.NavigateTo("/other"));
+
+        Assert.EndsWith("/other", Nav.Uri);
+    }
+
+    /// <summary>GS-049: 변경이 없거나 ConfirmLeave=false면 묻지 않고 이동</summary>
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task GS_049_InternalNavigation_NoPrompt(bool dirty, bool confirmLeave)
+    {
+        var module = JSInterop.SetupModule(ModulePath);
+        module.Mode = JSRuntimeMode.Loose;
+        var confirm = module.Setup<bool>("confirmLeave", _ => true);
+        confirm.SetResult(false);
+        var ds = TestData.ThreeLines();
+        var cut = RenderGrid(ds, confirmLeave);
+        if (dirty)
+            await cut.InvokeAsync(() => cut.Instance.CommitEdit(ds.RowKeys[0], "Qty", "99"));
+
+        await cut.InvokeAsync(() => Nav.NavigateTo("/other"));
+
+        Assert.EndsWith("/other", Nav.Uri);
+        Assert.Empty(confirm.Invocations);
+    }
+
+    /// <summary>GS-049: OnLeaving을 구독하면 앱이 묻는다 (기본 확인창 없음). Cancel이면 이동 막음</summary>
+    [Fact]
+    public async Task GS_049_OnLeaving_AppDecides()
+    {
+        var module = JSInterop.SetupModule(ModulePath);
+        module.Mode = JSRuntimeMode.Loose;
+        var confirm = module.Setup<bool>("confirmLeave", _ => true);
+        LeavingArgs? seen = null;
+        var ds = TestData.ThreeLines();
+        var cut = RenderGrid(ds, onLeaving: EventCallback.Factory.Create<LeavingArgs>(this, e => { seen = e; e.Cancel = true; }));
+        await cut.InvokeAsync(() => cut.Instance.CommitEdit(ds.RowKeys[0], "Qty", "99"));
+        var start = Nav.Uri;
+
+        await cut.InvokeAsync(() => Nav.NavigateTo("/other"));
+
+        Assert.Equal(start, Nav.Uri);
+        Assert.EndsWith("/other", seen!.TargetLocation);
+        Assert.Empty(confirm.Invocations);
+    }
+}

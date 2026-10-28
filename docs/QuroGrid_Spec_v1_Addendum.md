@@ -1,7 +1,7 @@
 # QuroGrid Spec v1 보완 문서 (Addendum A)
 
 - 대상: `docs/QuroGrid_FeatureMatrix_Spec_v1.pdf` (Spec v1 초안, 2026-10-28)
-- 문서 상태: A.4 (2026-10-28) · 스테이블영 결정 사항 반영
+- 문서 상태: A.5 (2026-10-28) · 스테이블영 결정 사항 반영
 - 이 문서는 Spec v1의 일부입니다. **아래 항목은 Spec 본문보다 우선합니다.** 본문에 없는 내용은 "보완", 본문과 다른 내용은 "변경"으로 표시합니다.
 
 ---
@@ -29,6 +29,8 @@
 | A-17 | 4.6, R2 | 변경 | **Date·Combo 직접 입력은 브라우저 에디터**(셀 이탈 시 1회 전송, R2 유지). 달력(`MudDatePicker`)·목록(`MudList`)은 Alt+↓로 열 때만 띄우고, 고르면 바로 확정한다. Spec 4.6의 Combo 에디터 `MudSelect`는 목록 `MudList`로 대신한다. Combo 직접 입력은 코드나 명칭(대소문자 무시) | 2026-10-28 |
 | A-18 | 4.6 | 보완 | **Check 셀**: 셀 안 체크 표시, 클릭·Space로 토글(서버 호출 1회), 에디터 없음. 저장 값은 컬럼 `CheckedValue`·`UncheckedValue`(기본 true/false, Y/N 매핑 가능). 복사는 저장 값, 붙여넣기는 매핑 값이나 true/false | 2026-10-28 |
 | A-19 | 4.6, 4.10 | 보완 | **Button 셀**: 문구는 `TextKey` 리소스 키, 바인딩 값 없음(Field는 식별자), 편집·붙여넣기 대상 아님. 클릭·Enter·Space → 이벤트 `OnCellButtonClick`(행 키·필드·행 객체). 삭제 표시 행에서는 발생하지 않음 | 2026-10-28 |
+| A-20 | 4.3 R7 | 보완 | **페이지 이탈 경고**: 그리드 옵션 `ConfirmLeave`(기본 켬). 미저장 변경(`DataSet.HasChanges`)이 있으면 창 닫기·새로고침은 브라우저 기본 경고, 앱 안 이동(링크·`NavigateTo`)은 확인창(문구 리소스 키 `quro.leave.unsaved`). `OnLeaving`을 구독하면 확인창 대신 앱이 묻는다(`Cancel`로 이동 막음) | 2026-10-28 |
+| A-21 | 4.3 R7, O-03 | 보완 | **연결 끊김 안내**: 끊김 중 그리드 입력 잠금(키·마우스·붙여넣기, 편집 중 값은 유지) + 안내(`quro.connection.offline`), 미저장 변경이 있으면 유실 경고(`quro.connection.unsaved`). 같은 회로로 재연결되면 잠금 해제·변경 유지. 회로가 소멸해 다시 열린 화면에는 `quro.connection.changes_lost` 안내(누르면 닫힘). 브라우저에는 **표시(플래그)만** sessionStorage에 두고 데이터는 보관하지 않음 (O-03 잠정안과 일치) | 2026-10-28 |
 
 ## 2. 이벤트 API 보완 (4.10)
 
@@ -39,6 +41,7 @@
 | `OnRowDeleted` (A-14) | 행 삭제 후. 삭제 호출 1회에 한 번, 실제 삭제된 행 키 목록(취소 행 제외) | — |
 | `OnPopupRequested` (A-16) | 코드도움 요청. 입력 문자열, 후보(Lookup 결과), 계기(`Commit`·`F4`) 전달. 앱이 `Value`에 고른 코드 | — (Value 없음 = 미확정) |
 | `OnCellButtonClick` (A-19) | Button 셀 클릭. 행 키·필드·행 객체 | — |
+| `OnLeaving` (A-20) | 미저장 변경이 있을 때 앱 안 이동 전. 이동할 주소(`TargetLocation`) 전달 | `Cancel` |
 
 사유 리소스 키: `quro.paste.readonly`(읽기 전용·삭제 표시 행), `quro.paste.invalid`(로캘 해석 실패), `quro.paste.cancelled`(`OnCellValueChanging`에서 취소)
 
@@ -53,6 +56,9 @@
 | F4를 편집 중이 아닐 때 (A-16) | 셀에 표시된 값을 입력 문자열로 전달 |
 | 선택 목록이 열린 채 그리드 밖을 누름 (A-17) | 편집·목록 유지 (Esc로 취소) |
 | Button 셀 Tab 이동 (A-19) | Tab 순서에서 제외 (화살표·클릭으로 이동) |
+| 연결 상태 감지 (A-21) | 앱의 `#components-reconnect-modal`(템플릿 기본 `ReconnectModal`)이 내는 `components-reconnect-state-changed` 이벤트로 감지. 이 요소가 없는 앱(기본 재연결 표시)에서는 잠금·안내가 동작하지 않음 |
+| 링크 이동 확인 (A-20) | 향상된 탐색(enhanced navigation) 링크는 서버를 거치지 않아 JS가 클릭 때 확인. 같은 이동에 두 번 묻지 않도록 2초 안의 서버 확인은 생략 |
+| 여러 그리드가 있는 화면 (A-20) | 그리드마다 확인. 화면 단위 한 번 묻기는 앱이 `OnLeaving`으로 |
 | 혼합 통화 합계 행 | 첫 행 통화의 소수 자릿수로 표시 |
 | 엑셀 내보내기(GS-054) 생성 위치 | 미정 |
 | 오픈 이슈 O-01 ~ O-04 | CLAUDE.md 9장의 잠정안 |

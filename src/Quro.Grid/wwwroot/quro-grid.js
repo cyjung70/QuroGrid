@@ -32,6 +32,8 @@ export function init(root, dotnet, options) {
     s.onMouseUp = () => { s.dragging = false; };
     s.onCopy = e => onCopy(s, e);
     s.onScroll = () => placePicker(s);
+    s.onReconnect = e => onReconnectState(s, e.detail?.state);
+    s.onLinkClick = e => onLinkClick(s, e);
     s.onPaste = e => onPaste(s, e);
     root.addEventListener('keydown', s.onKeyDown);
     root.addEventListener('mousedown', s.onMouseDown);
@@ -43,7 +45,14 @@ export function init(root, dotnet, options) {
     document.addEventListener('copy', s.onCopy);
     document.addEventListener('paste', s.onPaste);
     document.addEventListener('scroll', s.onScroll, true);   // 그리드·페이지 스크롤 시 선택 목록 위치를 따라간다
+    // Blazor 재연결 상태 (앱의 #components-reconnect-modal에서 발생, 버블링하지 않으므로 캡처로 받는다)
+    document.addEventListener('components-reconnect-state-changed', s.onReconnect, true);
+    // 미저장 변경이 있을 때 링크 이동 확인 (A-20). 향상된 탐색(enhanced navigation)은 서버의 NavigationLock을 거치지 않는다.
+    document.addEventListener('click', s.onLinkClick, true);
     grids.set(root, s);
+
+    // 이전 회로에서 미저장 변경을 남긴 채 연결이 끊겼다면, 다시 연 이 화면에서 알린다 (GS-048, A-21)
+    if (takeLostFlag()) root.setAttribute('data-lost', '');
 }
 
 export function dispose(root) {
@@ -58,6 +67,8 @@ export function dispose(root) {
     document.removeEventListener('copy', s.onCopy);
     document.removeEventListener('paste', s.onPaste);
     document.removeEventListener('scroll', s.onScroll, true);
+    document.removeEventListener('components-reconnect-state-changed', s.onReconnect, true);
+    document.removeEventListener('click', s.onLinkClick, true);
     clearTimeout(s.notifyTimer);
     s.style.remove();
     grids.delete(root);
@@ -80,6 +91,10 @@ function isPickerKey(e) {
 }
 
 function onKeyDown(s, e) {
+    if (isOffline(s)) {   // 연결 끊김 중 입력 잠금 (R7)
+        e.preventDefault();
+        return;
+    }
     // 선택 목록(달력·Combo 목록, MudBlazor) 안의 키는 목록이 받는다. Esc만 편집 취소.
     if (e.target.closest('.quro-picker')) {
         if (e.key === 'Escape') {
@@ -98,6 +113,14 @@ function onKeyDown(s, e) {
 }
 
 function onMouseDown(s, e) {
+    if (e.target.closest('.quro-notice-lost')) {   // 안내를 누르면 닫는다
+        s.root.removeAttribute('data-lost');
+        return;
+    }
+    if (isOffline(s)) {
+        e.preventDefault();
+        return;
+    }
     if (e.target.closest('.quro-picker')) {
         // 목록 항목은 포커스를 받지 않을 수 있어(relatedTarget 없음) 셀 이탈로 보지 않게 한다
         s.pickerMouseDown = true;
@@ -150,6 +173,10 @@ function onCopy(s, e) {
 /** Ctrl+V: 엑셀 형식을 행 × 열로 나눠 선택 범위 왼쪽 위부터. 서버 호출 1회 (R3) */
 function onPaste(s, e) {
     if (!hasFocus(s) || !s.active) return;
+    if (isOffline(s)) {
+        e.preventDefault();
+        return;
+    }
     const cells = parseTsv(e.clipboardData.getData('text/plain'));
     e.preventDefault();
     if (cells.length === 0) return;
@@ -158,7 +185,7 @@ function onPaste(s, e) {
 }
 
 function onDblClick(s, e) {
-    if (e.target.closest('.quro-picker')) return;
+    if (e.target.closest('.quro-picker') || isOffline(s)) return;
     const cell = e.target.closest('.quro-body [role=gridcell][data-field]');
     if (!cell || !hasEditor(cell)) return;
     const target = position(cell);
@@ -171,9 +198,10 @@ function onDblClick(s, e) {
 function onFocusOut(s, e) {
     // 그리드 밖을 클릭하면 편집 중인 값을 커밋한다 (셀 이탈). 에디터에서 포커스가 나간 경우만 본다.
     // 건너뛰는 경우: 처리 중인 동작이 있음(커밋·F4 중 앱의 코드도움 팝업이 포커스를 가져감),
-    // 선택 목록을 누름(목록 항목은 포커스를 받지 않을 수 있음), 그리드 안으로 이동.
+    // 선택 목록을 누름(목록 항목은 포커스를 받지 않을 수 있음), 연결 끊김 중(재연결 안내가 포커스를 가져감), 그리드 안으로 이동.
     const input = e.target;
-    if (!s.editing || input !== s.editing.input || s.pending > 0 || s.pickerMouseDown || s.root.contains(e.relatedTarget)) return;
+    if (!s.editing || input !== s.editing.input || s.pending > 0 || s.pickerMouseDown || isOffline(s)
+        || s.root.contains(e.relatedTarget)) return;
     // 서버가 편집을 끝내며 에디터를 지울 때(선택 목록에서 고름)도 focusout이 온다. 지워진 에디터는 커밋하지 않는다.
     setTimeout(() => {
         if (input.isConnected && s.editing?.input === input) enqueue(s, () => s.editing?.input === input ? commit(s) : null);
@@ -431,6 +459,89 @@ function selectedKeys(s) {
 export function selectedRowKeys(root) {
     const s = grids.get(root);
     return s ? selectedKeys(s) : [];
+}
+
+/**
+ * 앱 안 화면 이동 확인 (Addendum A-20, 서버 NavigationLock이 호출). 문구는 서버가 리소스 키로 해석해 넘긴다.
+ * 방금 링크 클릭에서 확인했다면 다시 묻지 않는다.
+ */
+export function confirmLeave(root, message) {
+    const s = grids.get(root);
+    if (s && performance.now() - (s.leaveConfirmedAt ?? -Infinity) < 2000) return true;
+    return window.confirm(message);
+}
+
+/** 같은 사이트 링크를 누를 때 미저장 변경이 있으면 확인한다. 취소하면 이동(Blazor 탐색 포함)을 막는다. */
+function onLinkClick(s, e) {
+    const message = s.root.dataset.leaveMessage;   // ConfirmLeave일 때만 서버가 그린다
+    if (!message || !s.root.isConnected || !s.root.hasAttribute('data-dirty')) return;
+    if (e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+    const link = e.target.closest?.('a[href]');
+    if (!link || link.target && link.target !== '_self' || link.hasAttribute('download')) return;
+    const url = new URL(link.href, document.baseURI);
+    if (url.origin !== location.origin || (url.pathname === location.pathname && url.search === location.search)) return;
+
+    if (window.confirm(message)) {
+        s.leaveConfirmedAt = performance.now();
+    } else {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+    }
+}
+
+// ── 연결 끊김 (R7, Addendum A-21) ──
+
+const LOST_KEY = () => `quro-grid-lost:${location.pathname}`;
+
+function isOffline(s) {
+    return s.root.hasAttribute('data-offline');
+}
+
+/**
+ * Blazor 재연결 상태. hide = 연결됨, rejected = 회로 없음(앱이 페이지를 다시 연다), 그 밖(show·retrying·failed…) = 끊김.
+ * 회로가 바뀌어 다시 그려진 화면의 이전 인스턴스(루트가 문서에서 빠짐)는 무시한다.
+ */
+function onReconnectState(s, state) {
+    if (!s.root.isConnected || state === 'rejected') return;
+    setOffline(s, state !== 'hide');
+}
+
+async function setOffline(s, offline) {
+    if (offline === isOffline(s)) return;
+    if (offline) {
+        s.root.setAttribute('data-offline', '');
+        if (s.editing) s.editing.input.readOnly = true;
+        // 이 회로로 돌아오지 못하면 변경은 사라진다. 다시 연 화면에서 알릴 수 있게 표시만 남긴다 (데이터는 남기지 않음, O-03)
+        if (s.root.hasAttribute('data-dirty')) storeLostFlag(true);
+        return;
+    }
+
+    s.root.removeAttribute('data-offline');
+    if (s.editing) {
+        s.editing.input.readOnly = false;
+        s.editing.input.focus();
+    }
+    // 같은 회로로 돌아왔는지 확인한다. 회로가 새로 시작됐으면(세션 복원) 이 화면은 곧 다시 그려지고,
+    // 새 인스턴스가 표시를 읽어 안내한다. 회로마다 객체 번호가 1부터라 응답 값(인스턴스 ID)으로 구별한다.
+    const same = await s.dotnet.invokeMethodAsync('InstanceId').then(id => id === s.options.instanceId, () => false);
+    if (same) storeLostFlag(false);
+}
+
+function storeLostFlag(on) {
+    try {
+        if (on) sessionStorage.setItem(LOST_KEY(), '1');
+        else sessionStorage.removeItem(LOST_KEY());
+    } catch { /* 저장소를 쓸 수 없으면 안내만 생략 */ }
+}
+
+function takeLostFlag() {
+    try {
+        const lost = sessionStorage.getItem(LOST_KEY()) === '1';
+        sessionStorage.removeItem(LOST_KEY());
+        return lost;
+    } catch {
+        return false;
+    }
 }
 
 /** 선택 목록에서 골라 서버가 값을 확정하고 편집을 끝냈을 때 서버가 호출한다 (Addendum A-17). */

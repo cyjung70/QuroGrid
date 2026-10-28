@@ -5,9 +5,23 @@
 
 <CascadingValue TValue="IColumnHost" Value="this" IsFixed="true">@ChildContent</CascadingValue>
 
+@if (ConfirmLeave)
+{
+    @* 미저장 변경 이탈 확인 (R7, Addendum A-20): 창 닫기·새로고침은 브라우저 경고, 앱 안 이동은 확인창 *@
+    <NavigationLock ConfirmExternalNavigation="DataSet.HasChanges" OnBeforeInternalNavigation="ConfirmInternalNavigation" />
+}
+
 @* 컬럼 정의가 등록된 뒤에 그린다. 셀 단위 이벤트 핸들러를 두지 않는다 (R5): 클릭·키는 quro-grid.js가 좌표로 해석한다. *@
 <Deferred>
-    <div @ref="_root" class="quro-grid" role="grid" tabindex="0" aria-colcount="@_columns.Count">
+    <div @ref="_root" class="quro-grid" role="grid" tabindex="0" aria-colcount="@_columns.Count"
+         data-dirty="@(DataSet.HasChanges ? "true" : null)"
+         data-leave-message="@(ConfirmLeave ? Text(GridKeys.LeaveUnsaved) : null)">
+        @* 연결 끊김 중에는 서버가 그릴 수 없으므로 안내를 미리 그려 두고 quro-grid.js가 보이게 한다 (R7, A-21) *@
+        <div class="quro-notice quro-notice-offline" role="alert">
+            @Text(GridKeys.ConnectionOffline)
+            <span class="quro-notice-unsaved">@Text(GridKeys.ConnectionUnsaved)</span>
+        </div>
+        <div class="quro-notice quro-notice-lost" role="alert">@Text(GridKeys.ChangesLost)</div>
         <div class="quro-head" role="rowgroup">
             <div class="quro-row" role="row" aria-rowindex="1">
                 @for (var i = 0; i < _columns.Count; i++)
