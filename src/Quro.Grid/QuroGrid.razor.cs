@@ -1036,6 +1036,10 @@ public partial class QuroGrid<TItem> where TItem : class
 
     // ── 렌더링 보조 (QuroGridRow와 공유) ──
 
+    /// <summary>본문 행 수 (aria-rowcount, GS-066). 페이징 중에는 그려지지 않은 행도 센다: 추가 행 + 서버 전체 건수</summary>
+    private int BodyRowCount() =>
+        Paging ? InsertedRowKeys().Count + (_total ?? 0) : VisibleRowKeys().Count();
+
     private IEnumerable<int> VisibleRowKeys() =>
         DeletedRows == DeletedRowDisplay.Hide
             ? OrderedRowKeys().Where(k => DataSet.GetState(k) != RowState.Deleted)

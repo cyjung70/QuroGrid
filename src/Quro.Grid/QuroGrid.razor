@@ -13,8 +13,10 @@
 
 @* 컬럼 정의가 등록된 뒤에 그린다. 셀 단위 이벤트 핸들러를 두지 않는다 (R5): 클릭·키는 quro-grid.js가 좌표로 해석한다. *@
 <Deferred>
+    @{ var bodyRows = BodyRowCount(); }
     <div @ref="_root" class="@(Paging ? "quro-grid quro-paged" : "quro-grid")" style="@RootStyle"
          role="grid" tabindex="0" aria-colcount="@_columns.Count"
+         aria-rowcount="@(bodyRows + (ShowFooter ? 2 : 1))"
          data-dirty="@(DataSet.HasChanges ? "true" : null)"
          data-leave-message="@(ConfirmLeave ? Text(GridKeys.LeaveUnsaved) : null)">
         @* 연결 끊김 중에는 서버가 그릴 수 없으므로 안내를 미리 그려 두고 quro-grid.js가 보이게 한다 (R7, A-21) *@
@@ -68,7 +70,7 @@
         @if (ShowFooter)
         {
             <div class="quro-foot" role="rowgroup">
-                <div class="quro-row quro-footer-row" role="row">
+                <div class="quro-row quro-footer-row" role="row" aria-rowindex="@(bodyRows + 2)">
                     @for (var i = 0; i < _columns.Count; i++)
                     {
                         var col = _columns[i];
