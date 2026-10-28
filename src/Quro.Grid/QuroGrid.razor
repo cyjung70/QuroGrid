@@ -13,7 +13,8 @@
 
 @* 컬럼 정의가 등록된 뒤에 그린다. 셀 단위 이벤트 핸들러를 두지 않는다 (R5): 클릭·키는 quro-grid.js가 좌표로 해석한다. *@
 <Deferred>
-    <div @ref="_root" class="quro-grid" role="grid" tabindex="0" aria-colcount="@_columns.Count"
+    <div @ref="_root" class="@(Paging ? "quro-grid quro-paged" : "quro-grid")" style="@RootStyle"
+         role="grid" tabindex="0" aria-colcount="@_columns.Count"
          data-dirty="@(DataSet.HasChanges ? "true" : null)"
          data-leave-message="@(ConfirmLeave ? Text(GridKeys.LeaveUnsaved) : null)">
         @* 연결 끊김 중에는 서버가 그릴 수 없으므로 안내를 미리 그려 두고 quro-grid.js가 보이게 한다 (R7, A-21) *@
@@ -37,13 +38,30 @@
         </div>
 
         <div class="quro-body" role="rowgroup">
-            @{ var index = 0; }
-            @foreach (var key in VisibleRowKeys())
+            @if (Paging)
             {
-                <QuroGridRow @key="key" TItem="TItem" Grid="this" RowKey="key" RowIndex="index++"
-                             Revision="DataSet.GetRevision(key)" Epoch="_epoch"
-                             EditingField="@(_editing?.RowKey == key ? _editing.Value.Field : null)"
-                             PickerOpen="IsPickerOpen(key)" />
+                @* 서버측 페이징 (R6, A-24): 보이는 범위만 그리고 적재한다. 삭제 표시 행은 자리에 남아 취소선 *@
+                <Virtualize @ref="_virtualize" TItem="int" ItemsProvider="ProvideRows" ItemSize="RowHeight" OverscanCount="10"
+                            Context="key">
+                    <ItemContent>
+                        <QuroGridRow @key="key" TItem="TItem" Grid="this" RowKey="key" RowIndex="RowIndexOf(key)"
+                                     Revision="DataSet.GetRevision(key)" Epoch="_epoch"
+                                     EditingField="@(_editing?.RowKey == key ? _editing.Value.Field : null)"
+                                     PickerOpen="IsPickerOpen(key)" />
+                    </ItemContent>
+                    <Placeholder><div class="quro-row quro-placeholder"></div></Placeholder>
+                </Virtualize>
+            }
+            else
+            {
+                var index = 0;
+                foreach (var key in VisibleRowKeys())
+                {
+                    <QuroGridRow @key="key" TItem="TItem" Grid="this" RowKey="key" RowIndex="index++"
+                                 Revision="DataSet.GetRevision(key)" Epoch="_epoch"
+                                 EditingField="@(_editing?.RowKey == key ? _editing.Value.Field : null)"
+                                 PickerOpen="IsPickerOpen(key)" />
+                }
             }
         </div>
 

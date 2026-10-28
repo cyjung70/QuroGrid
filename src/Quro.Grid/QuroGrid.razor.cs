@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Routing;
+using Microsoft.AspNetCore.Components.Web.Virtualization;
 using Microsoft.Extensions.Localization;
 using Microsoft.JSInterop;
 using Quro.Grid.Data;
@@ -34,6 +35,16 @@ public partial class QuroGrid<TItem> where TItem : class
     private int _orderGeneration;        // 정렬한 시점의 DataSet.Generation. 다시 조회되면 정렬을 다시 적용한다
     private readonly Dictionary<string, int> _widths = [];   // 사용자가 리사이즈한 너비 (A-23)
     private const int MinColumnWidth = 40;
+
+    // 서버측 페이징 (R6, A-24): 화면 위치 = [추가 행(맨 위)] + [서버 조회 순서]. 보이는 범위의 페이지만 적재한다.
+    private Virtualize<int>? _virtualize;
+    private readonly Dictionary<int, int[]> _pages = [];        // 페이지 번호 → 행 키 (조회 순서)
+    private int _pagesGeneration;
+    private int? _total;                                         // 서버 전체 건수 (첫 조회 전 null)
+    private IReadOnlyDictionary<string, decimal>? _totals;       // 서버 전체 합계
+    private readonly Dictionary<int, int> _rowIndex = [];        // 행 키 → 화면 위치 (aria-rowindex)
+    private readonly List<int> _staleRows = [];                  // 정렬·다시 조회로 버린 페이지의 행. 새 범위를 받은 뒤 놓는다
+    private bool _refreshRows;                                   // 행 구성이 바뀜 → 렌더 뒤 Virtualize 다시 조회
 
     [Inject] private IJSRuntime JS { get; set; } = default!;
 
@@ -97,6 +108,35 @@ public partial class QuroGrid<TItem> where TItem : class
     /// <summary>앱 안 화면 이동 확인을 앱이 직접 할 때 구독한다 (Addendum A-20).</summary>
     [Parameter] public EventCallback<LeavingArgs> OnLeaving { get; set; }
 
+    /// <summary>
+    /// 서버측 페이징 조회 함수 (R6, O-04: 화면별 설정, Addendum A-24). 주면 보이는 범위만 PageSize 단위로 적재하고,
+    /// 정렬은 조회로 넘긴다. DataSet은 행 ID 선택자로 만들어야 한다. 없으면 DataSet 전체를 그린다.
+    /// </summary>
+    [Parameter] public Func<GridItemsRequest, Task<GridItemsResult<TItem>>>? ItemsProvider { get; set; }
+
+    /// <summary>한 번에 조회할 행 수 (O-04: 화면별 설정).</summary>
+    [Parameter] public int PageSize { get; set; } = 100;
+
+    /// <summary>페이징 중 행 높이 (px). 가상 스크롤이 위치를 계산하는 데 쓴다.</summary>
+    [Parameter] public int RowHeight { get; set; } = 28;
+
+    /// <summary>그리드 높이 (CSS 값, 예: 480px). 주면 그리드 안에서 스크롤한다 (페이징 화면 권장).</summary>
+    [Parameter] public string? Height { get; set; }
+
+    /// <summary>다시 조회한다 (저장 후 등). 페이징 중이면 변경 없는 적재 행을 놓고 처음부터 다시 부른다.</summary>
+    public Task ReloadAsync()
+    {
+        if (Paging)
+        {
+            _total = null;
+            ResetPages();
+        }
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private bool Paging => ItemsProvider is not null;
+
     /// <summary>사용자가 헤더를 눌러 정렬을 바꾼 뒤 (Addendum A-22).</summary>
     [Parameter] public EventCallback<SortChangedArgs> OnSortChanged { get; set; }
 
@@ -129,6 +169,12 @@ public partial class QuroGrid<TItem> where TItem : class
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (_refreshRows && _virtualize is not null)
+        {
+            _refreshRows = false;
+            await _virtualize.RefreshDataAsync();
+        }
+
         if (firstRender)
         {
             _self = DotNetObjectReference.Create(this);
@@ -137,7 +183,8 @@ public partial class QuroGrid<TItem> where TItem : class
                 EnterDirection == EnterDirection.Down ? "down" : "right",
                 AddRowOnLastEnter,
                 NotifySelection: OnSelectionChanged.HasDelegate,
-                InstanceId: _instanceId);
+                InstanceId: _instanceId,
+                Paging: Paging);
             await _module.InvokeVoidAsync("init", _root, _self, options);
         }
         else if (_module is not null)
@@ -424,9 +471,12 @@ public partial class QuroGrid<TItem> where TItem : class
         item ??= Activator.CreateInstance<TItem>();
         await OnRowAdding.InvokeAsync(new RowAddingArgs<TItem>(item, source));
 
+        if (Paging)
+            after = null;   // 페이징 중 추가 행은 맨 위에 모은다 (A-24)
         OrderedRowKeys();   // 화면 순서를 맞춘 뒤 넣는다
         var key = DataSet.AddRow(item, afterRowKey: after);
         PlaceInOrder(key, after);
+        RefreshRows();
         await OnRowAdded.InvokeAsync(new RowAddedArgs<TItem>(key, DataSet.GetItem(key)));
         return key;
     }
@@ -461,6 +511,7 @@ public partial class QuroGrid<TItem> where TItem : class
             await OnRowDeleted.InvokeAsync(new RowDeletedArgs(deleted));
 
         _ensureActive = deleted.Count > 0;
+        RefreshRows();
         StateHasChanged();
         return deleted.Count;
     }
@@ -479,7 +530,7 @@ public partial class QuroGrid<TItem> where TItem : class
         if (args.Cancel)
             return false;
 
-        var rows = VisibleRowKeys().ToList();
+        var rows = Paging ? await PagedRowsFrom(startRowKey, cells.Length) : VisibleRowKeys().ToList();
         var firstRow = rows.IndexOf(startRowKey);
         var firstCol = _columns.IndexOf(Column(startField));
         if (firstRow < 0)
@@ -572,7 +623,7 @@ public partial class QuroGrid<TItem> where TItem : class
         else
             _sort[index] = next;
 
-        ApplySort();
+        SortChanged();
         await OnSortChanged.InvokeAsync(new SortChangedArgs(SortColumns));
         StateHasChanged();
     }
@@ -582,11 +633,20 @@ public partial class QuroGrid<TItem> where TItem : class
     {
         _sort.Clear();
         _sort.AddRange(sort.Where(s => Column(s.Field).Type != CellType.Button));
-        ApplySort();
+        SortChanged();
         StateHasChanged();
     }
 
     public void ClearSort() => SetSort([]);
+
+    /// <summary>정렬이 바뀜: 페이징이면 정렬 조건으로 다시 조회, 아니면 메모리 정렬.</summary>
+    private void SortChanged()
+    {
+        if (Paging)
+            ResetPages();
+        else
+            ApplySort();
+    }
 
     private void ApplySort()
     {
@@ -668,6 +728,144 @@ public partial class QuroGrid<TItem> where TItem : class
 
     internal string? SortOrder(QuroColumn col) =>
         _sort.Count > 1 ? (_sort.FindIndex(s => s.Field == col.Field) + 1).ToString(CultureInfo.InvariantCulture) : null;
+
+    // ── 서버측 페이징 (GS-051·GS-052, R6, Addendum A-24) ──
+
+    /// <summary>Virtualize가 보이는 범위를 요청한다. 필요한 페이지만 조회하고, 범위에서 먼 페이지는 놓는다.</summary>
+    private async ValueTask<ItemsProviderResult<int>> ProvideRows(ItemsProviderRequest request)
+    {
+        if (_pagesGeneration != DataSet.Generation)
+        {
+            _pages.Clear();   // 앱이 다시 Load함: 이전 행 키는 이미 없다
+            _pagesGeneration = DataSet.Generation;
+        }
+
+        var inserted = InsertedRowKeys();
+        var end = request.StartIndex + request.Count;
+        var keys = new List<int>(request.Count);
+        for (var v = request.StartIndex; v < Math.Min(end, inserted.Count); v++)
+            keys.Add(inserted[v]);
+
+        var from = Math.Max(0, request.StartIndex - inserted.Count);
+        var to = end - inserted.Count;
+        if (to > from)
+        {
+            await EnsureLoaded(from, to, request.CancellationToken);
+            keys.AddRange(ServerRowKeys(from, to));
+            ReleaseOutside(from, to, keys);
+        }
+
+        for (var i = 0; i < keys.Count; i++)
+            _rowIndex[keys[i]] = request.StartIndex + i;
+        return new ItemsProviderResult<int>(keys, inserted.Count + (_total ?? 0));
+    }
+
+    /// <summary>서버 위치 [from, to)를 덮는 페이지 중 없는 것을 조회해 DataSet에 합친다 (페이지마다 1회).</summary>
+    private async Task EnsureLoaded(int from, int to, CancellationToken cancellationToken)
+    {
+        for (var page = from / PageSize; page * PageSize < to; page++)
+        {
+            if (_total is { } total && page * PageSize >= total)
+                break;
+            if (_pages.ContainsKey(page))
+                continue;
+
+            var result = await ItemsProvider!(new GridItemsRequest(page * PageSize, PageSize, SortColumns, cancellationToken));
+            var totalsChanged = !Equals(_totals, result.Totals) || _total != result.TotalCount;
+            _total = result.TotalCount;
+            _totals = result.Totals;
+            _pages[page] = DataSet.LoadPage(result.Items).ToArray();
+            if (totalsChanged)
+                StateHasChanged();   // 합계 행은 Virtualize 밖이라 그리드가 다시 그린다
+        }
+    }
+
+    private IEnumerable<int> ServerRowKeys(int from, int to)
+    {
+        for (var i = from; i < Math.Min(to, _total ?? 0); i++)
+            if (_pages.TryGetValue(i / PageSize, out var page) && i % PageSize < page.Length)
+                yield return page[i % PageSize];
+    }
+
+    /// <summary>요청 범위 앞뒤 한 페이지만 남기고 놓는다 (R6). 변경 행은 DataSet이 남긴다.</summary>
+    private void ReleaseOutside(int from, int to, IReadOnlyCollection<int> shown)
+    {
+        var first = from / PageSize - 1;
+        var last = (to - 1) / PageSize + 1;
+        var drop = _pages.Keys.Where(p => p < first || p > last).ToList();
+        var release = drop.SelectMany(p => _pages[p]).Concat(_staleRows).ToList();
+        foreach (var page in drop)
+            _pages.Remove(page);
+        _staleRows.Clear();
+
+        var keep = _pages.Values.SelectMany(k => k).Concat(shown).ToHashSet();
+        if (_editing is { } editing)
+            keep.Add(editing.RowKey);
+        DataSet.Release(release.Where(k => !keep.Contains(k)));
+        foreach (var key in release.Where(k => !keep.Contains(k)))
+            _rowIndex.Remove(key);
+    }
+
+    /// <summary>정렬·다시 조회: 페이지를 버리고 처음부터 다시 부른다. 행은 새 범위를 받은 뒤 놓는다 (그리는 중인 행 보호).</summary>
+    private void ResetPages()
+    {
+        _staleRows.AddRange(DataSet.RowKeys);   // 변경 없는 적재 행 전부 (저장 후 남은 행 포함). 변경 행은 DataSet이 남긴다
+        _pages.Clear();
+        RefreshRows();
+    }
+
+    private void RefreshRows() => _refreshRows = Paging;
+
+    /// <summary>페이징 중 추가 행 (화면 맨 위, 추가 순서).</summary>
+    private List<int> InsertedRowKeys() =>
+        DataSet.RowKeys.Where(k => DataSet.GetState(k) == RowState.Inserted).ToList();
+
+    internal int RowIndexOf(int rowKey) => _rowIndex.GetValueOrDefault(rowKey);
+
+    /// <summary>
+    /// 페이징 중 붙여넣기 대상 행: 시작 행부터 화면 순서로 <paramref name="count"/>행.
+    /// 적재되지 않은 범위는 조회해서 채운다 (A-24, 붙여넣기 호출 1회 안에서).
+    /// </summary>
+    private async Task<List<int>> PagedRowsFrom(int startRowKey, int count)
+    {
+        if (!_rowIndex.TryGetValue(startRowKey, out var start))
+            throw new ArgumentException($"행 키 {startRowKey}가 화면에 없습니다.", nameof(startRowKey));
+
+        var inserted = InsertedRowKeys();
+        var keys = inserted.Skip(start).Take(count).ToList();
+        var from = Math.Max(0, start - inserted.Count);
+        var to = start + count - inserted.Count;
+        if (to > from)
+        {
+            await EnsureLoaded(from, to, CancellationToken.None);
+            keys.AddRange(ServerRowKeys(from, to));
+        }
+        return keys;
+    }
+
+    private decimal PendingDelta(string field)
+    {
+        var delta = 0m;
+        foreach (var key in DataSet.RowKeys)
+        {
+            delta += DataSet.GetState(key) switch
+            {
+                RowState.Inserted => Number(DataSet.GetValue(key, field)),
+                RowState.Updated => Number(DataSet.GetValue(key, field)) - Number(DataSet.GetOriginal(key, field)),
+                RowState.Deleted => -Number(DataSet.GetOriginal(key, field)),
+                _ => 0m,
+            };
+        }
+        return delta;
+    }
+
+    private static decimal Number(object? value) =>
+        value is null ? 0m : Convert.ToDecimal(value, CultureInfo.InvariantCulture);
+
+    internal string? RootStyle =>
+        Paging || Height is not null
+            ? $"{(Height is null ? "" : $"height:{Height};")}--quro-row-height:{RowHeight}px"
+            : null;
 
     // ── 컬럼 리사이즈 (GS-053, Addendum A-23): 드래그는 JS가, 끝날 때 1회 호출 (R1) ──
 
@@ -835,7 +1033,16 @@ public partial class QuroGrid<TItem> where TItem : class
             return "";
 
         var keys = DataSet.RowKeys.Where(k => DataSet.GetState(k) != RowState.Deleted).ToList();
-        var sum = keys.Sum(k => DataSet.GetValue(k, col.Field) is { } v ? Convert.ToDecimal(v, CultureInfo.InvariantCulture) : 0m);
+        decimal sum;
+        if (Paging)
+        {
+            // 적재되지 않은 행이 있으므로 서버 합계 + 저장 전 변경분 (A-24). 서버 합계가 없으면 비운다
+            if (_totals is null || !_totals.TryGetValue(col.Field, out var total))
+                return "";
+            sum = total + PendingDelta(col.Field);
+        }
+        else
+            sum = keys.Sum(k => Number(DataSet.GetValue(k, col.Field)));
         // 통화가 섞이면 합계 의미가 없으므로 첫 행의 통화 자릿수를 쓴다. 혼합 통화 합계 규칙은 Spec에 없다.
         var format = col.Type == CellType.Currency && keys.Count > 0 ? CurrencyFormat(col, keys[0]) : col.Format;
         return FormatNumber(sum, format);
