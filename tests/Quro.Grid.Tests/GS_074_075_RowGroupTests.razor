@@ -1,0 +1,193 @@
+@inherits GridTestContext
+
+@code {
+    // GS-074·GS-075 그룹핑·소계 (P1 5-5, Addendum A-32). 메모리 모드에서만 그리드가 그룹 머리 행·소계 행을 그린다.
+    // 그룹 머리 행·소계 행은 data-row가 없어 편집·붙여넣기·범위 선택 대상이 아니다. 펼침·접기는 quro-grid.js가 ExpandGroup을 1회 부른다.
+
+    private static readonly CultureInfo En = new("en-US");
+
+    /// <summary>그룹 문구만 있는 리소스 (UI 언어와 무관). 컬럼 헤더 키는 그대로 보인다</summary>
+    private sealed class GroupTexts : Microsoft.Extensions.Localization.IStringLocalizer
+    {
+        private static readonly Dictionary<string, string> Texts = new()
+        {
+            ["quro.group.header"] = "{0}: {1} ({2})",
+            ["quro.group.subtotal"] = "Subtotal",
+            ["quro.group.empty"] = "(Empty)",
+            ["quro.filter.checked"] = "Checked",
+            ["quro.filter.unchecked"] = "Unchecked",
+        };
+
+        public Microsoft.Extensions.Localization.LocalizedString this[string name] =>
+            new(name, Texts.GetValueOrDefault(name, name), !Texts.ContainsKey(name));
+
+        public Microsoft.Extensions.Localization.LocalizedString this[string name, params object[] arguments] => this[name];
+
+        public IEnumerable<Microsoft.Extensions.Localization.LocalizedString> GetAllStrings(bool includeParentCultures) => [];
+    }
+    private static readonly ComboOption[] Units = [new("EA", "Piece"), new("BOX", "Box")];
+
+    /// <summary>A1001·10·BOX·Y / A1002·5·EA·N / B2003·3·BOX·N (행 키 1·2·3)</summary>
+    private static QuroDataSet<PoLine> Lines()
+    {
+        var ds = new QuroDataSet<PoLine>();
+        ds.Load(
+        [
+            new PoLine { ItemCode = "A1001", Qty = 10m, Unit = "BOX", Urgent = "Y" },
+            new PoLine { ItemCode = "A1002", Qty = 5m, Unit = "EA", Urgent = "N" },
+            new PoLine { ItemCode = "B2003", Qty = 3m, Unit = "BOX", Urgent = "N" },
+        ]);
+        return ds;
+    }
+
+    private IRenderedComponent<QuroGrid<PoLine>> RenderGrid(QuroDataSet<PoLine> ds) =>
+        Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" Culture="En" ShowFooter="true" Localizer="new GroupTexts()">
+                                     <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" />
+                                     <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" Aggregate="Aggregate.Sum" />
+                                     <QuroColumn Field="Unit" HeaderKey="mm.unit" Type="CellType.Combo" Options="Units" />
+                                     <QuroColumn Field="Urgent" HeaderKey="mm.urgent" Type="CellType.Check" CheckedValue="@("Y")" UncheckedValue="@("N")" />
+                                 </QuroGrid>);
+
+    /// <summary>본문 행을 화면 순서로: 데이터 행 "r키", 그룹 머리 행 "g단 문구", 소계 행 "s단 수량소계"</summary>
+    private static string[] Layout(IRenderedComponent<QuroGrid<PoLine>> cut) =>
+        cut.FindAll(".quro-body [role=row]").Select(r =>
+            r.GetAttribute("data-row") is { } key ? $"r{key}"
+            : r.ClassList.Contains("quro-group-head-row") ? $"g{r.GetAttribute("data-group-level")} {r.TextContent.Trim()}"
+            : r.ClassList.Contains("quro-subtotal-row") ? $"s{r.GetAttribute("data-group-level")} {r.QuerySelector("[data-subtotal-field=Qty]")!.TextContent.Trim()}"
+            : "?").ToArray();
+
+    private static string GroupId(IRenderedComponent<QuroGrid<PoLine>> cut, string text) =>
+        cut.FindAll(".quro-group-head-row").First(r => r.TextContent.Contains(text)).GetAttribute("data-group")!;
+
+    private static string Footer(IRenderedComponent<QuroGrid<PoLine>> cut) =>
+        cut.Find("[data-footer-field=Qty]").TextContent.Trim();
+
+    /// <summary>GS-074: 그룹 머리 행(값·건수) + 소계 행. 그룹은 값 오름차순(Combo는 명칭), 그룹 안은 현재 순서. 합계 행은 그대로</summary>
+    [Fact]
+    public async Task GS_074_GroupBy_HeadAndSubtotalRows()
+    {
+        var cut = RenderGrid(Lines());
+
+        await cut.InvokeAsync(() => cut.Instance.SetGroupBy(["Unit"]));
+
+        Assert.Equal(["Unit"], cut.Instance.GroupColumns);
+        Assert.Equal(["g0 mm.unit: Box (2)", "r1", "r3", "s0 13", "g0 mm.unit: Piece (1)", "r2", "s0 5"], Layout(cut));
+        Assert.Equal("18", Footer(cut));
+        Assert.Equal("9", cut.Find("[role=grid]").GetAttribute("aria-rowcount"));   // 헤더 + 7 + 합계
+        Assert.Equal("4", cut.Find("[role=row][data-row='3']").GetAttribute("aria-rowindex"));
+        Assert.Equal("true", cut.Find(".quro-group-head-row").GetAttribute("aria-expanded"));
+        Assert.Equal("Subtotal", cut.Find(".quro-subtotal-row [data-subtotal-field=ItemCode]").TextContent.Trim());
+
+        await cut.InvokeAsync(() => cut.Instance.ClearGroupBy());
+        Assert.Equal(["r1", "r2", "r3"], Layout(cut));
+        Assert.Empty(cut.Instance.GroupColumns);
+    }
+
+    /// <summary>GS-074: 여러 단. 목록 순서가 단 순서, 소계는 단마다</summary>
+    [Fact]
+    public async Task GS_074_MultiLevel()
+    {
+        var cut = RenderGrid(Lines());
+
+        await cut.InvokeAsync(() => cut.Instance.SetGroupBy(["Unit", "Urgent"]));
+
+        Assert.Equal(
+        [
+            "g0 mm.unit: Box (2)",
+            "g1 mm.urgent: Unchecked (1)", "r3", "s1 3",
+            "g1 mm.urgent: Checked (1)", "r1", "s1 10",
+            "s0 13",
+            "g0 mm.unit: Piece (1)",
+            "g1 mm.urgent: Unchecked (1)", "r2", "s1 5",
+            "s0 5",
+        ], Layout(cut));
+    }
+
+    /// <summary>GS-074: 접으면 머리 행과 소계만 남고, 합계·건수는 그대로. 모두 접기·펼치기</summary>
+    [Fact]
+    public async Task GS_074_Collapse_Expand()
+    {
+        var cut = RenderGrid(Lines());
+        await cut.InvokeAsync(() => cut.Instance.SetGroupBy(["Unit"]));
+
+        Assert.True(await cut.InvokeAsync(() => cut.Instance.ExpandGroup(GroupId(cut, "Box"), false)));
+        Assert.Equal(["g0 mm.unit: Box (2)", "s0 13", "g0 mm.unit: Piece (1)", "r2", "s0 5"], Layout(cut));
+        Assert.Equal("false", cut.FindAll(".quro-group-head-row")[0].GetAttribute("aria-expanded"));
+        Assert.Equal("18", Footer(cut));
+
+        await cut.InvokeAsync(() => cut.Instance.CollapseAll());
+        Assert.Equal(["g0 mm.unit: Box (2)", "s0 13", "g0 mm.unit: Piece (1)", "s0 5"], Layout(cut));
+
+        await cut.InvokeAsync(() => cut.Instance.ExpandAll());
+        Assert.Equal(7, Layout(cut).Length);
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.ExpandGroup("없는 그룹", true)));
+    }
+
+    /// <summary>GS-074: 붙여넣기는 화면 순서의 데이터 행만 채운다 (그룹 행 건너뜀)</summary>
+    [Fact]
+    public async Task GS_074_Paste_FillsDataRowsInDisplayOrder()
+    {
+        var ds = Lines();
+        var cut = RenderGrid(ds);
+        await cut.InvokeAsync(() => cut.Instance.SetGroupBy(["Unit"]));
+
+        await cut.InvokeAsync(() => cut.Instance.Paste(1, "Qty", [["7"], ["8"], ["9"]]));
+
+        Assert.Equal((7m, 8m, 9m), ((decimal)ds.GetValue(1, "Qty")!, (decimal)ds.GetValue(3, "Qty")!, (decimal)ds.GetValue(2, "Qty")!));
+        Assert.Equal(3, ds.RowKeys.Count);
+        Assert.Equal(["g0 mm.unit: Box (2)", "r1", "r3", "s0 15", "g0 mm.unit: Piece (1)", "r2", "s0 9"], Layout(cut));
+    }
+
+    /// <summary>GS-074: 페이징 중에는 그룹핑하지 않는다 (A-32)</summary>
+    [Fact]
+    public async Task GS_074_Paging_GroupingIgnored()
+    {
+        var rows = Enumerable.Range(1, 30).Select(n => new PoLine { LineNo = n, Qty = n % 3, Version = 1 }).ToArray();
+        Task<GridItemsResult<PoLine>> Provide(GridItemsRequest r) => Task.FromResult(new GridItemsResult<PoLine>(
+            rows.Skip(r.StartIndex).Take(r.Count).Select(p => new PoLine { LineNo = p.LineNo, Qty = p.Qty, Version = 1 }).ToList(), rows.Length));
+
+        var ds = new QuroDataSet<PoLine>(line => line.LineNo);
+        var cut = Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" ItemsProvider="Provide" PageSize="100" Culture="En">
+                                               <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" />
+                                           </QuroGrid>);
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("[role=row][data-row]")));
+
+        await cut.InvokeAsync(() => cut.Instance.SetGroupBy(["Qty"]));
+
+        Assert.Empty(cut.Instance.GroupColumns);
+        Assert.Empty(cut.FindAll(".quro-group-head-row"));
+    }
+
+    /// <summary>GS-075: 그룹 값을 바꿔도 다른 그룹으로 옮기지 않고, 소계는 갱신. 다시 그룹핑·다시 조회하면 새 값으로</summary>
+    [Fact]
+    public async Task GS_075_EditGroupValue_StaysInPlace_SubtotalUpdates()
+    {
+        var ds = Lines();
+        var cut = RenderGrid(ds);
+        await cut.InvokeAsync(() => cut.Instance.SetGroupBy(["Unit"]));
+
+        await cut.InvokeAsync(() => cut.Instance.CommitEdit(1, "Unit", "EA"));
+        await cut.InvokeAsync(() => cut.Instance.CommitEdit(3, "Qty", "4"));
+
+        Assert.Equal(["g0 mm.unit: Box (2)", "r1", "r3", "s0 14", "g0 mm.unit: Piece (1)", "r2", "s0 5"], Layout(cut));
+
+        await cut.InvokeAsync(() => cut.Instance.SetGroupBy(["Unit"]));
+        Assert.Equal(["g0 mm.unit: Box (1)", "r3", "s0 4", "g0 mm.unit: Piece (2)", "r1", "r2", "s0 15"], Layout(cut));
+
+        ds.Load([new PoLine { ItemCode = "Z", Qty = 1m, Unit = "EA" }]);
+        cut.Render();
+        Assert.Equal(["g0 mm.unit: Piece (1)", "r1", "s0 1"], Layout(cut));
+    }
+
+    /// <summary>GS-075: 행 아래 추가·복사한 행은 그 행의 그룹에 들어간다</summary>
+    [Fact]
+    public async Task GS_075_AddRowBelow_JoinsThatGroup()
+    {
+        var cut = RenderGrid(Lines());
+        await cut.InvokeAsync(() => cut.Instance.SetGroupBy(["Unit"]));
+
+        var added = await cut.InvokeAsync(() => cut.Instance.AddRow(1));
+
+        Assert.Equal(["g0 mm.unit: Box (3)", "r1", $"r{added}", "r3", "s0 13", "g0 mm.unit: Piece (1)", "r2", "s0 5"], Layout(cut));
+    }
+}

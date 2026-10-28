@@ -153,19 +153,38 @@ public static class GridKeys
 
     /// <summary>헤더의 필터 버튼 (스크린리더 이름)</summary>
     public const string FilterOpen = "quro.filter.open";
+    /// <summary>필터 패널의 적용 버튼</summary>
     public const string FilterApply = "quro.filter.apply";
+    /// <summary>필터 패널의 해제 버튼</summary>
     public const string FilterClear = "quro.filter.clear";
 
     /// <summary>텍스트 입력 이름 (포함)</summary>
     public const string FilterContains = "quro.filter.contains";
+    /// <summary>숫자 최소 입력 이름</summary>
     public const string FilterMin = "quro.filter.min";
+    /// <summary>숫자 최대 입력 이름</summary>
     public const string FilterMax = "quro.filter.max";
+    /// <summary>시작일 입력 이름</summary>
     public const string FilterFrom = "quro.filter.from";
+    /// <summary>종료일 입력 이름</summary>
     public const string FilterTo = "quro.filter.to";
 
     /// <summary>Check 컬럼 값 목록의 체크·해제</summary>
     public const string FilterChecked = "quro.filter.checked";
+
+    /// <summary>Check 컬럼 값 목록의 해제 (그룹 머리 행 값에도 쓴다)</summary>
     public const string FilterUnchecked = "quro.filter.unchecked";
+
+    // 그룹핑 (A-42)
+
+    /// <summary>그룹 머리 행: {0} 컬럼 헤더, {1} 값, {2} 건수</summary>
+    public const string GroupHeader = "quro.group.header";
+
+    /// <summary>소계 행의 첫 칸</summary>
+    public const string GroupSubtotal = "quro.group.subtotal";
+
+    /// <summary>빈 값 그룹</summary>
+    public const string GroupEmpty = "quro.group.empty";
 }
 
 /// <summary>

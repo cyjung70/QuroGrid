@@ -13,7 +13,7 @@
 
 @* 컬럼 정의가 등록된 뒤에 그린다. 셀 단위 이벤트 핸들러를 두지 않는다 (R5): 클릭·키는 quro-grid.js가 좌표로 해석한다. *@
 <Deferred>
-    @{ var bodyRows = BodyRowCount(); var headerRows = HeaderRows; }
+    @{ var body = Paging ? null : BodyItems(); var bodyRows = BodyRowCount(body); var headerRows = HeaderRows; }
     <div @ref="_root" class="@(Paging ? "quro-grid quro-paged" : "quro-grid")" style="@RootStyle"
          role="grid" tabindex="0" aria-colcount="@Columns.Count"
          aria-rowcount="@(headerRows + bodyRows + (ShowFooter ? 1 : 0))" data-header-rows="@headerRows"
@@ -116,13 +116,39 @@
             }
             else
             {
-                var index = 0;
-                foreach (var key in VisibleRowKeys())
+                @* 그룹핑 중이면 그룹 머리 행·소계 행이 낀다 (GS-074, A-42). data-row가 없어 편집·붙여넣기·범위 선택 대상이 아니고,
+                   펼침·접기(클릭·Space·Enter·←→)는 quro-grid.js가 받는다 (R5) *@
+                foreach (var item in body!)
                 {
-                    <QuroGridRow @key="key" TItem="TItem" Grid="this" RowKey="key" RowIndex="index++"
-                                 Revision="DataSet.GetRevision(key)" Epoch="_epoch"
-                                 EditingField="@(_editing?.RowKey == key ? _editing.Value.Field : null)"
-                                 PickerOpen="IsPickerOpen(key)" />
+                    if (item.Kind == BodyItemKind.Row)
+                    {
+                        var key = item.RowKey;
+                        <QuroGridRow @key="key" TItem="TItem" Grid="this" RowKey="key" RowIndex="item.Index"
+                                     Revision="DataSet.GetRevision(key)" Epoch="_epoch"
+                                     EditingField="@(_editing?.RowKey == key ? _editing.Value.Field : null)"
+                                     PickerOpen="IsPickerOpen(key)" />
+                    }
+                    else if (item.Kind == BodyItemKind.GroupHead)
+                    {
+                        <div @key="@("h" + item.GroupId)" class="quro-row quro-group-head-row" role="row"
+                             aria-rowindex="@(item.Index + headerRows + 1)" aria-expanded="@(item.Expanded ? "true" : "false")"
+                             data-group="@item.GroupId" data-group-level="@item.Level">
+                            <div class="quro-cell quro-group-head-cell" role="gridcell" aria-colindex="1" aria-colspan="@Columns.Count"
+                                 style="width:@(Columns.Sum(WidthOf))px"><span class="quro-group-head-text" style="padding-left:@(item.Level * 16)px">@item.Text</span></div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div @key="@("s" + item.GroupId)" class="quro-row quro-subtotal-row" role="row"
+                             aria-rowindex="@(item.Index + headerRows + 1)" data-group-level="@item.Level">
+                            @for (var i = 0; i < Columns.Count; i++)
+                            {
+                                var col = Columns[i];
+                                <div class="@CellClass(i, "quro-subtotal")" style="@CellStyle(i)" role="gridcell"
+                                     aria-colindex="@(i + 1)" data-subtotal-field="@col.Field">@SubtotalText(col, item.Rows!)</div>
+                            }
+                        </div>
+                    }
                 }
             }
         </div>

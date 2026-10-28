@@ -69,6 +69,12 @@ public partial class QuroGrid<TItem> where TItem : class
     private FilterInput? _filterDraft;                           // 해석에 실패한 입력 (패널에 그대로 남긴다)
     private string? _filterInvalid;                              // 해석에 실패한 입력 이름 (data-filter)
 
+    // 그룹핑 (GS-074·GS-075, A-32·A-42)
+    private readonly List<string> _groupBy = [];
+    private readonly Dictionary<int, object?[]> _groupOf = [];   // 행 키 → 그룹을 정한 시점의 값. 편집해도 다른 그룹으로 옮기지 않는다
+    private int _groupGeneration;                                // 그룹을 정한 시점의 DataSet.Generation
+    private readonly HashSet<string> _collapsed = [];            // 접힌 그룹 ID
+
     [Inject] private IJSRuntime JS { get; set; } = default!;
 
     [Parameter, EditorRequired] public QuroDataSet<TItem> DataSet { get; set; } = default!;
@@ -567,6 +573,8 @@ public partial class QuroGrid<TItem> where TItem : class
         OrderedRowKeys();   // 화면 순서를 맞춘 뒤 넣는다
         var key = DataSet.AddRow(item, afterRowKey: after);
         PlaceInOrder(key, after);
+        if (Grouped && after is { } a && _groupOf.TryGetValue(a, out var group))
+            _groupOf[key] = group;   // 행 아래 추가·복사한 행은 그 행의 그룹에 (GS-075)
         RefreshRows();
         await OnRowAdded.InvokeAsync(new RowAddedArgs<TItem>(key, DataSet.GetItem(key)));
         return key;
@@ -1034,6 +1042,7 @@ public partial class QuroGrid<TItem> where TItem : class
         return _filterField is not null;
     }
 
+    /// <summary>필터 패널을 닫는다 (Esc·바깥 클릭, quro-grid.js가 호출). 조건은 바꾸지 않는다.</summary>
     [JSInvokable]
     public void CloseFilter()
     {
@@ -1095,6 +1104,7 @@ public partial class QuroGrid<TItem> where TItem : class
         StateHasChanged();
     }
 
+    /// <summary>모든 필터를 푼다 (<c>SetFilters([])</c>와 같음, 이벤트 없음).</summary>
     public void ClearFilters() => SetFilters([]);
 
     /// <summary>필터가 바뀜: 페이징이면 조건으로 처음부터 다시 조회, 아니면 지금 행을 거른다.</summary>
@@ -1266,6 +1276,163 @@ public partial class QuroGrid<TItem> where TItem : class
             f?.To?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             f?.Values ?? FilterValues(col).Select(v => v.Value).ToList());
     }
+
+    // ── 그룹핑·소계 (GS-074·GS-075, Addendum A-32·A-42): 메모리 모드에서만. 페이징 중에는 하지 않는다 ──
+
+    private bool Grouped => !Paging && _groupBy.Count > 0;
+
+    /// <summary>현재 그룹 컬럼 (목록 순서 = 단 순서). 비어 있으면 그룹핑하지 않는다.</summary>
+    public IReadOnlyList<string> GroupColumns => _groupBy.ToList();
+
+    /// <summary>
+    /// 그 컬럼들로 그룹핑한다 (여러 단, 이벤트 없음). 모든 그룹을 펼치고, 지금 값으로 그룹을 다시 정한다.
+    /// Button 컬럼은 무시한다. 페이징 중에는 아무것도 하지 않는다 (A-32).
+    /// </summary>
+    public void SetGroupBy(IReadOnlyList<string> fields)
+    {
+        if (Paging)
+            return;
+        _groupBy.Clear();
+        _groupBy.AddRange(fields.Select(Column).Where(c => c.Type != CellType.Button).Select(c => c.Field).Distinct());
+        _groupOf.Clear();
+        _collapsed.Clear();
+        _ensureActive = true;   // 활성 행이 접힌 곳에 있지 않도록 (렌더 반영 뒤)
+        StateHasChanged();
+    }
+
+    /// <summary>그룹핑을 푼다 (<c>SetGroupBy([])</c>와 같음).</summary>
+    public void ClearGroupBy() => SetGroupBy([]);
+
+    /// <summary>모든 그룹을 펼친다.</summary>
+    public void ExpandAll()
+    {
+        _collapsed.Clear();
+        StateHasChanged();
+    }
+
+    /// <summary>모든 그룹을 접는다 (안쪽 단 포함). 머리 행과 소계 행만 남는다.</summary>
+    public void CollapseAll()
+    {
+        _collapsed.UnionWith(BuildBody(all: true).Where(i => i.Kind == BodyItemKind.GroupHead).Select(i => i.GroupId!));
+        StateHasChanged();
+    }
+
+    /// <summary>그룹 하나를 펼치거나 접는다 (Space·Enter·←→·클릭, quro-grid.js가 1회 호출). 없는 그룹이면 false.</summary>
+    [JSInvokable]
+    public bool ExpandGroup(string groupId, bool expanded)
+    {
+        if (!BuildBody(all: true).Any(i => i.Kind == BodyItemKind.GroupHead && i.GroupId == groupId))
+            return false;
+        if (expanded)
+            _collapsed.Remove(groupId);
+        else
+            _collapsed.Add(groupId);
+        StateHasChanged();
+        return true;
+    }
+
+    internal enum BodyItemKind { Row, GroupHead, Subtotal }
+
+    /// <summary>본문의 한 줄: 데이터 행, 그룹 머리 행, 소계 행. Index는 화면 위치 (aria-rowindex)</summary>
+    internal sealed record BodyItem(BodyItemKind Kind, int Index, int RowKey = 0, string? GroupId = null, int Level = 0,
+        string? Text = null, bool Expanded = true, IReadOnlyList<int>? Rows = null);
+
+    /// <summary>메모리 모드 본문 (화면 순서). 그룹핑 중이면 그룹 머리 행·소계 행이 끼고, 접힌 그룹의 행은 빠진다</summary>
+    internal List<BodyItem> BodyItems() => BuildBody(all: false);
+
+    /// <summary><paramref name="all"/>이면 접힌 그룹 안까지 (모두 접기·그룹 확인용)</summary>
+    private List<BodyItem> BuildBody(bool all)
+    {
+        var keys = FilteredRowKeys().ToList();
+        var items = new List<BodyItem>(keys.Count);
+        if (!Grouped)
+        {
+            foreach (var key in keys)
+                items.Add(new BodyItem(BodyItemKind.Row, items.Count, key));
+            return items;
+        }
+
+        if (_groupGeneration != DataSet.Generation)
+        {
+            _groupOf.Clear();   // 다시 조회됨: 새 값으로 그룹을 정한다
+            _groupGeneration = DataSet.Generation;
+        }
+        var columns = _groupBy.Select(Column).ToList();
+        foreach (var key in keys.Where(k => !_groupOf.ContainsKey(k)))
+            _groupOf[key] = columns.Select(c => DataSet.GetValue(key, c.Field)).ToArray();
+
+        var ordered = keys.OrderBy(k => k, Comparer<int>.Create((a, b) => CompareGroups(a, b, columns))).ToList();   // 안정 정렬: 그룹 안은 지금 순서
+        AddGroups(items, ordered, 0, "", columns, all);
+        return items;
+    }
+
+    private void AddGroups(List<BodyItem> items, List<int> rows, int level, string parentId, List<QuroColumn> columns, bool all)
+    {
+        var col = columns[level];
+        for (var i = 0; i < rows.Count;)
+        {
+            var value = _groupOf[rows[i]][level];
+            var j = i;
+            while (j < rows.Count && Equals(_groupOf[rows[j]][level], value))
+                j++;
+            var run = rows.GetRange(i, j - i);
+            var live = run.Where(k => DataSet.GetState(k) != RowState.Deleted).ToList();
+            var id = $"{parentId}/{JsonSerializer.Serialize(value is null ? null : Convert.ToString(value, CultureInfo.InvariantCulture))}";
+            var expanded = !_collapsed.Contains(id);
+
+            items.Add(new BodyItem(BodyItemKind.GroupHead, items.Count, GroupId: id, Level: level,
+                Text: string.Format(EffectiveCulture, Text(GridKeys.GroupHeader), Text(col.HeaderKey), GroupValueText(col, value), live.Count),
+                Expanded: expanded));
+            if (expanded || all)
+            {
+                if (level + 1 < columns.Count)
+                    AddGroups(items, run, level + 1, id, columns, all);
+                else
+                    foreach (var key in run)
+                        items.Add(new BodyItem(BodyItemKind.Row, items.Count, key));
+            }
+            if (Columns.Any(c => c.Aggregate == Aggregate.Sum))
+                items.Add(new BodyItem(BodyItemKind.Subtotal, items.Count, GroupId: id, Level: level, Rows: live));
+            i = j;
+        }
+    }
+
+    /// <summary>그룹 순서: 단마다 값 오름차순(Combo는 명칭), 그 컬럼을 내림차순 정렬 중이면 내림차순. 빈 값은 맨 뒤</summary>
+    private int CompareGroups(int a, int b, List<QuroColumn> columns)
+    {
+        for (var level = 0; level < columns.Count; level++)
+        {
+            var col = columns[level];
+            var (x, y) = (_groupOf[a][level], _groupOf[b][level]);
+            var result = (x, y) switch
+            {
+                (null, null) => 0,
+                (null, _) => 1,
+                (_, null) => -1,
+                _ => (SortOf(col)?.Direction == SortDirection.Descending ? -1 : 1)
+                     * CompareValues(col.Type == CellType.Combo ? OptionText(col, x) : x, col.Type == CellType.Combo ? OptionText(col, y) : y),
+            };
+            if (result != 0)
+                return result;
+        }
+        return 0;
+    }
+
+    /// <summary>그룹 머리 행의 값 표시: 빈 값은 리소스 문구, Combo는 명칭, Check는 체크·해제 문구, 그 밖은 셀과 같은 서식</summary>
+    private string GroupValueText(QuroColumn col, object? value) => value switch
+    {
+        null or "" => Text(GridKeys.GroupEmpty),
+        _ when col.Type == CellType.Combo => OptionText(col, value),
+        _ when col.Type == CellType.Check && Equals(value, col.CheckedValue) => Text(GridKeys.FilterChecked),
+        _ when col.Type == CellType.Check && Equals(value, col.UncheckedValue) => Text(GridKeys.FilterUnchecked),
+        _ => Format(value, col),
+    };
+
+    /// <summary>소계 행의 셀: Sum 컬럼은 그룹 합계, 첫 컬럼(합계가 아니면)은 "소계" 문구</summary>
+    internal string SubtotalText(QuroColumn col, IReadOnlyList<int> rows) =>
+        col.Aggregate == Aggregate.Sum ? SumText(col, rows)
+        : Columns.Count > 0 && Columns[0] == col ? Text(GridKeys.GroupSubtotal)
+        : "";
 
     // ── Undo / Redo (GS-076~GS-078, Addendum A-33): 이력은 DataSet에 있다. 이벤트는 내지 않는다 ──
 
@@ -1560,11 +1727,17 @@ public partial class QuroGrid<TItem> where TItem : class
     // ── 렌더링 보조 (QuroGridRow와 공유) ──
 
     /// <summary>본문 행 수 (aria-rowcount, GS-066). 페이징 중에는 그려지지 않은 행도 센다: 추가 행 + 서버 전체 건수</summary>
-    private int BodyRowCount() =>
-        Paging ? InsertedRowKeys().Count + (_total ?? 0) : VisibleRowKeys().Count();
+    private int BodyRowCount(List<BodyItem>? body) =>
+        Paging ? InsertedRowKeys().Count + (_total ?? 0) : body!.Count;   // 그룹 머리 행·소계 행도 행이다
 
-    /// <summary>메모리 모드의 화면 행 (화면 순서): 삭제 표시 행 처리(O-02)와 필터(A-31)를 거친다</summary>
+    /// <summary>메모리 모드의 화면 데이터 행 (화면 순서). 그룹핑 중이면 그룹 순서이고 접힌 그룹의 행은 빠진다</summary>
     private IEnumerable<int> VisibleRowKeys() =>
+        Grouped
+            ? BodyItems().Where(i => i.Kind == BodyItemKind.Row).Select(i => i.RowKey)
+            : FilteredRowKeys();
+
+    /// <summary>메모리 모드의 행 (화면 순서): 삭제 표시 행 처리(O-02)와 필터(A-31)를 거친다</summary>
+    private IEnumerable<int> FilteredRowKeys() =>
         OrderedRowKeys().Where(k => !FilteredOut(k)
                                     && (DeletedRows != DeletedRowDisplay.Hide || DataSet.GetState(k) != RowState.Deleted));
 
@@ -1650,21 +1823,22 @@ public partial class QuroGrid<TItem> where TItem : class
         if (col.Aggregate != Aggregate.Sum)
             return "";
 
-        var keys = DataSet.RowKeys.Where(k => DataSet.GetState(k) != RowState.Deleted && !FilteredOut(k)).ToList();   // 보이는 행 (A-31)
-        decimal sum;
-        if (Paging)
-        {
-            // 적재되지 않은 행이 있으므로 서버 합계 + 저장 전 변경분 (A-24). 서버 합계가 없으면 비운다
-            if (_totals is null || !_totals.TryGetValue(col.Field, out var total))
-                return "";
-            sum = total + PendingDelta(col.Field);
-        }
-        else
-            sum = keys.Sum(k => Number(DataSet.GetValue(k, col.Field)));
-        // 통화가 섞이면 합계 의미가 없으므로 첫 행의 통화 자릿수를 쓴다. 혼합 통화 합계 규칙은 Spec에 없다.
-        var format = col.Type == CellType.Currency && keys.Count > 0 ? CurrencyFormat(col, keys[0]) : col.Format;
-        return FormatNumber(sum, format);
+        var keys = DataSet.RowKeys.Where(k => DataSet.GetState(k) != RowState.Deleted && !FilteredOut(k)).ToList();   // 보이는 행 (A-31, 접힌 그룹 포함)
+        if (!Paging)
+            return SumText(col, keys);
+
+        // 적재되지 않은 행이 있으므로 서버 합계 + 저장 전 변경분 (A-24). 서버 합계가 없으면 비운다
+        if (_totals is null || !_totals.TryGetValue(col.Field, out var total))
+            return "";
+        return FormatNumber(total + PendingDelta(col.Field), SumFormat(col, keys));
     }
+
+    private string SumText(QuroColumn col, IReadOnlyList<int> keys) =>
+        FormatNumber(keys.Sum(k => Number(DataSet.GetValue(k, col.Field))), SumFormat(col, keys));
+
+    // 통화가 섞이면 합계 의미가 없으므로 첫 행의 통화 자릿수를 쓴다. 혼합 통화 합계 규칙은 Spec에 없다.
+    private string? SumFormat(QuroColumn col, IReadOnlyList<int> keys) =>
+        col.Type == CellType.Currency && keys.Count > 0 ? CurrencyFormat(col, keys[0]) : col.Format;
 
     private string CurrencyFormat(QuroColumn col, int rowKey)
     {
