@@ -1,0 +1,186 @@
+@inherits GridTestContext
+@using Quro.Grid.Definition
+
+@code {
+    // GS-D11 ~ GS-D15: <QuroGrid Definition="@gridDef"> (T-11) and the grid gaps G-01 ~ G-04 (design v0.2 7.1, 7.5)
+
+    private static readonly CultureInfo En = new("en-US");
+
+    private IRenderedComponent<QuroGrid<SoLine>> RenderGrid(QuroDataSet<SoLine> ds, GridDef def,
+        EventCallback<CellValueChangedArgs<SoLine>> changed = default) =>
+        Render<QuroGrid<SoLine>>(@<QuroGrid DataSet="ds" Definition="def" Culture="En" Localizer="new FakeLocalizer()"
+                                            OnCellValueChanged="changed" />);
+
+    private static AngleSharp.Dom.IElement Cell(IRenderedComponent<QuroGrid<SoLine>> cut, int rowKey, string field) =>
+        cut.Find($"[role=row][data-row='{rowKey}'] [data-field='{field}']");
+
+    /// <summary>GS-D11: columns, headers, read-only, footer, Popup cell and format come from the definition</summary>
+    [Fact]
+    public void GS_D11_ColumnMapping()
+    {
+        var ds = GoldenScreen.OneLine();
+        ds.SetValue(ds.RowKeys[0], nameof(SoLine.Qty), 1234.5m);
+
+        var cut = RenderGrid(ds, GoldenScreen.Lines());
+
+        var headers = cut.FindAll(".quro-head [role=columnheader][data-field]");
+        Assert.Equal(["itemCd", "itemName", "qty", "unitPrice", "amount", "dcCode", "dcRate", "stdPrice", "invQty", "invNo"],
+            headers.Select(h => h.GetAttribute("data-field")));
+        Assert.Equal(new FakeLocalizer()["sd.so.line.qty"].Value, headers[2].TextContent.Trim());
+        Assert.False(new FakeLocalizer()["sd.so.line.qty"].ResourceNotFound);
+
+        var row = ds.RowKeys[0];
+        Assert.Equal("true", Cell(cut, row, "amount").GetAttribute("aria-readonly"));
+        Assert.Null(Cell(cut, row, "qty").GetAttribute("aria-readonly"));
+        Assert.Equal("popup", Cell(cut, row, "itemCd").GetAttribute("data-type"));
+        Assert.Equal("1,234.5", Cell(cut, row, "qty").TextContent.Trim());
+        Assert.Equal("20.00", cut.Find("[data-footer-field='amount']").TextContent.Trim());
+    }
+
+    /// <summary>GS-D11: hidden columns are not drawn but stay in the data set</summary>
+    [Fact]
+    public void GS_D11_HiddenColumnNotDrawn()
+    {
+        var def = GoldenScreen.Lines("invNo,sd.so.line.invNo,text,110,false,false,\"\",\"\",false,false",
+                                     "invNo,sd.so.line.invNo,text,110,false,false,\"\",\"\",false,true");
+
+        var cut = RenderGrid(GoldenScreen.OneLine(), def);
+
+        Assert.Equal(9, cut.FindAll(".quro-head [role=columnheader][data-field]").Count);
+        Assert.Empty(cut.FindAll("[data-field='invNo']"));
+    }
+
+    /// <summary>GS-D12 (G-01): edit=new edits only on added rows; F2 (BeginEdit), commit and paste on saved rows are refused</summary>
+    [Fact]
+    public async Task GS_D12_EditNewOnlyOnAddedRows()
+    {
+        var ds = GoldenScreen.OneLine();
+        var def = GoldenScreen.Lines("itemCd,sd.so.line.itemCd,text,150,true,", "itemCd,sd.so.line.itemCd,text,150,new,");
+        var cut = RenderGrid(ds, def);
+        var saved = ds.RowKeys[0];
+        var added = await cut.InvokeAsync(() => cut.Instance.AddRow());
+
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.BeginEdit(saved, "itemCd")));
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.CommitEdit(saved, "itemCd", "I-999")));
+        await cut.InvokeAsync(() => cut.Instance.Paste(saved, "itemCd", [["I-998"]]));
+        Assert.Equal("I-100", ds.GetItem(saved).ItemCd);
+        Assert.Equal("true", Cell(cut, saved, "itemCd").GetAttribute("aria-readonly"));
+
+        Assert.True(await cut.InvokeAsync(() => cut.Instance.BeginEdit(added, "itemCd")));
+        Assert.Null(Cell(cut, added, "itemCd").GetAttribute("aria-readonly"));
+    }
+
+    /// <summary>
+    /// GS-D13: the app applies calc rules in OnCellValueChanged with RuleExpression (A-44: the grid does not evaluate
+    /// expressions). One commit → one event, and the computed amount is on screen right away
+    /// </summary>
+    [Fact]
+    public async Task GS_D13_CalcRuleInApp()
+    {
+        var ds = GoldenScreen.OneLine();
+        var def = GoldenScreen.Lines();
+        var calc = def.Rules.Where(r => r.Action == RuleAction.Calc)
+            .Select(r => (r.On, Target: r.Targets[0], Expr: RuleExpression.Parse(r.Expr))).ToList();
+        var events = 0;
+        var changed = EventCallback.Factory.Create<CellValueChangedArgs<SoLine>>(this, e =>
+        {
+            events++;
+            foreach (var rule in calc.Where(c => c.On == e.Field + ".change"))
+                ds.SetValue(e.RowKey, rule.Target, rule.Expr.Evaluate(f => ds.GetValue(e.RowKey, f) as decimal?));
+        });
+        var cut = RenderGrid(ds, def, changed);
+        var row = ds.RowKeys[0];
+
+        Assert.True(await cut.InvokeAsync(() => cut.Instance.CommitEdit(row, "qty", "5")));
+
+        Assert.Equal(1, events);
+        Assert.Equal(50m, ds.GetItem(row).Amount);
+        Assert.Equal("50.00", Cell(cut, row, "amount").TextContent.Trim());
+    }
+
+    /// <summary>GS-D14 (G-02): validate "gt 0" with its message key; the app marks the cell from Validate()</summary>
+    [Fact]
+    public async Task GS_D14_ValidateGreaterThanZero()
+    {
+        var ds = GoldenScreen.OneLine();
+        var cut = RenderGrid(ds, GoldenScreen.Lines());
+        var row = ds.RowKeys[0];
+
+        await cut.InvokeAsync(() => cut.Instance.CommitEdit(row, "qty", "0"));
+        var errors = ds.Validate().Errors;
+
+        var error = Assert.Single(errors);
+        Assert.Equal((row, "msg.qty.zero"), (error.RowKey, error.MessageKey));
+        ds.SetCellMark(error.RowKey, error.Field, new CellMark(CellMarkLevel.Error, error.MessageKey));
+        await cut.InvokeAsync(() => cut.Instance.Refresh());
+        Assert.Equal("true", Cell(cut, row, "qty").GetAttribute("aria-invalid"));
+
+        await cut.InvokeAsync(() => cut.Instance.CommitEdit(row, "qty", "0.5"));
+        Assert.True(ds.Validate().IsValid);
+    }
+
+    /// <summary>GS-D15: initRows adds empty rows once, on an empty data set only</summary>
+    [Fact]
+    public void GS_D15_InitRows()
+    {
+        var ds = new QuroDataSet<SoLine>();
+        var def = GoldenScreen.Lines("initRows: 0", "initRows: 3");
+
+        var cut = RenderGrid(ds, def);
+        cut.Render();
+
+        Assert.Equal(3, ds.RowKeys.Count);
+        Assert.All(ds.RowKeys, k => Assert.Equal(RowState.Inserted, ds.GetState(k)));
+        Assert.Equal(3, cut.FindAll("[role=row][data-row]").Count);
+
+        var loaded = GoldenScreen.OneLine();
+        RenderGrid(loaded, def);
+        Assert.Single(loaded.RowKeys);
+    }
+
+    /// <summary>GS-D15 (G-03): clipboard: false turns off copy and paste</summary>
+    [Fact]
+    public async Task GS_D15_ClipboardOff()
+    {
+        var ds = GoldenScreen.OneLine();
+        var cut = RenderGrid(ds, GoldenScreen.Lines("clipboard: true", "clipboard: false"));
+        var row = ds.RowKeys[0];
+
+        Assert.Equal("off", cut.Find("[role=grid]").GetAttribute("data-clipboard"));
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.Paste(row, "itemName", [["Nut"]])));
+        Assert.Equal("Bolt", ds.GetItem(row).ItemName);
+    }
+
+    /// <summary>GS-D15: frozen: 2 fixes the first two columns</summary>
+    [Fact]
+    public void GS_D15_Frozen()
+    {
+        var cut = RenderGrid(GoldenScreen.OneLine(), GoldenScreen.Lines("    clipboard: true", "    clipboard: true\n    frozen: 2"));
+
+        var headers = cut.FindAll(".quro-head [role=columnheader][data-field]");
+        Assert.Equal([true, true, false], headers.Take(3).Select(h => h.ClassList.Contains("quro-frozen")));
+    }
+
+    /// <summary>GS-D15 (G-04): columns can opt out of filter, sort and grouping</summary>
+    [Fact]
+    public async Task GS_D15_ColumnFilterSortGroupOff()
+    {
+        var ds = TestData.ThreeLines();
+        var cut = Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" Culture="En">
+                                               <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" Filterable="false" Sortable="false" Groupable="false" />
+                                               <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" />
+                                           </QuroGrid>);
+
+        Assert.Empty(cut.FindAll("[data-field='ItemCode'] .quro-filter-button"));
+        Assert.Single(cut.FindAll("[data-field='Qty'] .quro-filter-button"));
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.OpenFilter("ItemCode")));
+
+        await cut.InvokeAsync(() => cut.Instance.Sort("ItemCode", false));
+        Assert.Empty(cut.Instance.SortColumns);
+        await cut.InvokeAsync(() => cut.Instance.SetSort([new SortColumn("ItemCode", SortDirection.Ascending), new SortColumn("Qty", SortDirection.Descending)]));
+        Assert.Equal(["Qty"], cut.Instance.SortColumns.Select(s => s.Field));
+
+        await cut.InvokeAsync(() => cut.Instance.SetGroupBy(["ItemCode", "Qty"]));
+        Assert.Equal(["Qty"], cut.Instance.GroupColumns);
+    }
+}

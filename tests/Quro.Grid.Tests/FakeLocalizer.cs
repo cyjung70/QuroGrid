@@ -14,6 +14,7 @@ internal sealed class FakeLocalizer : IStringLocalizer
             ["mm.qty"] = "수량",
             ["app.stock.minus"] = "가용 재고를 초과했습니다",
             ["mm.detail.open"] = "열기",
+            ["sd.so.line.qty"] = "수량",
         },
         ["en"] = new()
         {
@@ -21,6 +22,7 @@ internal sealed class FakeLocalizer : IStringLocalizer
             ["mm.qty"] = "Quantity",
             ["app.stock.minus"] = "Exceeds available stock",
             ["mm.detail.open"] = "Open",
+            ["sd.so.line.qty"] = "Quantity",
         },
     };
 

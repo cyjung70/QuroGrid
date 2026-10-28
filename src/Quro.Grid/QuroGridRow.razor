@@ -11,7 +11,7 @@
         <div class="@MarkClass(Grid.CellClass(i, "quro-body-cell"), mark)" style="@Grid.CellStyle(i)" role="gridcell"
              aria-colindex="@(i + 1)" data-field="@col.Field" data-type="@Grid.TypeAttribute(col)"
              data-copy="@Grid.CopyText(RowKey, col)"
-             aria-readonly="@(col.ReadOnly || col.Type == CellType.Button ? "true" : null)"
+             aria-readonly="@(Grid.CellReadOnly(RowKey, col) ? "true" : null)"
              aria-invalid="@(mark?.Level == CellMarkLevel.Error ? "true" : null)"
              title="@(mark is null ? null : Grid.Text(mark.MessageKey))">
             @if (EditingField == col.Field)

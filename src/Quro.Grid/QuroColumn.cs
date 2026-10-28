@@ -27,6 +27,18 @@ public sealed class QuroColumn : ComponentBase, IDisposable
     /// <summary>True when the cells cannot be edited.</summary>
     [Parameter] public bool ReadOnly { get; set; }
 
+    /// <summary>Editable only on added rows (state Inserted); read-only on saved rows. Screen definition <c>edit: new</c>, G-01.</summary>
+    [Parameter] public bool NewRowOnly { get; set; }
+
+    /// <summary>Header filter allowed (G-04). Default true.</summary>
+    [Parameter] public bool Filterable { get; set; } = true;
+
+    /// <summary>Header sort allowed (G-04). Default true.</summary>
+    [Parameter] public bool Sortable { get; set; } = true;
+
+    /// <summary>Grouping by this column allowed (G-04). Default true.</summary>
+    [Parameter] public bool Groupable { get; set; } = true;
+
     /// <summary>열 너비 (px).</summary>
     [Parameter] public int Width { get; set; } = 120;
 
@@ -76,11 +88,15 @@ public sealed class QuroColumn : ComponentBase, IDisposable
     protected override void OnParametersSet()
     {
         object now = (Field, HeaderKey, Type, Format, ReadOnly, Width, Aggregate, CurrencyField, Required, Min, Max,
-            (Lookup, Options, CheckedValue, UncheckedValue, TextKey));
+            (Lookup, Options, CheckedValue, UncheckedValue, TextKey), (NewRowOnly, Filterable, Sortable, Groupable));
         if (_rendered is not null && !Equals(now, _rendered))
             Host?.ColumnChanged(this);
         _rendered = now;
     }
+
+    internal bool CanFilter => Filterable && Type != CellType.Button;
+    internal bool CanSort => Sortable && Type != CellType.Button;
+    internal bool CanGroup => Groupable && Type != CellType.Button;
 
     /// <summary>Removes the column from the grid.</summary>
     public void Dispose() => Host?.RemoveColumn(this);

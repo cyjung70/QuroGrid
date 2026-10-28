@@ -125,7 +125,7 @@ TOBE 2.4·2.7을 기준으로 하고, QuroGrid 그리드 기능에 맞춰 열 �
 | `bind` | 예 | 저장 DTO 컬렉션 이름 | H2 계약 테스트 키 (QuroERP) |
 | `rowKey` | 예 | 서버 행 키 필드 | 열에 없어도 됨 (숨은 키). DataSet 업무 키 (7.2) |
 | `initRows` | 아니오 (0) | 처음 빈 행 수 | `AddRows(initRows)` |
-| `clipboard` | 아니오 (true) | 복사·붙여넣기 허용 | 새 옵션 필요 (G-03) |
+| `clipboard` | 아니오 (true) | 복사·붙여넣기 허용 | `Clipboard` (G-03 ✅) |
 | `pageSize`★ | 아니오 (0) | 0 = 메모리 모드, >0 = 서버 페이징 (A-24) | `ItemsProvider` 사용 여부 |
 | `frozen`★ | 아니오 (0) | 왼쪽 고정 열 수 | `FrozenColumns` |
 | `deletedRows`★ | 아니오 (`hide`) | `hide` \| `strike` (O-02) | `DeletedRows` |
@@ -281,19 +281,19 @@ Critical(아키텍처·공개 API·데이터 모델) 항목은 확정 전까지 
 | `type=button` | `Type=Button`, `TextKey`=`label` | |
 | `width` | `Width` | |
 | `edit=false` | `ReadOnly=true` | |
-| `edit=new` | (없음) | **G-01** |
+| `edit=new` | `NewRowOnly=true` | G-01 ✅ |
 | `req` | `Required` | |
 | `fmt` | `Format` | |
 | `sum` | `Aggregate=Sum` | |
 | `hidden=true` | 열을 만들지 않음 (DataSet 필드만) | |
 | `min`/`max` | `Min`/`Max` | |
-| `filter`/`sort`/`group` | (없음, 전부 허용) | **G-04** |
+| `filter`/`sort`/`group` | `Filterable`/`Sortable`/`Groupable` | G-04 ✅ |
 
 ### 7.2 그리드 → `QuroGrid` · `QuroDataSet`
 - `rowKey`: QuroDataSet의 내부 행 키(int)와 별개인 **업무 키**. 저장 payload에 그대로 실림. 추가 행은 null (서버 채번, R6)
 - `initRows` → `AddRows(initRows)` 1회 (R3)
 - `pageSize>0` → `ItemsProvider`; `rules`의 `sum`은 서버 `Totals`로 (A-24)
-- `validate gt/ge/lt/le` → `DataSet.SetRule` (G-02)
+- `validate gt/ge/lt/le/ne` → `DataSet.SetRule` (G-02 ✅): `MinExclusive`·`MaxExclusive`·`NotEqual`, 메시지 = `msg` (`FieldRule.MessageKey`)
 
 ### 7.3 툴바 → 그리드 API
 `addRow` → `AddRow()`, `deleteRow` → `DeleteSelectedRows()`, `undoRow` → `RevertRow(active)` (O-01), `exportXlsx`/`exportCsv` → `GetExportRequest(format)`, `uploadCsv` → 앱이 파일을 읽어 `PasteCells`와 같은 경로 (G-05). `query`·`new`·`save`·`delete`·`print`는 앱.
@@ -310,10 +310,10 @@ Critical(아키텍처·공개 API·데이터 모델) 항목은 확정 전까지 
 ### 7.5 그리드 기능 갭 (구현 전 GS 시나리오 필요)
 | ID | 갭 | 필요 공개 API (제안) |
 |---|---|---|
-| G-01 | 추가 행에서만 편집되는 열 | `QuroColumn.EditableWhen` 또는 `NewRowOnly` (bool) |
-| G-02 | 초과·미만(배타) 범위, `ne` | `FieldRule.MinExclusive`/`MaxExclusive` 또는 `Rule` 목록 |
-| G-03 | 복사·붙여넣기 끄기 | `QuroGrid.Clipboard` (bool, 기본 true) |
-| G-04 | 열별 필터·정렬·그룹 허용 | `QuroColumn.Filterable`/`Sortable`/`Groupable` (기본 true) |
+| G-01 | 추가 행에서만 편집되는 열 | ✅ `QuroColumn.NewRowOnly` (A-45) |
+| G-02 | 초과·미만(배타) 범위, `ne` | ✅ `FieldRule.MinExclusive`·`MaxExclusive`·`NotEqual` (+ `MessageKey`) (A-45) |
+| G-03 | 복사·붙여넣기 끄기 | ✅ `QuroGrid.Clipboard` (A-45) |
+| G-04 | 열별 필터·정렬·그룹 허용 | ✅ `QuroColumn.Filterable`·`Sortable`·`Groupable` (A-45) |
 | G-05 | CSV 업로드 | 앱이 파싱 → 기존 붙여넣기 경로 공개 (`PasteAsync(cells)`) |
 
 ---

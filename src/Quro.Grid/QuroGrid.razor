@@ -3,7 +3,21 @@
 @implements IColumnHost
 @implements IAsyncDisposable
 
-<CascadingValue TValue="IColumnHost" Value="this" IsFixed="true">@ChildContent</CascadingValue>
+<CascadingValue TValue="IColumnHost" Value="this" IsFixed="true">
+    @if (Definition is not null)
+    {
+        @* 화면 정의의 열 (T-11, 설계서 7.1). hidden 열은 그리지 않고 DataSet 필드로만 둔다 *@
+        foreach (var c in Definition.Columns.Where(c => !c.Hidden))
+        {
+            <QuroColumn @key="c.Id" Field="@c.Id" HeaderKey="@c.Label" Type="DefinitionType(c)" Format="@c.Fmt"
+                        ReadOnly="c.Edit == ColumnEdit.ReadOnly" NewRowOnly="c.Edit == ColumnEdit.NewRowOnly"
+                        Width="c.Width" Aggregate="c.Sum ? Aggregate.Sum : Aggregate.None" CurrencyField="@c.Currency"
+                        Required="c.Req" Min="c.Min" Max="c.Max" TextKey="@(c.Type == ColumnType.Button ? c.Label : null)"
+                        Filterable="c.Filter" Sortable="c.Sort" Groupable="c.Group" />
+        }
+    }
+    @ChildContent
+</CascadingValue>
 
 @if (ConfirmLeave)
 {
@@ -17,7 +31,7 @@
     <div @ref="_root" class="@(Paging ? "quro-grid quro-paged" : "quro-grid")" style="@RootStyle"
          role="grid" tabindex="0" aria-colcount="@Columns.Count"
          aria-rowcount="@(headerRows + bodyRows + (ShowFooter ? 1 : 0))" data-header-rows="@headerRows"
-         data-dirty="@(DataSet.HasChanges ? "true" : null)"
+         data-dirty="@(DataSet.HasChanges ? "true" : null)" data-clipboard="@(Clipboard ? null : "off")"
          data-leave-message="@(ConfirmLeave ? Text(GridKeys.LeaveUnsaved) : null)">
         @* 연결 끊김 중에는 서버가 그릴 수 없으므로 안내를 미리 그려 두고 quro-grid.js가 보이게 한다 (R7, A-21) *@
         <div class="quro-notice quro-notice-offline" role="alert">
@@ -53,7 +67,7 @@
                     <div class="@CellClass(i, "quro-header")" style="@CellStyle(i)" role="columnheader"
                          aria-colindex="@(i + 1)" data-field="@col.Field" aria-sort="@AriaSort(sort)"
                          data-filtered="@(FilterOf(col) is null ? null : "true")">@Text(col.HeaderKey)@if (sort is not null)
-                         {<span class="quro-sort" aria-hidden="true" data-dir="@(sort.Direction == SortDirection.Ascending ? "asc" : "desc")" data-order="@SortOrder(col)"></span>}@if (col.Type != CellType.Button)
+                         {<span class="quro-sort" aria-hidden="true" data-dir="@(sort.Direction == SortDirection.Ascending ? "asc" : "desc")" data-order="@SortOrder(col)"></span>}@if (col.CanFilter)
                          {<span class="quro-filter-button" role="button" aria-label="@Text(GridKeys.FilterOpen)"></span>}<span class="quro-resize" aria-hidden="true"></span></div>
                 }
             </div>

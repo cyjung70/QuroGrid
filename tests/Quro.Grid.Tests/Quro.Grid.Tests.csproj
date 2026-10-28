@@ -23,4 +23,9 @@
     <ProjectReference Include="..\..\src\Quro.Grid\Quro.Grid.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Golden screen definition shared with Quro.Grid.Definition.Tests (GS-D11~GS-D15) -->
+    <None Include="..\Quro.Grid.Definition.Tests\Golden\sd\sd.so.entry.screen.toon" Link="Golden\sd.so.entry.screen.toon" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

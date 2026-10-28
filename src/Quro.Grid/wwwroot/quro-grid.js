@@ -363,13 +363,18 @@ function onMouseMove(s, e) {
     enqueue(s, () => { if (!s.editing) activate(s, target.row, target.field, true); });
 }
 
+/** Copy and paste turned off by the grid (Clipboard=false, G-03). Read from the markup so a change applies at once. */
+function clipboardOff(s) {
+    return s.root.dataset.clipboard === 'off';
+}
+
 function hasFocus(s) {
     return !s.editing && s.root.contains(document.activeElement);
 }
 
 /** Ctrl+C: 선택 범위의 표시 값을 엑셀 형식(탭·줄바꿈)으로. 표시와 값이 다른 셀(Check·Button)은 data-copy. */
 function onCopy(s, e) {
-    if (!hasFocus(s) || !s.active) return;
+    if (!hasFocus(s) || !s.active || clipboardOff(s)) return;
     const { rowEls, fields } = selection(s);
     const copyText = cell => cell ? (cell.dataset.copy ?? cell.textContent.trim()) : '';
     const text = rowEls
@@ -384,6 +389,10 @@ function onCopy(s, e) {
 /** Ctrl+V: 엑셀 형식을 행 × 열로 나눠 선택 범위 왼쪽 위부터. 서버 호출 1회 (R3) */
 function onPaste(s, e) {
     if (!hasFocus(s) || !s.active) return;
+    if (clipboardOff(s)) {
+        e.preventDefault();
+        return;
+    }
     if (isOffline(s)) {
         e.preventDefault();
         return;
