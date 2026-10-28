@@ -6,6 +6,7 @@
   </Configurations>
   <Folder Name="/src/">
     <Project Path="src/Quro.Grid.Data/Quro.Grid.Data.csproj" />
+    <Project Path="src/Quro.Grid.DefLint/Quro.Grid.DefLint.csproj" />
     <Project Path="src/Quro.Grid.Definition/Quro.Grid.Definition.csproj" />
     <Project Path="src/Quro.Grid.Sample/Quro.Grid.Sample.csproj" />
     <Project Path="src/Quro.Grid/Quro.Grid.csproj" />

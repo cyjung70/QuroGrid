@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Quro.Grid.Definition\Quro.Grid.Definition.csproj" />
+    <ProjectReference Include="..\..\src\Quro.Grid.DefLint\Quro.Grid.DefLint.csproj" />
   </ItemGroup>
 
   <ItemGroup>

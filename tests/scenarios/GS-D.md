@@ -2,7 +2,7 @@
 
 > 기준: `docs/QuroGrid_TOON_ScreenDef_v0.2.md` (이하 **설계서**). TOBE 입력: QuroERP TO BE 설계서 v0.1 5장 H1~H8 (QuroHarness 보관, 비공개).
 > 테스트 이름: `GS_D0x_<What>` (예: `GS_D01_LoadSalesOrderScreen_Counts`). 테스트를 먼저 쓰고 실패를 확인한 뒤 구현한다.
-> 상태: 설계서 6.1절 확정 (Addendum A-44), T-11 = `<QuroGrid Definition>`. GS-D11~GS-D15 완료 (A-45·A-46). T-12 결정 (A-46): GS-D16 착수.
+> 상태: 설계서 6.1절 확정 (Addendum A-44), T-11 = `<QuroGrid Definition>`. GS-D11~GS-D15 완료 (A-45·A-46). T-12 결정 (A-46): GS-D16 완료 (`Quro.Grid.DefLint`).
 
 ## 1. Harness H1~H8 ↔ 이 저장소
 
@@ -63,11 +63,11 @@ TOBE의 Harness 8개 중 QuroGrid가 판정할 수 있는 것은 여기서, Quro
 | GS-D14 | validate `gt 0` (G-02) | qty 0 커밋 | 메시지 키 `msg.qty.zero`가 `Validate()` 결과에 포함, 앱이 그 결과로 `SetCellMark` → 셀 오류 표시 (Data: `GS_D14_*` 배타 범위·ne·`MessageKey`·camelCase 필드) | H6 |
 | GS-D15 | 그리드 옵션 | `initRows: 3` / `clipboard: false` (G-03) / `frozen: 2` | 빈 행 3 (그리기 1회, R3, DataSet이 비었을 때만, `AddBlankRow`: 손대기 전에는 `HasChanges`·`Validate`·`GetChanges` 대상 아님, Data `GS_D15_*`) / Ctrl+V·복사 무시 / 왼쪽 2열 고정. 열 옵션 `Filterable`·`Sortable`·`Groupable=false` (G-04) | H6 |
 
-### 3.4 CLI (xUnit) — 묶음 D-6 (T-12 결정: A-46)
+### 3.4 CLI (xUnit) — 묶음 D-6 (T-12 결정: A-46, GS-D16 ✅)
 
 | ID | 시나리오 | 입력 | 기대 결과 | H |
 |---|---|---|---|---|
-| GS-D16 | 폴더 검증 CLI | 골든 폴더 + `bad/` 폴더, `--catalog catalog.json` | 정상 폴더 종료 코드 0, `bad/`는 1. 출력 한 줄 = `파일:줄: V-xx 메시지` (CI 주석으로 쓸 수 있는 형식) | H1~H4 H7 |
+| GS-D16 | 폴더 검증 CLI | 골든 폴더 + `bad/` 폴더, `--catalog catalog.json` | 정상 폴더 종료 코드 0, `bad/`는 1. 출력 한 줄 = `파일:줄: V-xx 메시지` (CI 주석으로 쓸 수 있는 형식). 카탈로그에 없는 키는 V-21 한 줄. 사용법 오류(폴더 없음·알 수 없는 옵션·카탈로그 읽기 실패)는 2 | H1~H4 H7 |
 
 ## 4. 여기서 다루지 않는 것 (QuroERP)
 
