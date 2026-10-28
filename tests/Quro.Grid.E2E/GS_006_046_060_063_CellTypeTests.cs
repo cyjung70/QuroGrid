@@ -95,6 +95,7 @@ public class GS_006_046_060_063_CellTypeTests(SampleServer server) : GridPageTes
         await Expect(Cell(2, "ItemCode")).ToHaveTextAsync("A1003");
         await Expect(Editor).ToHaveCountAsync(0);
         await ExpectActiveAsync(2, "ItemCode");                // F4 확정은 이동하지 않는다
+        await Expect(Page.GetByRole(AriaRole.Dialog)).ToHaveCountAsync(0);   // 팝업이 다 닫힌 뒤 키를 누른다 (닫히는 중의 키는 팝업이 받음)
         await Page.Keyboard.PressAsync("ArrowRight");          // 키보드는 그리드로 돌아온다
         await ExpectActiveAsync(2, "Qty");
     }
