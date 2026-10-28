@@ -1,6 +1,6 @@
 // quro-grid.js — QuroGrid의 얇은 JS 층 (Spec 4.2).
 // 소유: 활성 셀(포커스)·범위 선택·키보드 이동·편집 중 키 입력·클립보드 (R1).
-// 서버 호출은 편집 시작·커밋·취소·행 추가·붙여넣기(1회, R3) 때만 (R2).
+// 서버 호출은 편집 시작·커밋·취소·행 추가·행 삭제·붙여넣기(1회, R3)·활성 행 변경(구독 시) 때만 (R2).
 // 셀마다 핸들러를 달지 않고 그리드 루트 하나에서 이벤트를 받아 data-row / data-field로 좌표를 해석한다 (R5).
 
 const grids = new Map();
@@ -54,25 +54,30 @@ export function dispose(root) {
     document.removeEventListener('mouseup', s.onMouseUp);
     document.removeEventListener('copy', s.onCopy);
     document.removeEventListener('paste', s.onPaste);
+    clearTimeout(s.notifyTimer);
     s.style.remove();
     grids.delete(root);
 }
 
 // ── 이벤트 ──
 
-const HANDLED = new Set(['Enter', 'Tab', 'Escape', 'F2', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
+const HANDLED = new Set(['Enter', 'Tab', 'Escape', 'F2', 'Insert', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 
 function isChar(e) {
     return e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey;
 }
 
+function isRowDelete(e) {
+    return e.key === 'Delete' && e.ctrlKey;
+}
+
 function onKeyDown(s, e) {
     // 편집 중이고 밀린 동작이 없으면 문자·화살표는 에디터가 그대로 받는다 (서버 호출 없음, R2)
     if (s.editing && s.pending === 0 && !['Enter', 'Tab', 'Escape'].includes(e.key)) return;
-    if (!HANDLED.has(e.key) && !isChar(e)) return;
+    if (!HANDLED.has(e.key) && !isChar(e) && !isRowDelete(e)) return;
 
     e.preventDefault();
-    const key = { key: e.key, shift: e.shiftKey, char: isChar(e) };
+    const key = { key: isRowDelete(e) ? 'RowDelete' : e.key, shift: e.shiftKey, char: isChar(e) };
     enqueue(s, () => handleKey(s, key));
 }
 
@@ -181,6 +186,13 @@ async function handleKey(s, k) {
             if (s.editing && !(await commit(s))) return;
             moveToEditable(s, k.shift ? -1 : 1);
             return;
+        case 'Insert':
+            if (!s.editing) await addRow(s);   // 잠정: 목록 끝에 추가
+            return;
+        case 'RowDelete':
+            // 선택 범위의 행을 한 번에 (R3). 남은 행으로의 이동은 서버 렌더 뒤 ensureActive가 한다.
+            if (!s.editing) await s.dotnet.invokeMethodAsync('DeleteRows', selectedKeys(s));
+            return;
         case 'ArrowUp': return moveBy(s, -1, 0, k.shift);
         case 'ArrowDown': return moveBy(s, 1, 0, k.shift);
         case 'ArrowLeft': return moveBy(s, 0, -1, k.shift);
@@ -260,12 +272,15 @@ async function moveEnter(s) {
         moved = moveToEditable(s, 1);
     }
 
-    if (!moved && s.options.addRowOnLastEnter) {
-        const key = await s.dotnet.invokeMethodAsync('AddRow');
-        const row = await waitFor(() => s.root.querySelector(`.quro-body [role=row][data-row="${key}"]`));
-        const first = cellsOf(row).find(editable);
-        if (first) activate(s, key, first.dataset.field);
-    }
+    if (!moved && s.options.addRowOnLastEnter) await addRow(s);
+}
+
+/** 새 행을 추가하고(서버) 그 행의 첫 편집 가능 셀로 */
+async function addRow(s) {
+    const key = await s.dotnet.invokeMethodAsync('AddRow');
+    const row = await waitFor(() => s.root.querySelector(`.quro-body [role=row][data-row="${key}"]`));
+    const first = cellsOf(row).find(editable);
+    if (first) activate(s, key, first.dataset.field);
 }
 
 /** 활성 셀 이동. extend면 고정 끝(anchor)을 두고 범위를 넓힌다. 아니면 범위는 한 셀로 줄어든다. */
@@ -288,6 +303,51 @@ function activate(s, row, field, extend = false) {
     s.style.textContent = css;
     currentCell(s)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     if (!s.editing && document.activeElement !== s.root) s.root.focus({ preventScroll: true });
+    notifySelection(s);
+}
+
+/**
+ * 활성 행이 바뀌면 서버에 알린다 (Addendum A-13). 앱이 구독한 경우에만, 같은 행 안의 이동은 보내지 않는다.
+ * 빠르게 여러 행을 지나가면 멈춘 행만 보낸다 (100ms, 잠정).
+ */
+function notifySelection(s) {
+    if (!s.options.notifySelection || s.active.row === s.notifiedRow) return;
+    clearTimeout(s.notifyTimer);
+    s.notifyTimer = setTimeout(() => {
+        const row = s.active?.row;
+        if (row === undefined || row === s.notifiedRow || !currentCell(s)) return;
+        s.notifiedRow = row;
+        s.dotnet.invokeMethodAsync('SelectionChanged', row).catch(err => console.error('quro-grid', err));
+    }, 100);
+}
+
+/** 선택 범위의 행 키 (표시 순서). 삭제 뒤 활성 셀을 둘 위치로 범위 첫 행의 순번을 기억한다. */
+function selectedKeys(s) {
+    if (!s.active) return [];
+    const { rowEls } = selection(s);
+    s.activeIndex = rows(s).indexOf(rowEls[0]);
+    return rowEls.map(rowKey);
+}
+
+export function selectedRowKeys(root) {
+    const s = grids.get(root);
+    return s ? selectedKeys(s) : [];
+}
+
+/** 행 삭제 렌더 뒤 서버가 호출한다: 활성 셀이 사라졌으면 같은 순번(없으면 마지막) 행의 같은 열로. */
+export function ensureActive(root) {
+    const s = grids.get(root);
+    if (!s || !s.active || currentCell(s)) return;
+    const all = rows(s);
+    if (all.length === 0) {
+        s.active = s.anchor = null;
+        s.style.textContent = '';
+        return;
+    }
+    const row = all[Math.min(Math.max(s.activeIndex ?? 0, 0), all.length - 1)];
+    const cells = cellsOf(row);
+    const cell = cells.find(c => c.dataset.field === s.active.field) ?? cells[0];
+    activate(s, rowKey(row), cell.dataset.field);
 }
 
 // ── 선택 범위 ──

@@ -29,8 +29,18 @@ public sealed class CellValueChangedArgs<TItem>(int rowKey, string field, TItem 
 }
 
 /// <summary>행 추가 전 (OnRowAdding). <see cref="Item"/>에 기본값을 넣는다.</summary>
-public sealed class RowAddingArgs<TItem>(TItem item) where TItem : class
+public sealed class RowAddingArgs<TItem>(TItem item, int? sourceRowKey = null) where TItem : class
 {
+    public TItem Item { get; } = item;
+
+    /// <summary>행 복사(A-12)면 원본 행 키. 앱은 여기서 키·버전 등 복사하면 안 되는 값을 정리한다.</summary>
+    public int? SourceRowKey { get; } = sourceRowKey;
+}
+
+/// <summary>활성 행 변경 (OnSelectionChanged, Addendum A-13).</summary>
+public sealed class SelectionChangedArgs<TItem>(int rowKey, TItem item) where TItem : class
+{
+    public int RowKey { get; } = rowKey;
     public TItem Item { get; } = item;
 }
 
@@ -39,6 +49,12 @@ public sealed class RowAddedArgs<TItem>(int rowKey, TItem item) where TItem : cl
 {
     public int RowKey { get; } = rowKey;
     public TItem Item { get; } = item;
+}
+
+/// <summary>행 삭제 후 (OnRowDeleted, 제안 A-14). 삭제 호출 1회에 한 번, 실제 삭제된 행 키(취소 행 제외).</summary>
+public sealed class RowDeletedArgs(IReadOnlyList<int> rowKeys)
+{
+    public IReadOnlyList<int> RowKeys { get; } = rowKeys;
 }
 
 /// <summary>행 삭제 전 (OnRowDeleting). 행마다 발생하며 취소한 행만 남는다.</summary>

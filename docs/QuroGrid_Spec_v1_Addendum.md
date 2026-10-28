@@ -1,7 +1,7 @@
 # QuroGrid Spec v1 보완 문서 (Addendum A)
 
 - 대상: `docs/QuroGrid_FeatureMatrix_Spec_v1.pdf` (Spec v1 초안, 2026-10-28)
-- 문서 상태: A.1 (2026-10-28) · 스테이블영 결정 사항 반영
+- 문서 상태: A.3 (2026-10-28) · 스테이블영 결정 사항 반영 + 제안 1건(A-14, 승인 대기)
 - 이 문서는 Spec v1의 일부입니다. **아래 항목은 Spec 본문보다 우선합니다.** 본문에 없는 내용은 "보완", 본문과 다른 내용은 "변경"으로 표시합니다.
 
 ---
@@ -21,20 +21,32 @@
 | A-09 | 5 | 변경 | API 통합 테스트(xUnit + PostgreSQL)는 저장 API 쪽 범위. QuroGrid 저장소는 DataSet의 저장 호출을 가짜 HTTP 핸들러로 단위 테스트한다 | 2026-10-28 |
 | A-10 | 4.4, 4.5 | 보완 | 검증 규칙은 DataSet 규칙 API `SetRule(field, FieldRule)`로 등록하고, `QuroColumn`의 `Required`·`Min`·`Max`는 이 API로 넘긴다 | 2026-10-28 |
 | A-11 | 4.4 | 보완 | `Inserted` 행에 `RevertRow`를 호출하면 행을 제거한다 | 2026-10-28 |
+| A-12 | 3-B, R3 | 보완 | **행 복사**: 선택한 행을 같은 값의 새 행(`Inserted`)으로 복제하고, 새 행은 **각 원래 행 바로 아래**에 넣는다. 여러 행도 서버 호출 1회. 복사 행도 `OnRowAdding`을 거치며(`SourceRowKey`로 원본 전달) 앱이 키·버전 등을 정리한다 | 2026-10-28 |
+| A-13 | 4.10 | 보완 | `OnSelectionChanged`는 **활성 행이 바뀔 때만** 발생한다 (같은 행 안의 셀 이동은 제외). 앱이 구독한 경우에만 서버로 보낸다 | 2026-10-28 |
 
 ## 2. 이벤트 API 보완 (4.10)
 
 | 이벤트 | 시점 · 용도 | 취소 |
 |---|---|---|
 | `OnPasted` (A-04) | 붙여넣기 후. 추가된 행 키, 건너뛴 셀(행 키·필드·사유 리소스 키) 전달 | — |
+| `OnSelectionChanged` (A-13) | 활성 행 변경. 행 키와 행 객체 전달 | — |
+| `OnRowDeleted` (A-14, **제안**) | 행 삭제 후. 삭제 호출 1회에 한 번, 실제 삭제된 행 키 목록(취소 행 제외) | — |
 
 사유 리소스 키: `quro.paste.readonly`(읽기 전용·삭제 표시 행), `quro.paste.invalid`(로캘 해석 실패), `quro.paste.cancelled`(`OnCellValueChanging`에서 취소)
 
-## 3. 잠정 사항 (구현은 했으나 결정 대기)
+## 3. 제안 (구현했으나 승인 대기)
+
+| ID | Spec 절 | 구분 | 내용 | 이유 |
+|---|---|---|---|---|
+| A-14 | 4.10 | 보완 | 이벤트 `OnRowDeleted(RowDeletedArgs{RowKeys})` 추가. `OnRowAdded`와 짝 | Spec 이벤트 목록에는 `OnRowDeleting`(삭제 전)만 있어, 앱이 삭제 **후** 상태(변경 수·합계·버튼 활성화)를 갱신할 시점이 없다. Ctrl+Delete처럼 JS에서 시작한 삭제는 앱 쪽 렌더가 일어나지 않는다 |
+
+## 4. 잠정 사항 (구현은 했으나 결정 대기)
 
 | 항목 | 잠정안 |
 |---|---|
 | `AddRowOnLastEnter` 기본값 (A-02) | 끔 |
+| Insert 키 행 추가 위치 | 목록 끝 (`AddRow`와 같음) |
+| `OnSelectionChanged` 전송 간격 (A-13) | 활성 행이 멈춘 뒤 100ms (화살표로 여러 행을 빠르게 지나가면 마지막 행만) |
 | Popup 0건 일치 시 입력값 (A-05) | 확정하지 않고 편집 상태 유지, 안내는 앱이 `CellMark`로 |
 | 혼합 통화 합계 행 | 첫 행 통화의 소수 자릿수로 표시 |
 | 엑셀 내보내기(GS-054) 생성 위치 | 미정 |

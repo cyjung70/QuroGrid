@@ -23,6 +23,7 @@ public partial class QuroGrid<TItem> where TItem : class
     private ElementReference _root;
     private IJSObjectReference? _module;
     private DotNetObjectReference<QuroGrid<TItem>>? _self;
+    private bool _ensureActive;   // 행 삭제 후 JS에 활성 셀을 남은 행으로 옮기게 한다 (렌더 반영 뒤)
 
     [Inject] private IJSRuntime JS { get; set; } = default!;
 
@@ -60,10 +61,16 @@ public partial class QuroGrid<TItem> where TItem : class
     [Parameter] public EventCallback<RowAddingArgs<TItem>> OnRowAdding { get; set; }
     [Parameter] public EventCallback<RowAddedArgs<TItem>> OnRowAdded { get; set; }
     [Parameter] public EventCallback<RowDeletingArgs<TItem>> OnRowDeleting { get; set; }
+
+    /// <summary>삭제 후 (제안 A-14 — Spec 이벤트 목록에 없음). 삭제 호출 1회에 한 번.</summary>
+    [Parameter] public EventCallback<RowDeletedArgs> OnRowDeleted { get; set; }
     [Parameter] public EventCallback<PastingArgs> OnPasting { get; set; }
 
     /// <summary>붙여넣기 후: 추가된 행, 건너뛴 셀과 사유 (Addendum A-04).</summary>
     [Parameter] public EventCallback<PastedArgs> OnPasted { get; set; }
+
+    /// <summary>활성 행 변경 (Addendum A-13). 구독한 경우에만 JS가 보낸다.</summary>
+    [Parameter] public EventCallback<SelectionChangedArgs<TItem>> OnSelectionChanged { get; set; }
 
     internal IReadOnlyList<QuroColumn> Columns => _columns;
     internal CultureInfo EffectiveCulture => Culture ?? CultureInfo.CurrentCulture;
@@ -88,13 +95,21 @@ public partial class QuroGrid<TItem> where TItem : class
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender)
-            return;
-
-        _self = DotNetObjectReference.Create(this);
-        _module = await JS.InvokeAsync<IJSObjectReference>("import", ModulePath);
-        var options = new GridJsOptions(EnterDirection == EnterDirection.Down ? "down" : "right", AddRowOnLastEnter);
-        await _module.InvokeVoidAsync("init", _root, _self, options);
+        if (firstRender)
+        {
+            _self = DotNetObjectReference.Create(this);
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", ModulePath);
+            var options = new GridJsOptions(
+                EnterDirection == EnterDirection.Down ? "down" : "right",
+                AddRowOnLastEnter,
+                NotifySelection: OnSelectionChanged.HasDelegate);
+            await _module.InvokeVoidAsync("init", _root, _self, options);
+        }
+        else if (_ensureActive && _module is not null)
+        {
+            _ensureActive = false;
+            await _module.InvokeVoidAsync("ensureActive", _root);
+        }
     }
 
     public async ValueTask DisposeAsync()
@@ -159,20 +174,50 @@ public partial class QuroGrid<TItem> where TItem : class
         return key;
     }
 
-    private async Task<int> AddRowCore()
+    /// <summary>
+    /// 행 복사 (Addendum A-12): 표시 순서대로 각 행 바로 아래에 같은 값의 새 행. 여러 행도 호출 1회 (R3).
+    /// 복사 행도 OnRowAdding을 거치며 <see cref="RowAddingArgs{TItem}.SourceRowKey"/>로 원본을 알린다.
+    /// </summary>
+    [JSInvokable]
+    public async Task<IReadOnlyList<int>> CopyRows(IReadOnlyList<int> rowKeys)
     {
-        var item = Activator.CreateInstance<TItem>();
-        await OnRowAdding.InvokeAsync(new RowAddingArgs<TItem>(item));
+        var copies = new List<int>();
+        foreach (var source in DataSet.RowKeys.Where(rowKeys.Contains).ToList())
+            copies.Add(await AddRowCore(DataSet.CopyOf(source), source));
 
-        var key = DataSet.AddRow(item);
+        StateHasChanged();
+        return copies;
+    }
+
+    /// <summary>선택 범위(JS 소유)의 행을 복사한다. 툴바 버튼 등 그리드 밖에서 호출.</summary>
+    public async Task<IReadOnlyList<int>> CopySelectedRows() => await CopyRows(await SelectedRowKeys());
+
+    /// <summary>선택 범위(JS 소유)의 행을 삭제한다. 툴바 버튼 등 그리드 밖에서 호출.</summary>
+    public async Task<int> DeleteSelectedRows() => await DeleteRows(await SelectedRowKeys());
+
+    private async Task<IReadOnlyList<int>> SelectedRowKeys() =>
+        _module is null ? [] : await _module.InvokeAsync<int[]>("selectedRowKeys", _root);
+
+    private async Task<int> AddRowCore(TItem? item = null, int? source = null)
+    {
+        item ??= Activator.CreateInstance<TItem>();
+        await OnRowAdding.InvokeAsync(new RowAddingArgs<TItem>(item, source));
+
+        var key = DataSet.AddRow(item, afterRowKey: source);
         await OnRowAdded.InvokeAsync(new RowAddedArgs<TItem>(key, DataSet.GetItem(key)));
         return key;
     }
 
+    /// <summary>활성 행이 바뀌었을 때 JS가 호출한다 (Addendum A-13, 구독한 경우에만).</summary>
+    [JSInvokable]
+    public Task SelectionChanged(int rowKey) =>
+        OnSelectionChanged.InvokeAsync(new SelectionChangedArgs<TItem>(rowKey, DataSet.GetItem(rowKey)));
+
     /// <summary>여러 행 삭제. OnRowDeleting은 행마다 발생하고, 취소한 행은 남는다. 삭제한 행 수를 돌려준다.</summary>
+    [JSInvokable]
     public async Task<int> DeleteRows(IReadOnlyList<int> rowKeys)
     {
-        var deleted = 0;
+        var deleted = new List<int>();
         foreach (var key in rowKeys)
         {
             if (DataSet.GetState(key) == RowState.Deleted)
@@ -186,11 +231,15 @@ public partial class QuroGrid<TItem> where TItem : class
             DataSet.DeleteRow(key);
             if (_editing?.RowKey == key)
                 _editing = null;
-            deleted++;
+            deleted.Add(key);
         }
 
+        if (deleted.Count > 0)
+            await OnRowDeleted.InvokeAsync(new RowDeletedArgs(deleted));
+
+        _ensureActive = deleted.Count > 0;
         StateHasChanged();
-        return deleted;
+        return deleted.Count;
     }
 
     /// <summary>
@@ -282,10 +331,22 @@ public partial class QuroGrid<TItem> where TItem : class
     void IColumnHost.AddColumn(QuroColumn column)
     {
         _columns.Add(column);
+        RegisterRule(column);
         _epoch++;
     }
 
-    void IColumnHost.ColumnChanged() => _epoch++;
+    void IColumnHost.ColumnChanged(QuroColumn column)
+    {
+        RegisterRule(column);
+        _epoch++;
+    }
+
+    /// <summary>컬럼의 Required·Min·Max를 DataSet 규칙 API로 넘긴다 (Addendum A-10).</summary>
+    private void RegisterRule(QuroColumn col)
+    {
+        if (col.Required || col.Min is not null || col.Max is not null)
+            DataSet.SetRule(col.Field, new FieldRule { Required = col.Required, Min = col.Min, Max = col.Max });
+    }
 
     void IColumnHost.RemoveColumn(QuroColumn column)
     {

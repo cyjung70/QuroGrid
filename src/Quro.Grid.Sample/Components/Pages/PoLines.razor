@@ -8,13 +8,22 @@
 
 <h1>@L["sample.po_lines.title"]</h1>
 
-<QuroGrid TItem="PoLine" DataSet="_lines" Localizer="L" Culture="_culture" ShowFooter="true" FrozenColumns="1"
+@* 툴바는 그리드 바깥 (Spec 4.2: MudBlazor 영역). 선택 범위는 그리드(JS)가 소유하므로 그리드 메서드로 처리한다. *@
+<div class="sample-toolbar">
+    <button type="button" data-testid="copy-rows" @onclick="() => _grid.CopySelectedRows()">@L["sample.copy_rows"]</button>
+    <button type="button" data-testid="delete-rows" @onclick="() => _grid.DeleteSelectedRows()">@L["sample.delete_rows"]</button>
+</div>
+
+<QuroGrid @ref="_grid" TItem="PoLine" DataSet="_lines" Localizer="L" Culture="_culture" ShowFooter="true" FrozenColumns="1"
           EnterDirection="@(Enter == "down" ? EnterDirection.Down : EnterDirection.Right)"
           AddRowOnLastEnter="@(NewRow == 1)"
           AddRowsOnPaste="@(PasteRows != 0)"
           OnCellValueChanged="RecalcAmount"
           OnPasting="() => _pastes++"
-          OnPasted="ShowPasteResult">
+          OnPasted="ShowPasteResult"
+          OnRowAdding="SetLineNo"
+          OnRowDeleted="RefreshStatus"
+          OnSelectionChanged="@(Selection == 1 ? EventCallback.Factory.Create<SelectionChangedArgs<PoLine>>(this, ShowSelection) : default)">
     <QuroColumn Field="LineNo" HeaderKey="mm.line_no" Type="CellType.Number" ReadOnly="true" Width="60" />
     <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" />
     <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" Aggregate="Aggregate.Sum" />
@@ -36,6 +45,8 @@
     <dd data-testid="paste-skipped">@_skipped</dd>
     <dt>@L["sample.message"]</dt>
     <dd data-testid="paste-message">@_pasteMessage</dd>
+    <dt>@L["sample.selected_row"]</dt>
+    <dd data-testid="selected-row">@_selectedRow</dd>
     <dt>@L["sample.payload"]</dt>
     <dd><code data-testid="json">@_lines.GetChanges().ToJson()</code></dd>
 </dl>
@@ -43,6 +54,8 @@
 @code {
     private static readonly SampleLocalizer L = new();
     private readonly QuroDataSet<PoLine> _lines = new();
+    private QuroGrid<PoLine> _grid = default!;
+    private int? _selectedRow;
     private CultureInfo _culture = new("en-US");
     private int _pastes;
     private int _skipped;
@@ -59,6 +72,9 @@
 
     /// <summary>1이면 납기일(Date) 열 표시.</summary>
     [SupplyParameterFromQuery] public int? Dates { get; set; }
+
+    /// <summary>1이면 OnSelectionChanged 구독 (활성 행 표시).</summary>
+    [SupplyParameterFromQuery] public int? Selection { get; set; }
 
     /// <summary>표시·입력 로캘 (기본 en-US).</summary>
     [SupplyParameterFromQuery(Name = "culture")] public string? CultureName { get; set; }
@@ -94,6 +110,15 @@
         if (e.Field is nameof(PoLine.Qty) or nameof(PoLine.UnitPrice))
             _lines.SetValue(e.RowKey, nameof(PoLine.Amount), e.Item.Qty * e.Item.UnitPrice);
     }
+
+    /// <summary>새 행·복사 행에 다음 행 번호를 준다 (복사 행은 원본 번호를 쓰면 안 됨, A-12)</summary>
+    /// <summary>삭제 후 변경 수 표시 갱신 (이벤트 처리 뒤 페이지가 다시 그려진다)</summary>
+    private static void RefreshStatus(RowDeletedArgs e) { }
+
+    private void SetLineNo(RowAddingArgs<PoLine> e) =>
+        e.Item.LineNo = _lines.RowKeys.Select(k => _lines.GetItem(k).LineNo).DefaultIfEmpty().Max() + 1;
+
+    private void ShowSelection(SelectionChangedArgs<PoLine> e) => _selectedRow = e.RowKey;
 
     private void ShowPasteResult(PastedArgs e)
     {

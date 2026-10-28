@@ -40,6 +40,9 @@ public sealed class QuroDataSet<T> where T : class
 
     public object? GetValue(int rowKey, string field) => Field(field).GetValue(Find(rowKey).Item);
 
+    /// <summary>행의 현재 값을 복사한 새 객체 (행 복사용, 목록에는 넣지 않는다).</summary>
+    public T CopyOf(int rowKey) => Clone(Find(rowKey).Item);
+
     /// <summary>행 객체. 값은 <see cref="SetValue"/>로 바꿔야 행 상태가 갱신된다.</summary>
     public T GetItem(int rowKey) => Find(rowKey).Item;
 
@@ -134,16 +137,20 @@ public sealed class QuroDataSet<T> where T : class
             row.State = MatchesOriginal(row) ? RowState.Normal : RowState.Updated;
     }
 
-    /// <summary>행 추가. 상태는 Inserted.</summary>
-    public int AddRow(T? template = null)
+    /// <summary>행 추가. 상태는 Inserted. <paramref name="afterRowKey"/>가 있으면 그 행 바로 아래, 없으면 끝.</summary>
+    public int AddRow(T? template = null, int? afterRowKey = null)
     {
-        var item = Activator.CreateInstance<T>();
-        if (template is not null)
-            foreach (var prop in Fields.Values)
-                prop.SetValue(item, prop.GetValue(template));
-
+        var item = template is null ? Activator.CreateInstance<T>() : Clone(template);
         var row = new Row(_nextInsertedKey--, item, RowState.Inserted, original: null);
-        Append(row);
+
+        if (afterRowKey is null)
+            Append(row);
+        else
+        {
+            // 행 복사: 원래 행 바로 아래 (Addendum A-12)
+            _rows.Insert(_rows.IndexOf(Find(afterRowKey.Value)) + 1, row);
+            _byKey.Add(row.Key, row);
+        }
         return row.Key;
     }
 
@@ -263,6 +270,14 @@ public sealed class QuroDataSet<T> where T : class
         Fields.TryGetValue(field, out var prop)
             ? prop
             : throw new ArgumentException($"{typeof(T).Name}에 필드 '{field}'가 없습니다.", nameof(field));
+
+    private static T Clone(T source)
+    {
+        var item = Activator.CreateInstance<T>();
+        foreach (var prop in Fields.Values)
+            prop.SetValue(item, prop.GetValue(source));
+        return item;
+    }
 
     private static Dictionary<string, object?> Snapshot(T item) =>
         Fields.Values.ToDictionary(p => p.Name, p => p.GetValue(item));
