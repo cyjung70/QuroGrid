@@ -3,7 +3,7 @@
 @{
     var deleted = Grid.DataSet.GetState(RowKey) == RowState.Deleted;
 }
-<div class="@(deleted ? "quro-row quro-deleted" : "quro-row")" role="row" data-row="@RowKey" aria-rowindex="@(RowIndex + 2)">
+<div class="@(deleted ? "quro-row quro-deleted" : "quro-row")" role="row" data-row="@RowKey" aria-rowindex="@(RowIndex + Grid.HeaderRows + 1)">
     @for (var i = 0; i < Grid.Columns.Count; i++)
     {
         var col = Grid.Columns[i];

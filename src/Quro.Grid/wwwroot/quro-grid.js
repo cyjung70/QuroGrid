@@ -488,7 +488,7 @@ async function handleHeaderKey(s, k) {
             return;
         case 'ArrowDown': {
             if (s.options.paging) s.root.scrollTop = 0;   // 첫 행이 그려져 있지 않을 수 있다
-            const first = await waitFor(() => s.root.querySelector('.quro-body [role=row][aria-rowindex="2"]'));
+            const first = await waitFor(() => s.root.querySelector(`.quro-body [role=row][aria-rowindex="${headerRows(s.root) + 1}"]`));
             if (!first) return;
             const cells = cellsOf(first);
             const cell = cells.find(c => c.dataset.field === s.header) ?? cells[0];
@@ -854,9 +854,13 @@ function rowEl(s, key) {
     return s.root.querySelector(`.quro-body [role=row][data-row="${key}"]`);
 }
 
-/** 화면 위치 (0부터). 서버가 aria-rowindex = 위치 + 2 (헤더가 1)로 그린다. */
+/** 화면 위치 (0부터). 서버가 aria-rowindex = 위치 + 헤더 행 수 + 1로 그린다 (다단 헤더면 헤더가 여러 행, GS-070). */
 function rowIndexOf(el) {
-    return el ? Number(el.getAttribute('aria-rowindex')) - 2 : -1;
+    return el ? Number(el.getAttribute('aria-rowindex')) - headerRows(el.closest('[role=grid]')) - 1 : -1;
+}
+
+function headerRows(root) {
+    return Number(root?.dataset.headerRows ?? 1);
 }
 
 // ── 클립보드 (엑셀 형식: 탭·줄바꿈, 특수 문자가 있으면 큰따옴표) ──
