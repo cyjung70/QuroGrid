@@ -4,6 +4,7 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 소비자(QuroERP)는 버전을 올리기 전에 이 파일을 읽는다.
 
 ## Unreleased
+- Changed: 화면 정의(TOON) 계약을 v0.2 스키마로 (문서만, Addendum A-44) — consumer-contract 4·6장. `Quro.Grid.Definition`·`<QuroGrid Definition>`은 구현 예정이라 아직 API 변화 없음
 - Added: `Quro.Grid.Definition` 패키지 골격 (TOON 화면 정의 파서·검증기) — I-02 결정 대기
 
 ## 0.1.0-alpha.1 — 2026-10-29
