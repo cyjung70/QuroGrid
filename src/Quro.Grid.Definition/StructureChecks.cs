@@ -16,9 +16,6 @@ internal sealed partial class StructureChecks(string file, List<DefinitionError>
 
     private static readonly HashSet<FieldType> TextTypes = [FieldType.Text, FieldType.Textarea, FieldType.Password];
 
-    [GeneratedRegex(@"[A-Za-z][A-Za-z0-9]*(?!\s*\()(?![A-Za-z0-9])")]
-    private static partial Regex Identifier();
-
     // Design 5.5: @today, @now, @company.{key}, @setting:{key}, @user.{key}. Anything else starting with '@' is a typo.
     [GeneratedRegex(@"^@(?:today|now|company\.[A-Za-z][A-Za-z0-9]*|user\.[A-Za-z][A-Za-z0-9]*|setting:[A-Za-z][A-Za-z0-9.]*)$")]
     private static partial Regex DefaultToken();
@@ -37,12 +34,27 @@ internal sealed partial class StructureChecks(string file, List<DefinitionError>
         if (def.Grids.Count == 0 && def.Toolbar.FirstOrDefault(GridCommands.Contains) is var cmd && GridCommands.Contains(cmd))
             Error("V-14", def.LineOf("toolbar"), $"toolbar command '{cmd}' needs a grid");
 
+        if (def.LockWhen is { } lockWhen)
+            CheckLockWhen(lockWhen, def.LineOf("lockWhen"), fieldById);
         CheckUniqueIds(def);
         if (def.Form is { } form)
             foreach (var f in form.Fields)
                 CheckField(f, form.Cols);
         foreach (var grid in def.Grids)
             CheckGrid(grid, fieldById);
+    }
+
+    private void CheckLockWhen(string text, int line, Dictionary<string, FieldDef> fieldById)
+    {
+        try
+        {
+            foreach (var field in LockExpression.Parse(text).Fields.Where(f => !fieldById.ContainsKey(f)))
+                Error("V-18", line, $"lockWhen field '{field}' is not a form field");
+        }
+        catch (FormatException ex)
+        {
+            Error("V-18", line, $"lockWhen '{text}': {ex.Message}");
+        }
     }
 
     private void CheckUniqueIds(ScreenDef def)
@@ -91,10 +103,25 @@ internal sealed partial class StructureChecks(string file, List<DefinitionError>
         var calcInputs = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
         foreach (var rule in grid.Rules)
         {
+            // Lookup rules use the {lookupId}.{query}(args) form (design 4.4); the others are rule expressions.
+            IReadOnlySet<string> inputs = new HashSet<string>();
+            if (rule.Action != RuleAction.Lookup)
+            {
+                try
+                {
+                    inputs = RuleExpression.Parse(rule.Expr).Identifiers;
+                }
+                catch (FormatException ex)
+                {
+                    Error("V-18", rule.Source.Line, $"expression '{rule.Expr}': {ex.Message}");
+                }
+                foreach (var input in inputs.Where(i => !columnById.ContainsKey(i)))
+                    Error("V-15", rule.Source.Line, $"{rule.Action.ToString().ToLowerInvariant()} input '{input}' is not a column of grid '{grid.Id}'");
+            }
+
             switch (rule.Action)
             {
                 case RuleAction.Calc:
-                    var inputs = InputsOf(rule.Expr);
                     foreach (var target in rule.Targets)
                     {
                         if (!columnById.TryGetValue(target, out var col))
@@ -105,8 +132,6 @@ internal sealed partial class StructureChecks(string file, List<DefinitionError>
                             calcInputs[target] = set = new HashSet<string>(StringComparer.Ordinal);
                         set.UnionWith(inputs);
                     }
-                    foreach (var input in inputs.Where(i => !columnById.ContainsKey(i)))
-                        Error("V-15", rule.Source.Line, $"calc input '{input}' is not a column of grid '{grid.Id}'");
                     break;
                 case RuleAction.Lookup:
                     foreach (var target in rule.Targets.Where(t => !columnById.ContainsKey(t)))
@@ -134,7 +159,6 @@ internal sealed partial class StructureChecks(string file, List<DefinitionError>
             if (parts is ["requires", var field] && !fieldById.ContainsKey(field))
                 Error("V-18", v.Source.Line, $"'requires {field}': '{field}' is not a form field");
         }
-        // lockWhen fields (also V-18) are checked with LockExpression in chunk D-4.
     }
 
     /// <summary>True when <paramref name="column"/> is computed, directly or through other calc rules, from <paramref name="target"/>.</summary>
@@ -156,8 +180,4 @@ internal sealed partial class StructureChecks(string file, List<DefinitionError>
         }
         return false;
     }
-
-    // Identifiers of a rule expression that are not function names. Replaced by the RuleExpression parser in chunk D-4.
-    private static HashSet<string> InputsOf(string expr) =>
-        Identifier().Matches(expr).Select(m => m.Value).ToHashSet(StringComparer.Ordinal);
 }

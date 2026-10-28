@@ -216,7 +216,8 @@ factor := number | id | "(" expr ")" | "-" factor | func "(" args ")"
 func   := sum | min | max | round | abs | coalesce
 ```
 - `id`는 같은 그리드의 열 id, 또는 `sum`의 인수로 열 id. 폼 필드는 `lookup` 인수에서만
-- 계산은 `decimal`. `null`·빈 값은 0 (TOBE R11). 0으로 나누기 = 결과 `null` + 경고 (예외 없음)
+- 계산은 `decimal`. `null`·빈 값은 0 (TOBE R11). 0으로 나누기 = 결과 `null` + 경고 (예외 없음). `null` 결과는 0으로 나누기에서만 나오므로 호출자는 null을 경고로 표시한다
+- 함수: `sum(열)` 열 전체 합(빈 값 제외), `min`·`max`(인수 1개 이상), `round(x[, 자릿수 0~28])` 반올림은 0에서 먼 쪽(MidpointRounding.AwayFromZero), `abs(x)`, `coalesce(a, b, …)` 비어 있지 않은 첫 값
 - 반올림: 결과를 `target` 열의 `fmt` 소수 자릿수로 반올림하지 않는다 — 저장값 반올림은 서버 Pricing 규약 (T-13)
 - 문자열 연결·비교·사용자 함수·리플렉션 없음 → 식으로 임의 코드를 실행할 수 없다 (H7)
 
@@ -411,13 +412,14 @@ public sealed class ScreenDefValidator(IQuroDefinitionCatalog catalog)
     public IReadOnlyList<DefinitionError> Validate(ScreenDef def);
 }
 
-// D-4 — 식 (LockWhen·RuleDef.Expr·ValidateDef.Rule은 모델에 문자열로 두고 여기서 파싱)
+// ✅ D-4 — 식 (LockWhen·RuleDef.Expr는 모델에 문자열로 두고 여기서 파싱). 파싱 실패 = FormatException
+// Load는 calc·sum·set 식과 lockWhen을 파싱해 문법 오류·없는 필드를 V-18, 다른 그리드 열 입력을 V-15로 보고
 public sealed class RuleExpression
 {
     public static RuleExpression Parse(string expr);
-    public decimal? Evaluate(Func<string, decimal?> valueOf);
+    public decimal? Evaluate(Func<string, decimal?> valueOf, Func<string, IEnumerable<decimal?>>? columnValues = null);   // columnValues: sum(열)용 (초안에 없던 선택 매개변수)
 }
-public sealed class LockExpression { public static LockExpression Parse(string text); public bool Evaluate(Func<string, object?> valueOf); }
+public sealed class LockExpression { public static LockExpression Parse(string text); public bool Evaluate(Func<string, object?> valueOf); }   // and가 or보다 먼저, 값은 서수 문자열 비교
 ```
 - `SourceInfo(File, Line)`를 모든 정의에 달아 오류·로그에 위치를 낸다
 - 오류는 모두 모아서 줄 순서로 돌려준다 (첫 오류에서 멈추지 않음). 오류가 하나라도 있으면 `Value`는 null
