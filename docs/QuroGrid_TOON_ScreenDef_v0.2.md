@@ -350,47 +350,73 @@ Critical(아키텍처·공개 API·데이터 모델) 항목은 확정 전까지 
 
 ---
 
-## 9. 불변 모델 (공개 API 초안 — T-11과 함께 승인 필요)
+## 9. 불변 모델 (공개 API)
+
+C-02·T-11 확정(A-44)으로 승인. ✅ = 구현됨 (묶음 D-1, GS-D01·GS-D02), 나머지는 해당 묶음에서 GS 먼저.
 
 ```csharp
 namespace Quro.Grid.Definition;
 
+// ✅ D-1 — 모델. 선택 열(align, min, max, source, currency, filter, sort, group)은 ColumnDef의 init 속성
 public sealed record ScreenDef(string Id, string Module, string Title, int Version, string Api, string Key,
-    ScreenLayout Layout, PermDef Perm, LockExpression? LockWhen,
-    IReadOnlyList<ToolbarCommand> Toolbar, FormDef? Form, IReadOnlyList<GridDef> Grids, SourceInfo Source);
-
+    ScreenLayout Layout, PermDef Perm, string? LockWhen, IReadOnlyList<ToolbarCommand> Toolbar,
+    FormDef? Form, IReadOnlyList<GridDef> Grids, SourceInfo Source);
+public sealed record PermDef(string Read, string Write);
 public sealed record FormDef(int Cols, IReadOnlyList<FieldDef> Fields, IReadOnlyList<ReadOnlyRule> ReadOnlyFor);
-public sealed record FieldDef(string Id, string Label, FieldType Type, FieldMode Mode, int? Max, CaseRule Case,
-    DefaultValue? Default, SourceRef? Source, int Span, string? On);
-
+public sealed record FieldDef(string Id, string? Label, FieldType Type, FieldMode Mode, int? Max, CaseRule Case,
+    string? Default, string? DataSource, int Span, string? On, SourceInfo Source);
+public sealed record ReadOnlyRule(string Perm, IReadOnlyList<string> Fields);
 public sealed record GridDef(string Id, string Bind, string RowKey, int InitRows, bool Clipboard, int PageSize,
-    int Frozen, IReadOnlyList<ColumnDef> Columns, IReadOnlyList<RuleDef> Rules, IReadOnlyList<ValidateDef> Validate);
+    int Frozen, DeletedRowsMode DeletedRows, IReadOnlyList<ColumnDef> Columns, IReadOnlyList<RuleDef> Rules,
+    IReadOnlyList<ValidateDef> Validate, SourceInfo Source);
 public sealed record ColumnDef(string Id, string Label, ColumnType Type, int Width, ColumnEdit Edit, bool Req,
-    string? Fmt, string? Lookup, bool Sum, bool Hidden /* + 선택 열 */);
-public sealed record RuleDef(RuleTrigger On, RuleAction Action, IReadOnlyList<string> Targets, string Expr);
-public sealed record ValidateDef(string Target, ValidateRule Rule, string Msg);
-
+    string? Fmt, string? Lookup, bool Sum, bool Hidden, SourceInfo Source) { /* 선택 열 init 속성 */ }
+public sealed record RuleDef(string On, RuleAction Action, IReadOnlyList<string> Targets, string Expr, SourceInfo Source);
+public sealed record ValidateDef(string Target, string Rule, string Msg, SourceInfo Source);
+public enum ScreenLayout { FormGrid, Form, Grid }
+public enum ToolbarCommand { Query, New, Save, Delete, AddRow, DeleteRow, UndoRow, UploadCsv, ExportXlsx, ExportCsv, Print }
+public enum FieldType { Text, Textarea, Password, Select, Radio, Checkbox, Date, Number, Money, Money4, Hidden }
 public enum FieldMode { Opt, Req, Key, NewOnly, Ro, Auto, Hidden }
+public enum CaseRule { None, Upper, Lower }
+public enum ColumnType { Text, Number, Money, Date, Select, Checkbox, Button }
+public enum ColumnEdit { ReadOnly, Editable, NewRowOnly }     // TOON edit: false / true / new
+public enum ColumnAlign { Left, Center, Right }
+public enum RuleAction { Calc, Sum, Lookup, Set }
+public enum DeletedRowsMode { Hide, Strike }
+
+// ✅ D-1 — 로드·오류
+public sealed record SourceInfo(string File, int Line);
+public sealed record DefinitionError(string Code, string File, int Line, string Message);   // ToString() = "file:line: code message"
+public sealed class DefinitionResult<T> { public T? Value { get; } public IReadOnlyList<DefinitionError> Errors { get; } }
+public static class ScreenDefLoader
+{
+    public static DefinitionResult<ScreenDef> Load(string path, string text);   // strict 파싱(V-01) + 키(V-02) + 값·열거값(V-03)
+}
+
+// D-2 — 구조 검사 V-04~V-18, 모드 리졸버
 public enum FormState { New, Loaded, Locked }
 public readonly record struct FieldState(bool Visible, bool Editable, bool Required);
 public static class FieldModeResolver { public static FieldState Resolve(FieldMode mode, FormState state, bool permReadOnly); }
 
-public static class ScreenDefLoader
-{
-    public static DefinitionResult<ScreenDef> Load(string path, string text);   // strict 파싱 + 구조 검사 (V-01~V-18)
-}
+// D-3 — 카탈로그 검사 V-19~V-32
 public sealed class ScreenDefValidator(IQuroDefinitionCatalog catalog)
 {
-    public IReadOnlyList<DefinitionError> Validate(ScreenDef def);                // 카탈로그 검사 (V-19~V-32)
+    public IReadOnlyList<DefinitionError> Validate(ScreenDef def);
 }
+
+// D-4 — 식 (LockWhen·RuleDef.Expr·ValidateDef.Rule은 모델에 문자열로 두고 여기서 파싱)
 public sealed class RuleExpression
 {
-    public static RuleExpression Parse(string expr);                            // 실패 시 DefinitionError
+    public static RuleExpression Parse(string expr);
     public decimal? Evaluate(Func<string, decimal?> valueOf);
 }
+public sealed class LockExpression { public static LockExpression Parse(string text); public bool Evaluate(Func<string, object?> valueOf); }
 ```
 - `SourceInfo(File, Line)`를 모든 정의에 달아 오류·로그에 위치를 낸다
-- 컬렉션은 `ImmutableArray`/`FrozenDictionary`로 노출 (R6: Singleton 캐시)
+- 오류는 모두 모아서 줄 순서로 돌려준다 (첫 오류에서 멈추지 않음). 오류가 하나라도 있으면 `Value`는 null
+- 컬렉션은 `IReadOnlyList`로 노출하고 로드 뒤 바꾸지 않는다 (앱이 Singleton으로 캐시, R6)
+- 식·조건은 모델에 원문 문자열로 둔다 — 파싱 실패가 모델 로드를 막지 않게 하고, 식 언어를 따로 버전 관리하기 위함
+- TOON 리더(`ToonReader`)는 `internal`. i18n·`lookup.toon`도 읽어야 하면 그때 공개한다 (비파괴 추가)
 - 업무 용어(`customer`, `soNo`)는 코드에 없다. 골든 파일에만 있다
 
 ---
