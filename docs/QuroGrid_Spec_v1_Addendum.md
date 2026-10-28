@@ -1,7 +1,7 @@
 # QuroGrid Spec v1 보완 문서 (Addendum A)
 
 - 대상: `docs/QuroGrid_FeatureMatrix_Spec_v1.pdf` (Spec v1 초안 Draft v0.2, 2026-10-28 — 4.9·5장 본문 개정)
-- 문서 상태: A.18 (2026-10-29) · 스테이블영 결정 사항 반영
+- 문서 상태: A.19 (2026-10-29) · 스테이블영 결정 사항 반영
 - 이 문서는 Spec v1의 일부입니다. **아래 항목은 Spec 본문보다 우선합니다.** 본문에 없는 내용은 "보완", 본문과 다른 내용은 "변경"으로 표시합니다.
 
 ---
@@ -49,6 +49,8 @@
 | A-37 | 3-A (P1) | 보완 | **다단 헤더 (GS-070)**: `<QuroColumnGroup HeaderKey>`로 컬럼(과 그룹)을 묶으면 그 위에 그룹 헤더 행을 그린다. 그룹 칸 너비 = 묶인 **보이는** 컬럼 너비의 합 (리사이즈·숨김 반영, 모두 숨기면 칸 없음). 그룹 없는 컬럼 위는 빈 칸. 헤더 행 수만큼 `aria-rowindex`가 밀리고 그리드에 `data-header-rows`. 그룹 안 컬럼은 그 그룹 안에서만 이동, 그룹을 가르는 이동은 하지 않음 | 2026-10-29 |
 | A-38 | 3-E, 4.2 (P1) | 보완 | **테마·다크 모드 (GS-080·GS-081)**: 그리드 색은 CSS 변수로만 정의. 앱은 `--quro-*`(bg·text·border·head-bg·active·selected·error·error-line·warning·warning-line·check-line·check-mark·shadow)를 그리드나 바깥 요소에 두어 바꾼다. 없으면 MudBlazor 팔레트(`--mud-palette-surface`·`text-primary`·`lines-default`·`background-gray`·`primary`·`error`·`warning` 등, 다크 모드 포함), 그것도 없으면 기본값. 선택·오류·경고 배경은 강조색을 배경에 섞어(`color-mix`) 글자 명암비 4.5:1 이상 | 2026-10-29 |
 | A-39 | 4.4, A-33 (P1) | 보완 | **Undo/Redo 구현 (GS-076~GS-078)**: 이력은 QuroDataSet에 둔다 (`Undo`·`Redo`·`CanUndo`·`CanRedo`·`BeginUndoStep`). 단계마다 건드린 행의 전후 모습(값·상태·목록 위치)을 남겨 되살리므로 행 상태 규칙(6장)이 그대로 지켜진다. 그리드는 사용자 동작 하나(커밋 + 앱의 `OnCellValueChanged` 재계산, 붙여넣기, 일괄 삭제, 행 추가·복사, 체크 토글, 목록·코드도움 확정)를 한 단계로 묶는다. Ctrl+Z / Ctrl+Y·Ctrl+Shift+Z는 편집 중이 아닐 때 서버 1회, 편집 중에는 입력란 기본 Undo. `RevertRow`도 한 단계 | 2026-10-29 |
+| A-40 | 3-D, A-31 (P1) | 보완 | **헤더 필터 구현 (GS-071~GS-073)**: 헤더 오른쪽 필터 버튼(Button 컬럼 제외) 또는 헤더에서 Alt+↓ → 헤더 아래 패널. 입력은 컬럼 타입별로 Text·Popup = 포함(대소문자 무시), Number·Currency = 최소·최대(사용자 로캘), Date = 시작·종료(양 끝 포함, 빈 날짜 제외), Combo·Check = 값 목록. 컬럼끼리 AND. 패널 안 입력은 브라우저에서만, 열기·적용(Enter·적용 버튼)·해제·닫기(Esc·바깥 클릭) 때 서버 1회. 해석 실패면 그 입력에 `aria-invalid`, 패널 유지. 필터 중인 헤더에 `data-filtered`. API: `Filters`, `SetFilters`·`ClearFilters`(이벤트 없음), `OnFilterChanged(Filters)`, `ColumnFilter(Field, Contains, Min, Max, From, To, Values)`. 메모리 모드는 적용 시점에 거르고 합계·`aria-rowcount`는 보이는 행 기준. 페이징 모드는 `GridItemsRequest.Filters`로 서버가 거르고 처음부터 다시 조회. 내보내기 요청(`GridExportRequest.Filters`)에도 담는다 | 2026-10-29 |
+| A-41 | D-03 | 변경 | **라이선스: LGPL v3 → MIT.** 저장소 루트 `LICENSE.md`(MIT, Copyright (c) 2026 CHO Y. JUNG), 패키지 `PackageLicenseExpression` = `MIT`. 새 의존성은 MIT와 함께 배포할 수 있는 라이선스만(MIT·Apache 2.0·BSD 등). GPL 계열·상용은 계속 금지. Clean-room 규칙(2장)은 그대로 | 2026-10-29 |
 
 ## 2. 이벤트 API 보완 (4.10)
 
@@ -61,7 +63,8 @@
 | `OnCellButtonClick` (A-19) | Button 셀 클릭. 행 키·필드·행 객체 | — |
 | `OnSortChanged` (A-22) | 사용자가 헤더로 정렬을 바꾼 뒤. 정렬 목록(`SortColumn(필드, 방향)`, 비면 해제). 앱의 `SetSort`·`ClearSort`로는 발생하지 않음 | — |
 | `OnColumnResized` (A-23) | 경계 드래그가 끝난 뒤. 필드·새 너비(px) | — |
-| `ItemsProvider` (A-24, 파라미터) | 페이징 조회 함수. `GridItemsRequest(StartIndex, Count, Sort)` → `GridItemsResult(Items, TotalCount, Totals)`. 시작 행은 PageSize의 배수 | — |
+| `OnFilterChanged` (A-40) | 사용자가 필터 패널에서 조건을 적용·해제한 뒤. 현재 필터 목록(컬럼마다 하나, 적용 순서). 앱의 `SetFilters`·`ClearFilters`로는 발생하지 않음 | — |
+| `ItemsProvider` (A-24, 파라미터) | 페이징 조회 함수. `GridItemsRequest(StartIndex, Count, Sort, Filters)` → `GridItemsResult(Items, TotalCount, Totals)`. 시작 행은 PageSize의 배수 | — |
 | `OnLeaving` (A-20) | 미저장 변경이 있을 때 앱 안 이동 전. 이동할 주소(`TargetLocation`) 전달 | `Cancel` |
 
 사유 리소스 키: `quro.paste.readonly`(읽기 전용·삭제 표시 행), `quro.paste.invalid`(로캘 해석 실패), `quro.paste.cancelled`(`OnCellValueChanging`에서 취소)
@@ -107,5 +110,11 @@
 | `RejectChanges`와 이력 (A-39) | 이력을 비운다 (저장 성공·다시 조회와 같음) |
 | Undo 이력과 셀 표시 (A-39) | `SetCellMark`는 이력에 없음 (값만 되살림, 표시는 앱이 다시 판정) |
 | 페이징 중 Undo (A-39) | 놓았다가 다시 적재한 행은 행 키로 찾아 되살림 |
+| 필터 후 편집·추가 행 (A-40) | 메모리 모드는 적용 시점에 거르고, 그 뒤 편집해 조건에서 벗어난 행·추가한 행은 그대로 보임 (정렬 A-22와 같음). 다시 조회(`Load`)하면 다시 적용 |
+| 텍스트 필터 비교 (A-40) | 표시 문자열 또는 저장 값에 포함되면 맞음 (대소문자 무시). 빈 값은 맞지 않음 |
+| 값 목록 전부·전무 (A-40) | 값을 모두 고르거나 하나도 고르지 않으면 그 컬럼은 거르지 않음 |
+| 숫자 범위 빈 값 (A-40) | 최소·최대 중 하나라도 있으면 빈 값 행은 맞지 않음 |
+| 패널이 열리기 전 입력 (A-40) | 필터 버튼을 누르고 패널이 열리기 전에 친 키는 패널 입력으로 넘김 (편집 시작 중 입력과 같음) |
+| 필터 패널 문구 (A-40) | 리소스 키 `quro.filter.open`·`apply`·`clear`·`contains`·`min`·`max`·`from`·`to`·`checked`·`unchecked` |
 | 혼합 통화 합계 행 | 첫 행 통화의 소수 자릿수로 표시 |
 | 큰 붙여넣기 중 앱 화면 (A-26) | 셀마다 값 변경 이벤트를 받은 앱 화면은 이벤트마다 다시 그려진다 (Blazor `EventCallback` 동작). 그리드는 그리지 않지만, 앱 화면에 변경분 전체 직렬화 같은 무거운 표시가 있으면 느려진다 (샘플의 저장 payload 미리보기로 500행 × 10열 약 7초 확인 → 붙여넣기 성능 화면에서 뺌). 앱 지침으로 둠 |

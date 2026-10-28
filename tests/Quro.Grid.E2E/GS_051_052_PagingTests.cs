@@ -57,6 +57,22 @@ public class GS_051_052_PagingTests(SampleServer server) : GridPageTest(server)
         await Expect(Cell(1, "LineNo")).ToHaveCountAsync(0);   // 첫 페이지는 놓았다
     }
 
+    /// <summary>정렬을 바꿀 때마다 다시 조회한 행이 그려진다 (Virtualize.RefreshDataAsync 뒤 그리드가 다시 그림)</summary>
+    [Fact]
+    public async Task GS_052_SortTwice_RowsFollowServerOrder()
+    {
+        await OpenAsync("?large=1");
+        await Expect(Cell(1, "LineNo")).ToHaveTextAsync("1");
+        var header = Page.Locator("[role=columnheader][data-field='Qty']");
+        var firstQty = Page.Locator(".quro-body [role=row][data-row] [data-field=Qty]").First;
+
+        await header.ClickAsync();
+        await Expect(firstQty).ToHaveTextAsync("1");
+        await header.ClickAsync();
+        await Expect(header).ToHaveAttributeAsync("aria-sort", "descending");
+        await Expect(firstQty).ToHaveTextAsync("50");
+    }
+
     [Fact]
     public async Task GS_052_EditScrollAwayAndBack_ChangeKept_TotalAdjusted()
     {

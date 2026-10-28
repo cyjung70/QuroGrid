@@ -28,7 +28,9 @@ public sealed record ExportColumn(
 /// <param name="Columns">내보낼 컬럼 (화면 순서, Button 셀 제외)</param>
 /// <param name="Sort">현재 정렬 (비어 있으면 조회 순서)</param>
 /// <param name="Culture">표시 로캘 이름 (예: ko-KR)</param>
+/// <param name="Filters">현재 필터 (GS-072, 비어 있으면 전체). 저장 API가 조회 조건과 함께 적용한다</param>
 public sealed record GridExportRequest(
     IReadOnlyList<ExportColumn> Columns,
     IReadOnlyList<SortColumn> Sort,
-    string Culture);
+    string Culture,
+    IReadOnlyList<ColumnFilter> Filters);

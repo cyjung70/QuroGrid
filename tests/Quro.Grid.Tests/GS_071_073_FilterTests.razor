@@ -1,0 +1,196 @@
+@inherits GridTestContext
+
+@code {
+    // GS-071~GS-073 헤더 필터 (P1 5-4, Addendum A-31). 메모리 모드는 그리드가 거르고, 페이징 모드는 조건을 조회 요청에 담는다.
+    // 패널 열기·적용은 quro-grid.js가 OpenFilter·ApplyFilter를 1회씩 부른다 (패널 안 입력은 브라우저에서만, R2).
+
+    private static readonly CultureInfo En = new("en-US");
+    private static readonly CultureInfo De = new("de-DE");
+    private static readonly ComboOption[] Units = [new("EA", "Piece"), new("BOX", "Box")];
+
+    /// <summary>A1001·10·BOX·납기 없음·Y / A1002·5·EA·11-05·N / B2003·3·BOX·11-01·N (행 키 1·2·3)</summary>
+    private static QuroDataSet<PoLine> Lines()
+    {
+        var ds = new QuroDataSet<PoLine>();
+        ds.Load(
+        [
+            new PoLine { ItemCode = "A1001", Qty = 10m, Unit = "BOX", Urgent = "Y" },
+            new PoLine { ItemCode = "A1002", Qty = 5m, Unit = "EA", DueDate = new DateOnly(2026, 11, 5), Urgent = "N" },
+            new PoLine { ItemCode = "B2003", Qty = 3m, Unit = "BOX", DueDate = new DateOnly(2026, 11, 1), Urgent = "N" },
+        ]);
+        return ds;
+    }
+
+    private IRenderedComponent<QuroGrid<PoLine>> RenderGrid(QuroDataSet<PoLine> ds, CultureInfo? culture = null,
+        EventCallback<FilterChangedArgs> onFilter = default) =>
+        Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" Culture="culture ?? En" ShowFooter="true" OnFilterChanged="onFilter">
+                                     <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" />
+                                     <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" Aggregate="Aggregate.Sum" />
+                                     <QuroColumn Field="Unit" HeaderKey="mm.unit" Type="CellType.Combo" Options="Units" />
+                                     <QuroColumn Field="DueDate" HeaderKey="mm.due_date" Type="CellType.Date" />
+                                     <QuroColumn Field="Urgent" HeaderKey="mm.urgent" Type="CellType.Check" CheckedValue="@("Y")" UncheckedValue="@("N")" />
+                                     <QuroColumn Field="Detail" HeaderKey="mm.detail" Type="CellType.Button" TextKey="mm.detail.open" />
+                                 </QuroGrid>);
+
+    private static int[] Rendered(IRenderedComponent<QuroGrid<PoLine>> cut) =>
+        cut.FindAll("[role=row][data-row]").Select(r => int.Parse(r.GetAttribute("data-row")!)).ToArray();
+
+    private static string Footer(IRenderedComponent<QuroGrid<PoLine>> cut) =>
+        cut.Find("[data-footer-field=Qty]").TextContent.Trim();
+
+    private static Task<bool> Apply(IRenderedComponent<QuroGrid<PoLine>> cut, string field, FilterInput input) =>
+        cut.InvokeAsync(() => cut.Instance.ApplyFilter(field, input));
+
+    /// <summary>GS-071: 컬럼 타입마다 다른 입력 (텍스트 포함 / 숫자 범위 / 날짜 범위 / 값 목록). Button 컬럼은 필터 없음</summary>
+    [Fact]
+    public async Task GS_071_OpenFilter_PanelPerColumnType()
+    {
+        var cut = RenderGrid(Lines());
+        string[] Inputs() => cut.FindAll(".quro-filter-panel [data-filter]").Select(i => i.GetAttribute("data-filter")!).ToArray();
+
+        Assert.True(await cut.InvokeAsync(() => cut.Instance.OpenFilter("ItemCode")));
+        Assert.Equal("ItemCode", cut.Find(".quro-filter-panel").GetAttribute("data-field"));
+        Assert.Equal(["text"], Inputs());
+
+        await cut.InvokeAsync(() => cut.Instance.OpenFilter("Qty"));
+        Assert.Equal(["min", "max"], Inputs());
+
+        await cut.InvokeAsync(() => cut.Instance.OpenFilter("DueDate"));
+        Assert.Equal(["from", "to"], Inputs());
+        Assert.All(cut.FindAll(".quro-filter-panel input[data-filter]"), i => Assert.Equal("date", i.GetAttribute("type")));
+
+        await cut.InvokeAsync(() => cut.Instance.OpenFilter("Unit"));
+        var options = cut.FindAll(".quro-filter-panel input[data-filter=value]");
+        Assert.Equal(["EA", "BOX"], options.Select(o => o.GetAttribute("value")));
+        Assert.Contains("Piece", cut.Find(".quro-filter-panel").TextContent);
+
+        await cut.InvokeAsync(() => cut.Instance.OpenFilter("Urgent"));
+        Assert.Equal(["Y", "N"], cut.FindAll(".quro-filter-panel input[data-filter=value]").Select(o => o.GetAttribute("value")));
+
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.OpenFilter("Detail")));
+        Assert.Empty(cut.FindAll(".quro-filter-panel"));
+        Assert.Empty(cut.FindAll("[role=columnheader][data-field=Detail] .quro-filter-button"));
+        Assert.Single(cut.FindAll("[role=columnheader][data-field=Qty] .quro-filter-button"));
+
+        await cut.InvokeAsync(() => cut.Instance.OpenFilter("Qty"));
+        await cut.InvokeAsync(() => cut.Instance.CloseFilter());
+        Assert.Empty(cut.FindAll(".quro-filter-panel"));
+    }
+
+    /// <summary>GS-072: 조건은 AND, 텍스트는 대소문자 무시 포함, 합계는 보이는 행, 헤더에 필터 표시, OnFilterChanged</summary>
+    [Fact]
+    public async Task GS_072_Memory_ConditionsAnd_FooterVisibleRows()
+    {
+        var events = new List<IReadOnlyList<ColumnFilter>>();
+        var cut = RenderGrid(Lines(), onFilter: EventCallback.Factory.Create<FilterChangedArgs>(this, e => events.Add(e.Filters)));
+
+        await cut.InvokeAsync(() => cut.Instance.OpenFilter("ItemCode"));
+        Assert.True(await Apply(cut, "ItemCode", new FilterInput(Text: "a100")));
+        Assert.Equal([1, 2], Rendered(cut));
+        Assert.Empty(cut.FindAll(".quro-filter-panel"));                  // 적용하면 닫힘
+        Assert.Equal("15", Footer(cut));
+        Assert.Equal("true", cut.Find("[role=columnheader][data-field=ItemCode]").GetAttribute("data-filtered"));
+        Assert.Equal("4", cut.Find("[role=grid]").GetAttribute("aria-rowcount"));   // 헤더 + 2행 + 합계
+
+        await Apply(cut, "Qty", new FilterInput(Min: "6"));
+        Assert.Equal([1], Rendered(cut));
+        Assert.Equal([new ColumnFilter("ItemCode") { Contains = "a100" }, new ColumnFilter("Qty") { Min = 6m }],
+            cut.Instance.Filters.Select(f => f with { Values = null }));
+        Assert.Equal(2, events.Count);
+
+        await Apply(cut, "Qty", new FilterInput());                       // 빈 입력 = 그 컬럼 해제
+        Assert.Equal([1, 2], Rendered(cut));
+        Assert.Null(cut.Find("[role=columnheader][data-field=Qty]").GetAttribute("data-filtered"));
+
+        await cut.InvokeAsync(() => cut.Instance.SetFilters([]));         // 앱이 전체 해제 (이벤트 없음)
+        Assert.Equal([1, 2, 3], Rendered(cut));
+        Assert.Equal(3, events.Count);
+    }
+
+    /// <summary>GS-072: 날짜 범위(빈 날짜 제외), Combo·Check 값 목록</summary>
+    [Fact]
+    public async Task GS_072_Memory_DateRange_ValueLists()
+    {
+        var cut = RenderGrid(Lines());
+
+        await Apply(cut, "DueDate", new FilterInput(From: "2026-11-02"));
+        Assert.Equal([2], Rendered(cut));
+
+        await Apply(cut, "DueDate", new FilterInput());
+        await Apply(cut, "Unit", new FilterInput(Values: ["BOX"]));
+        Assert.Equal([1, 3], Rendered(cut));
+
+        await Apply(cut, "Urgent", new FilterInput(Values: ["N"]));
+        Assert.Equal([3], Rendered(cut));
+    }
+
+    /// <summary>GS-072: 숫자는 사용자 로캘로 해석, 해석 실패는 적용 안 함(패널 유지)</summary>
+    [Fact]
+    public async Task GS_072_Memory_LocaleParse_InvalidKeepsPanel()
+    {
+        var cut = RenderGrid(Lines(), De);
+
+        await cut.InvokeAsync(() => cut.Instance.OpenFilter("Qty"));
+        Assert.False(await Apply(cut, "Qty", new FilterInput(Min: "abc")));
+        Assert.Single(cut.FindAll(".quro-filter-panel"));
+        Assert.Equal("true", cut.Find(".quro-filter-panel [data-filter=min]").GetAttribute("aria-invalid"));
+        Assert.Empty(cut.Instance.Filters);
+
+        Assert.True(await Apply(cut, "Qty", new FilterInput(Min: "4,5")));
+        Assert.Equal(4.5m, cut.Instance.Filters.Single().Min);
+        Assert.Equal([1, 2], Rendered(cut));
+    }
+
+    /// <summary>GS-072: 적용 뒤 편집해 조건에서 벗어난 행·추가한 행은 그대로 보인다 (정렬 A-22와 같은 원칙). 내보내기 요청에 조건</summary>
+    [Fact]
+    public async Task GS_072_EditedAndAddedRows_StayVisible_ExportCarriesFilters()
+    {
+        var ds = Lines();
+        var cut = RenderGrid(ds);
+        await Apply(cut, "Qty", new FilterInput(Min: "4"));
+        Assert.Equal([1, 2], Rendered(cut));
+
+        await cut.InvokeAsync(() => cut.Instance.CommitEdit(2, "Qty", "1"));
+        var added = await cut.InvokeAsync(() => cut.Instance.AddRow());
+
+        Assert.Equal([1, 2, added], Rendered(cut));
+        Assert.Equal("11", Footer(cut));
+        Assert.Equal([new ColumnFilter("Qty") { Min = 4m }], cut.Instance.GetExportRequest().Filters);
+
+        ds.Load([new PoLine { ItemCode = "Z", Qty = 1m }, new PoLine { ItemCode = "Y", Qty = 9m }]);   // 다시 조회 → 조건 다시 적용
+        cut.Render();
+        Assert.Equal([2], Rendered(cut));
+    }
+
+    /// <summary>GS-073: 페이징 중에는 조건을 조회 요청에 담아 서버가 거르고, 처음부터 다시 조회한다</summary>
+    [Fact]
+    public async Task GS_073_Paging_FiltersGoToServer()
+    {
+        var rows = Enumerable.Range(1, 250).Select(n => new PoLine { LineNo = n, Qty = n, Version = 1 }).ToArray();
+        var requests = new List<GridItemsRequest>();
+        Task<GridItemsResult<PoLine>> Provide(GridItemsRequest r)
+        {
+            requests.Add(r);
+            var min = r.Filters.FirstOrDefault(f => f.Field == "Qty")?.Min ?? 0m;
+            var hit = rows.Where(p => p.Qty >= min).ToList();
+            return Task.FromResult(new GridItemsResult<PoLine>(
+                hit.Skip(r.StartIndex).Take(r.Count).Select(p => new PoLine { LineNo = p.LineNo, Qty = p.Qty, Version = 1 }).ToList(),
+                hit.Count, new Dictionary<string, decimal> { ["Qty"] = hit.Sum(p => p.Qty) }));
+        }
+
+        var ds = new QuroDataSet<PoLine>(line => line.LineNo);
+        var cut = Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" ItemsProvider="Provide" PageSize="100" Culture="En" ShowFooter="true">
+                                               <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" Aggregate="Aggregate.Sum" />
+                                           </QuroGrid>);
+        cut.WaitForAssertion(() => Assert.NotEmpty(Rendered(cut)));
+        Assert.All(requests, r => Assert.Empty(r.Filters));
+
+        await Apply(cut, "Qty", new FilterInput(Min: "200"));
+
+        cut.WaitForAssertion(() => Assert.Equal("53", cut.Find("[role=grid]").GetAttribute("aria-rowcount")));   // 헤더 + 51 + 합계
+        Assert.Equal(200m, requests[^1].Filters.Single().Min);
+        Assert.Equal(0, requests[^1].StartIndex % 100);
+        Assert.Equal(Enumerable.Range(200, 51).Sum().ToString("#,0", En), cut.Find("[data-footer-field=Qty]").TextContent.Trim());
+        Assert.Equal(200m, ds.GetValue(Rendered(cut)[0], "Qty"));
+    }
+}

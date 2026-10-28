@@ -4,13 +4,16 @@ namespace Quro.Grid;
 
 /// <summary>조회 요청. 시작 행은 PageSize의 배수, 건수는 PageSize.</summary>
 public sealed class GridItemsRequest(int startIndex, int count, IReadOnlyList<SortColumn> sort,
-    CancellationToken cancellationToken = default)
+    CancellationToken cancellationToken = default, IReadOnlyList<ColumnFilter>? filters = null)
 {
     public int StartIndex { get; } = startIndex;
     public int Count { get; } = count;
 
     /// <summary>정렬 조건 (비어 있으면 기본 순서). 페이징 중 정렬은 서버가 한다.</summary>
     public IReadOnlyList<SortColumn> Sort { get; } = sort;
+
+    /// <summary>필터 조건 (GS-073, A-31). 페이징 중 필터는 서버가 한다. 비어 있으면 전체</summary>
+    public IReadOnlyList<ColumnFilter> Filters { get; } = filters ?? [];
 
     public CancellationToken CancellationToken { get; } = cancellationToken;
 }

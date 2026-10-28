@@ -53,6 +53,16 @@ public sealed class SampleLocalizer : IStringLocalizer
         ["quro.paste.readonly"] = ("읽기 전용 셀은 건너뛰었습니다", "Read-only cells were skipped"),
         ["quro.paste.invalid"] = ("형식이 맞지 않는 값은 건너뛰었습니다", "Invalid values were skipped"),
         ["quro.paste.cancelled"] = ("변경이 취소된 셀이 있습니다", "Some changes were cancelled"),
+        ["quro.filter.open"] = ("필터", "Filter"),
+        ["quro.filter.apply"] = ("적용", "Apply"),
+        ["quro.filter.clear"] = ("해제", "Clear"),
+        ["quro.filter.contains"] = ("포함할 글자", "Contains"),
+        ["quro.filter.min"] = ("최소", "Min"),
+        ["quro.filter.max"] = ("최대", "Max"),
+        ["quro.filter.from"] = ("시작일", "From"),
+        ["quro.filter.to"] = ("종료일", "To"),
+        ["quro.filter.checked"] = ("체크", "Checked"),
+        ["quro.filter.unchecked"] = ("체크 안 함", "Unchecked"),
     };
 
     public LocalizedString this[string name] =>

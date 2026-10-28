@@ -49,13 +49,55 @@
                 {
                     var col = Columns[i];
                     var sort = SortOf(col);
-                    @* 헤더 클릭(정렬)·경계 드래그(리사이즈)는 quro-grid.js가 받는다 (R5, A-22·A-23) *@
+                    @* 헤더 클릭(정렬)·경계 드래그(리사이즈)·필터 버튼은 quro-grid.js가 받는다 (R5, A-22·A-23·A-31) *@
                     <div class="@CellClass(i, "quro-header")" style="@CellStyle(i)" role="columnheader"
-                         aria-colindex="@(i + 1)" data-field="@col.Field" aria-sort="@AriaSort(sort)">@Text(col.HeaderKey)@if (sort is not null)
-                         {<span class="quro-sort" aria-hidden="true" data-dir="@(sort.Direction == SortDirection.Ascending ? "asc" : "desc")" data-order="@SortOrder(col)"></span>}<span class="quro-resize" aria-hidden="true"></span></div>
+                         aria-colindex="@(i + 1)" data-field="@col.Field" aria-sort="@AriaSort(sort)"
+                         data-filtered="@(FilterOf(col) is null ? null : "true")">@Text(col.HeaderKey)@if (sort is not null)
+                         {<span class="quro-sort" aria-hidden="true" data-dir="@(sort.Direction == SortDirection.Ascending ? "asc" : "desc")" data-order="@SortOrder(col)"></span>}@if (col.Type != CellType.Button)
+                         {<span class="quro-filter-button" role="button" aria-label="@Text(GridKeys.FilterOpen)"></span>}<span class="quro-resize" aria-hidden="true"></span></div>
                 }
             </div>
         </div>
+
+        @if (FilterColumn is { } filterCol)
+        {
+            @* 필터 패널 (A-31): 입력은 브라우저에서만, 적용·해제·Esc는 quro-grid.js가 1회 호출한다 (R2). 위치는 JS가 헤더 아래로 *@
+            var draft = FilterDraft(filterCol);
+            <div class="quro-filter-panel" role="dialog" aria-label="@Text(filterCol.HeaderKey)" data-field="@filterCol.Field">
+                @switch (FilterKind(filterCol))
+                {
+                    case "number":
+                        <input class="quro-filter-input" data-filter="min" inputmode="decimal" value="@draft.Min"
+                               placeholder="@Text(GridKeys.FilterMin)" aria-label="@Text(GridKeys.FilterMin)" aria-invalid="@FilterInvalid("min")" />
+                        <input class="quro-filter-input" data-filter="max" inputmode="decimal" value="@draft.Max"
+                               placeholder="@Text(GridKeys.FilterMax)" aria-label="@Text(GridKeys.FilterMax)" aria-invalid="@FilterInvalid("max")" />
+                        break;
+                    case "date":
+                        <input class="quro-filter-input" type="date" data-filter="from" value="@draft.From"
+                               aria-label="@Text(GridKeys.FilterFrom)" aria-invalid="@FilterInvalid("from")" />
+                        <input class="quro-filter-input" type="date" data-filter="to" value="@draft.To"
+                               aria-label="@Text(GridKeys.FilterTo)" aria-invalid="@FilterInvalid("to")" />
+                        break;
+                    case "values":
+                        @foreach (var option in FilterValues(filterCol))
+                        {
+                            <label class="quro-filter-option">
+                                <input type="checkbox" data-filter="value" value="@option.Value"
+                                       checked="@(draft.Values?.Contains(option.Value) ?? true)" />@option.Text
+                            </label>
+                        }
+                        break;
+                    default:
+                        <input class="quro-filter-input" data-filter="text" value="@draft.Text"
+                               placeholder="@Text(GridKeys.FilterContains)" aria-label="@Text(GridKeys.FilterContains)" />
+                        break;
+                }
+                <div class="quro-filter-actions">
+                    <button type="button" data-filter-action="clear">@Text(GridKeys.FilterClear)</button>
+                    <button type="button" data-filter-action="apply">@Text(GridKeys.FilterApply)</button>
+                </div>
+            </div>
+        }
 
         <div class="quro-body" role="rowgroup">
             @if (Paging)
