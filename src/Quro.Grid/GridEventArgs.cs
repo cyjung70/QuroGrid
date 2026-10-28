@@ -131,3 +131,31 @@ public static class PasteKeys
     public const string Invalid = "quro.paste.invalid";
     public const string Cancelled = "quro.paste.cancelled";
 }
+
+/// <summary>그리드가 직접 표시하는 안내의 리소스 키 (R7, Addendum A-20·A-21). 앱의 Localizer에 문구를 둔다.</summary>
+public static class GridKeys
+{
+    /// <summary>연결 끊김 중: 입력 잠금 안내</summary>
+    public const string ConnectionOffline = "quro.connection.offline";
+
+    /// <summary>연결 끊김 중 미저장 변경이 있을 때 덧붙이는 경고</summary>
+    public const string ConnectionUnsaved = "quro.connection.unsaved";
+
+    /// <summary>회로가 바뀌어(세션 소멸) 미저장 변경이 사라졌음을 다시 연 화면에서 알림</summary>
+    public const string ChangesLost = "quro.connection.changes_lost";
+
+    /// <summary>미저장 변경이 있는 채로 앱 안 화면 이동 시 확인</summary>
+    public const string LeaveUnsaved = "quro.leave.unsaved";
+}
+
+/// <summary>
+/// 미저장 변경이 있는 채로 앱 안 화면 이동 (OnLeaving, Addendum A-20). 취소 가능.
+/// 구독하면 그리드 기본 확인창 대신 앱이 묻는다 (예: MudDialog).
+/// </summary>
+public sealed class LeavingArgs(string targetLocation)
+{
+    public string TargetLocation { get; } = targetLocation;
+
+    /// <summary>true면 이동하지 않는다.</summary>
+    public bool Cancel { get; set; }
+}

@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Routing;
 using Microsoft.Extensions.Localization;
 using Microsoft.JSInterop;
 using Quro.Grid.Data;
@@ -25,6 +26,7 @@ public partial class QuroGrid<TItem> where TItem : class
     private DotNetObjectReference<QuroGrid<TItem>>? _self;
     private bool _ensureActive;   // 행 삭제 후 JS에 활성 셀을 남은 행으로 옮기게 한다 (렌더 반영 뒤)
     private bool _endEdit;        // 선택 목록에서 골라 서버가 편집을 끝냈을 때 JS 편집 상태를 정리한다 (렌더 반영 뒤)
+    private readonly string _instanceId = Guid.NewGuid().ToString("N");   // 재연결 후 같은 회로인지 JS가 확인 (A-21)
     private (int RowKey, string Field)? _picker;   // 열린 선택 목록 (Date 달력·Combo 목록, Addendum A-17)
     private DateTime? _pickerDate;
 
@@ -81,6 +83,15 @@ public partial class QuroGrid<TItem> where TItem : class
     /// <summary>Button 셀 클릭 (Addendum A-19).</summary>
     [Parameter] public EventCallback<CellButtonClickArgs<TItem>> OnCellButtonClick { get; set; }
 
+    /// <summary>
+    /// 미저장 변경이 있으면 페이지 이탈을 확인한다 (R7, Addendum A-20: 기본 켬).
+    /// 창 닫기·새로고침은 브라우저 경고, 앱 안 화면 이동은 확인창(또는 <see cref="OnLeaving"/>).
+    /// </summary>
+    [Parameter] public bool ConfirmLeave { get; set; } = true;
+
+    /// <summary>앱 안 화면 이동 확인을 앱이 직접 할 때 구독한다 (Addendum A-20).</summary>
+    [Parameter] public EventCallback<LeavingArgs> OnLeaving { get; set; }
+
     internal IReadOnlyList<QuroColumn> Columns => _columns;
     internal CultureInfo EffectiveCulture => Culture ?? CultureInfo.CurrentCulture;
 
@@ -111,7 +122,8 @@ public partial class QuroGrid<TItem> where TItem : class
             var options = new GridJsOptions(
                 EnterDirection == EnterDirection.Down ? "down" : "right",
                 AddRowOnLastEnter,
-                NotifySelection: OnSelectionChanged.HasDelegate);
+                NotifySelection: OnSelectionChanged.HasDelegate,
+                InstanceId: _instanceId);
             await _module.InvokeVoidAsync("init", _root, _self, options);
         }
         else if (_module is not null)
@@ -513,6 +525,35 @@ public partial class QuroGrid<TItem> where TItem : class
 
     [JSInvokable]
     public void CancelEdit() => EndEditing();
+
+    /// <summary>재연결 후 JS가 호출한다. 같은 회로(같은 그리드 인스턴스)면 init 때 받은 값과 같다 (A-21).</summary>
+    [JSInvokable]
+    public string InstanceId() => _instanceId;
+
+    /// <summary>
+    /// 앱 안 화면 이동 전 (Addendum A-20). 미저장 변경이 있으면 OnLeaving(구독 시) 또는 확인창으로 묻고,
+    /// 취소하면 이동을 막는다.
+    /// </summary>
+    private async Task ConfirmInternalNavigation(LocationChangingContext context)
+    {
+        if (!ConfirmLeave || !DataSet.HasChanges)
+            return;
+
+        bool leave;
+        if (OnLeaving.HasDelegate)
+        {
+            var args = new LeavingArgs(context.TargetLocation);
+            await OnLeaving.InvokeAsync(args);
+            leave = !args.Cancel;
+        }
+        else
+        {
+            leave = _module is not null && await _module.InvokeAsync<bool>("confirmLeave", _root, Text(GridKeys.LeaveUnsaved));
+        }
+
+        if (!leave)
+            context.PreventNavigation();
+    }
 
     /// <summary>앱이 DataSet을 직접 바꾼 뒤 (예: SetCellMark) 화면에 반영한다. 바뀐 행만 다시 그린다.</summary>
     public void Refresh() => StateHasChanged();

@@ -74,6 +74,41 @@
     opacity: 0.6;
 }
 
+/* 그리드가 직접 띄우는 안내 (R7): 연결 끊김 중 입력 잠금, 회로 소멸 후 변경 유실 */
+.quro-notice {
+    display: none;
+    position: sticky;
+    left: 0;
+    z-index: 4;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--quro-warning-line);
+    background: var(--quro-warning);
+    white-space: normal;
+}
+
+.quro-notice-unsaved {
+    display: none;
+    font-weight: 600;
+}
+
+.quro-grid[data-offline] .quro-notice-offline,
+.quro-grid[data-lost] .quro-notice-lost {
+    display: block;
+}
+
+.quro-grid[data-offline][data-dirty] .quro-notice-unsaved {
+    display: inline;
+}
+
+.quro-notice-lost {
+    cursor: pointer;
+}
+
+/* 입력 잠금 중 */
+.quro-grid[data-offline] .quro-body {
+    opacity: 0.6;
+}
+
 /* 선택 목록 (Date 달력·Combo 목록, Addendum A-17): 그리드 스크롤 영역에 잘리지 않도록 화면 기준으로 띄운다.
    위치(top·left)는 quro-grid.js가 셀 좌표로 정한다. */
 .quro-picker {

@@ -198,6 +198,9 @@ public sealed class QuroDataSet<T> where T : class
         return new ValidationResult { Errors = errors };
     }
 
+    /// <summary>미저장 변경이 있는지 (Normal이 아닌 행). 이탈 경고·연결 끊김 경고에 쓴다 (R7).</summary>
+    public bool HasChanges => _rows.Exists(r => r.State != RowState.Normal);
+
     /// <summary>저장용 변경분.</summary>
     public ChangeSet<T> GetChanges() => new()
     {
