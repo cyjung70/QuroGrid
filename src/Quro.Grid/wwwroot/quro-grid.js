@@ -1,5 +1,5 @@
 // quro-grid.js — QuroGrid의 얇은 JS 층 (Spec 4.2).
-// 소유: 활성 셀(포커스)·범위 선택·키보드 이동·편집 중 키 입력·클립보드 (R1).
+// 소유: 활성 셀(포커스)·활성 헤더·범위 선택·키보드 이동·편집 중 키 입력·클립보드 (R1).
 // 서버 호출은 편집 시작·커밋·취소·행 추가·행 삭제·붙여넣기(1회, R3)·활성 행 변경(구독 시)·
 // 코드도움(F4)·선택 목록 열기(Alt+↓)·체크 토글·버튼 클릭 때만 (R2).
 // 셀마다 핸들러를 달지 않고 그리드 루트 하나에서 이벤트를 받아 data-row / data-field로 좌표를 해석한다 (R5).
@@ -19,6 +19,7 @@ export function init(root, dotnet, options) {
         root, dotnet, options, id, style,
         active: null,      // { row: number, field: string } — 선택 범위의 움직이는 끝
         anchor: null,      // 선택 범위의 고정 끝 (Shift+이동·드래그)
+        header: null,      // 키보드로 헤더에 있을 때 그 필드 (GS-064). 이때 본문 활성 셀 표시는 없다
         dragging: false,
         editing: null,     // { row, field, input }
         queue: Promise.resolve(),
@@ -109,8 +110,8 @@ function onKeyDown(s, e) {
     if (!HANDLED.has(e.key) && !isChar(e) && !isRowDelete(e)) return;
 
     e.preventDefault();
-    const key = { key: isRowDelete(e) ? 'RowDelete' : e.key, shift: e.shiftKey, alt: e.altKey, char: isChar(e) };
-    enqueue(s, () => handleKey(s, key));
+    const key = { key: isRowDelete(e) ? 'RowDelete' : e.key, shift: e.shiftKey, alt: e.altKey, ctrl: e.ctrlKey, char: isChar(e) };
+    enqueue(s, () => s.header ? handleHeaderKey(s, key) : handleKey(s, key));
 }
 
 function onMouseDown(s, e) {
@@ -197,6 +198,22 @@ function startResize(s, header, e) {
     document.addEventListener('mouseup', up, true);
 }
 
+/**
+ * 경계 더블클릭: 헤더·그려진 셀·합계 중 가장 긴 내용에 맞춘다 (GS-065, 최소 40px). 바뀌면 서버 1회.
+ * 잠깐 max-content로 그려 재고 바로 되돌린다 (그 사이 화면에는 그려지지 않는다).
+ */
+function autoFit(s, header) {
+    const field = header.dataset.field;
+    const grid = `[data-quro-grid="${s.id}"]`;
+    const selector = `${grid} [data-field="${CSS.escape(field)}"], ${grid} [data-footer-field="${CSS.escape(field)}"]`;
+    s.resizeStyle ??= document.head.appendChild(document.createElement('style'));
+    s.resizeStyle.textContent = `${selector} { width: max-content !important; }`;
+    const fit = Math.max(MIN_WIDTH, ...[...document.querySelectorAll(selector)].map(el => Math.ceil(el.getBoundingClientRect().width)));
+    s.resizeStyle.textContent = '';
+    if (fit === Math.round(header.getBoundingClientRect().width)) return;
+    enqueue(s, () => s.dotnet.invokeMethodAsync('ColumnResized', field, fit));
+}
+
 /** 드래그 중 너비를 별도 style 규칙으로 덮는다 (서버 렌더와 충돌하지 않게). field가 null이면 지운다. */
 function drawResize(s, field, width, shifted = []) {
     s.resizeStyle ??= document.head.appendChild(document.createElement('style'));
@@ -279,6 +296,11 @@ export function pasteData(root) {
 
 function onDblClick(s, e) {
     if (e.target.closest('.quro-picker') || isOffline(s)) return;
+    const handle = e.target.closest('.quro-head .quro-resize');
+    if (handle) {
+        autoFit(s, handle.closest('[role=columnheader]'));
+        return;
+    }
     const cell = e.target.closest('.quro-body [role=gridcell][data-field]');
     if (!cell || !hasEditor(cell)) return;
     const target = position(cell);
@@ -361,11 +383,67 @@ async function handleKey(s, k) {
                 await s.dotnet.invokeMethodAsync('DeleteRows', selectedKeys(s));
             }
             return;
-        case 'ArrowUp': return moveBy(s, -1, 0, k.shift);
+        case 'ArrowUp':
+            // 헤더로 (GS-064): Ctrl+↑는 어느 행에서나, ↑는 첫 행에서
+            if (k.ctrl || (!k.shift && rowIndexOf(rowEl(s, s.active.row)) === 0)) return enterHeader(s, s.active.field);
+            return moveBy(s, -1, 0, k.shift);
         case 'ArrowDown': return k.alt ? openPicker(s) : moveBy(s, 1, 0, k.shift);
         case 'ArrowLeft': return moveBy(s, 0, -1, k.shift);
         case 'ArrowRight': return moveBy(s, 0, 1, k.shift);
     }
+}
+
+// ── 헤더 키보드 (GS-064): ←→ 헤더 이동, Enter 정렬(Shift+Enter 추가), ↓ 본문 첫 행. 그 밖의 키는 무시 ──
+
+function headers(s) {
+    return [...s.root.querySelectorAll('.quro-head [role=columnheader][data-field]')];
+}
+
+function enterHeader(s, field) {
+    s.header = field;
+    s.root.setAttribute('data-active-header', field);
+    const scope = `[data-quro-grid="${s.id}"]`;
+    s.style.textContent = `${scope} .quro-head [data-field="${CSS.escape(field)}"]{outline:2px solid var(--quro-active,#2e6be6);outline-offset:-2px}`;
+    const el = headers(s).find(h => h.dataset.field === field);
+    markSelected(s, el ? [el] : []);
+    el?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+
+function leaveHeader(s) {
+    s.header = null;
+    s.root.removeAttribute('data-active-header');
+}
+
+async function handleHeaderKey(s, k) {
+    const all = headers(s);
+    const i = all.findIndex(h => h.dataset.field === s.header);
+    switch (k.key) {
+        case 'ArrowLeft':
+        case 'ArrowRight': {
+            const next = all[Math.min(Math.max(i + (k.key === 'ArrowLeft' ? -1 : 1), 0), all.length - 1)];
+            if (next) enterHeader(s, next.dataset.field);
+            return;
+        }
+        case 'Enter':
+            await s.dotnet.invokeMethodAsync('Sort', s.header, k.shift);
+            return;
+        case 'ArrowDown': {
+            if (s.options.paging) s.root.scrollTop = 0;   // 첫 행이 그려져 있지 않을 수 있다
+            const first = await waitFor(() => s.root.querySelector('.quro-body [role=row][aria-rowindex="2"]'));
+            if (!first) return;
+            const cells = cellsOf(first);
+            const cell = cells.find(c => c.dataset.field === s.header) ?? cells[0];
+            if (cell) activate(s, rowKey(first), cell.dataset.field);
+            return;
+        }
+    }
+}
+
+/** 스크린리더용 선택 표시 (GS-066): 이전 표시를 지우고 주어진 요소에 aria-selected */
+function markSelected(s, els) {
+    for (const el of s.root.querySelectorAll('[aria-selected=true]'))
+        if (!el.closest('.quro-picker')) el.removeAttribute('aria-selected');
+    for (const el of els) el.setAttribute('aria-selected', 'true');
 }
 
 // ── 편집 (서버 호출) ──
@@ -517,6 +595,7 @@ async function addRow(s, afterRow) {
 function activate(s, row, field, extend = false) {
     // 화면 위치(aria-rowindex)도 기억한다: 페이징 중 범위의 끝 행이 화면 밖으로 나가 그려지지 않아도 범위를 안다 (A-25)
     const index = rowIndexOf(rowEl(s, row));
+    if (s.header) leaveHeader(s);
     s.active = { row, field, index };
     if (!extend || !s.anchor) s.anchor = { row, field, index };
 
@@ -533,6 +612,7 @@ function activate(s, row, field, extend = false) {
         css += `${selectors.join(',')}{background:var(--quro-selected,#dbe7fd)}`;
     }
     s.style.textContent = css;
+    markSelected(s, sel.rowEls.flatMap(r => sel.fields.map(f => cellAt(s, rowKey(r), f))).filter(Boolean));
     currentCell(s)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     if (!s.editing && document.activeElement !== s.root) s.root.focus({ preventScroll: true });
     notifySelection(s);

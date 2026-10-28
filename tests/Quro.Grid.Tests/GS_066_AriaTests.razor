@@ -1,0 +1,51 @@
+@inherits GridTestContext
+
+@code {
+    // GS-066 스크린리더 속성 (그리드 쪽 렌더). 활성 셀·범위의 aria-selected는 JS 층이라 E2E에서 확인
+
+    private static readonly CultureInfo En = new("en-US");
+
+    private static int RowCount(IRenderedComponent<QuroGrid<PoLine>> cut) =>
+        int.Parse(cut.Find("[role=grid]").GetAttribute("aria-rowcount")!);
+
+    /// <summary>GS-066: aria-rowcount = 헤더 + 보이는 행 + 합계 행. 합계 행은 마지막 aria-rowindex</summary>
+    [Fact]
+    public async Task GS_066_RowCount_HeaderRowsFooter()
+    {
+        var ds = TestData.ThreeLines();
+        var cut = Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" ShowFooter="true" Culture="En">
+                                               <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" />
+                                               <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" Aggregate="Aggregate.Sum" />
+                                           </QuroGrid>);
+
+        Assert.Equal(5, RowCount(cut));
+        Assert.Equal("5", cut.Find(".quro-footer-row").GetAttribute("aria-rowindex"));
+
+        await cut.InvokeAsync(() => cut.Instance.DeleteRows([ds.RowKeys[0]]));   // 기본: 삭제 표시 행 숨김
+        Assert.Equal(4, RowCount(cut));
+        Assert.Equal("4", cut.Find(".quro-footer-row").GetAttribute("aria-rowindex"));
+
+        await cut.InvokeAsync(() => cut.Instance.AddRow());
+        Assert.Equal(5, RowCount(cut));
+    }
+
+    /// <summary>GS-066: 페이징 중에는 서버 전체 건수 + 추가 행 (그려지지 않은 행 포함)</summary>
+    [Fact]
+    public async Task GS_066_RowCount_Paging_ServerTotal()
+    {
+        var rows = Enumerable.Range(1, 250).Select(n => new PoLine { LineNo = n, Qty = n, Version = 1 }).ToArray();
+        Task<GridItemsResult<PoLine>> Provide(GridItemsRequest r) =>
+            Task.FromResult(new GridItemsResult<PoLine>(
+                rows.Skip(r.StartIndex).Take(r.Count).Select(p => new PoLine { LineNo = p.LineNo, Qty = p.Qty, Version = 1 }).ToList(),
+                rows.Length, null));
+
+        var ds = new QuroDataSet<PoLine>(line => line.LineNo);
+        var cut = Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" ItemsProvider="Provide" PageSize="100" Culture="En">
+                                               <QuroColumn Field="LineNo" HeaderKey="mm.line_no" Type="CellType.Number" ReadOnly="true" />
+                                           </QuroGrid>);
+
+        cut.WaitForAssertion(() => Assert.Equal(251, RowCount(cut)));
+        await cut.InvokeAsync(() => cut.Instance.AddRow());
+        cut.WaitForAssertion(() => Assert.Equal(252, RowCount(cut)));
+    }
+}
