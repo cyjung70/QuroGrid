@@ -1,0 +1,147 @@
+using System.Reflection;
+
+namespace Quro.Grid.Data;
+
+/// <summary>
+/// 그리드 데이터 모델 (Spec 4.4). 행 상태·원본값·변경분을 관리한다. UI를 참조하지 않는다.
+/// </summary>
+/// <remarks>
+/// 구현은 GS 시나리오 테스트를 따라 채운다. 아직 시나리오가 없는 API는 NotImplementedException.
+/// </remarks>
+public sealed class QuroDataSet<T> where T : class
+{
+    private static readonly Dictionary<string, PropertyInfo> Fields =
+        typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => p.CanRead && p.CanWrite && p.GetIndexParameters().Length == 0)
+            .ToDictionary(p => p.Name);
+
+    private readonly List<Row> _rows = [];
+    private readonly Dictionary<int, Row> _byKey = [];
+    private int _nextLoadedKey = 1;
+    private int _nextInsertedKey = -1;   // 추가 행은 음수 임시 키 (Spec 4.4 tempKey)
+
+    // ── Spec 4.4에 없는 보조 API (테스트에서 행을 적재·조회하기 위해 필요) ──
+
+    /// <summary>조회 결과를 적재한다. 모든 행은 Normal.</summary>
+    public void Load(IEnumerable<T> rows)
+    {
+        _rows.Clear();
+        _byKey.Clear();
+        _nextLoadedKey = 1;
+        _nextInsertedKey = -1;
+
+        foreach (var item in rows)
+            Append(new Row(_nextLoadedKey++, item, RowState.Normal, Snapshot(item)));
+    }
+
+    /// <summary>현재 목록에 있는 행 키 (표시 순서). Deleted 행도 포함한다 (화면 처리는 O-02).</summary>
+    public IReadOnlyList<int> RowKeys => _rows.Select(r => r.Key).ToList();
+
+    public object? GetValue(int rowKey, string field) => Field(field).GetValue(Find(rowKey).Item);
+
+    // ── Spec 4.4 API ──
+
+    public RowState GetState(int rowKey) => Find(rowKey).State;
+
+    /// <summary>원본값. 추가 행은 원본이 없으므로 null.</summary>
+    public object? GetOriginal(int rowKey, string field)
+    {
+        var prop = Field(field);
+        var row = Find(rowKey);
+        return row.Original is null ? null : row.Original[prop.Name];
+    }
+
+    public void SetValue(int rowKey, string field, object? value)
+    {
+        var prop = Field(field);
+        var row = Find(rowKey);
+        if (row.State == RowState.Deleted)
+            throw new InvalidOperationException($"삭제 표시된 행({rowKey})은 수정할 수 없습니다.");
+
+        prop.SetValue(row.Item, value);
+
+        if (row.State is RowState.Normal or RowState.Updated)
+            row.State = MatchesOriginal(row) ? RowState.Normal : RowState.Updated;
+    }
+
+    /// <summary>행 추가. 상태는 Inserted.</summary>
+    public int AddRow(T? template = null)
+    {
+        var item = Activator.CreateInstance<T>();
+        if (template is not null)
+            foreach (var prop in Fields.Values)
+                prop.SetValue(item, prop.GetValue(template));
+
+        var row = new Row(_nextInsertedKey--, item, RowState.Inserted, original: null);
+        Append(row);
+        return row.Key;
+    }
+
+    /// <summary>Inserted면 목록에서 제거, 아니면 Deleted.</summary>
+    public void DeleteRow(int rowKey)
+    {
+        var row = Find(rowKey);
+        if (row.State == RowState.Inserted)
+        {
+            _rows.Remove(row);
+            _byKey.Remove(rowKey);
+            return;
+        }
+
+        row.State = RowState.Deleted;
+    }
+
+    /// <summary>행 단위 변경 취소 (MVP Undo 대체, O-01 잠정안).</summary>
+    public void RevertRow(int rowKey) => throw new NotImplementedException();
+
+    /// <summary>저장용 변경분.</summary>
+    public ChangeSet<T> GetChanges() => new()
+    {
+        Inserted = ItemsIn(RowState.Inserted),
+        Updated = ItemsIn(RowState.Updated),
+        Deleted = ItemsIn(RowState.Deleted),
+    };
+
+    /// <summary>저장 성공 응답을 받은 뒤에만 호출한다.</summary>
+    public void AcceptChanges() => throw new NotImplementedException();
+
+    /// <summary>전체 변경 취소.</summary>
+    public void RejectChanges() => throw new NotImplementedException();
+
+    // ── 내부 ──
+
+    private void Append(Row row)
+    {
+        _rows.Add(row);
+        _byKey.Add(row.Key, row);
+    }
+
+    private Row Find(int rowKey) =>
+        _byKey.TryGetValue(rowKey, out var row)
+            ? row
+            : throw new KeyNotFoundException($"행 키 {rowKey}가 없습니다.");
+
+    private static PropertyInfo Field(string field) =>
+        Fields.TryGetValue(field, out var prop)
+            ? prop
+            : throw new ArgumentException($"{typeof(T).Name}에 필드 '{field}'가 없습니다.", nameof(field));
+
+    private static Dictionary<string, object?> Snapshot(T item) =>
+        Fields.Values.ToDictionary(p => p.Name, p => p.GetValue(item));
+
+    private static bool MatchesOriginal(Row row) =>
+        Fields.Values.All(p => Equals(p.GetValue(row.Item), row.Original![p.Name]));
+
+    private List<T> ItemsIn(RowState state) =>
+        _rows.Where(r => r.State == state).Select(r => r.Item).ToList();
+
+    private sealed class Row(int key, T item, RowState state, Dictionary<string, object?>? original)
+    {
+        public int Key { get; } = key;
+        public T Item { get; } = item;
+        public RowState State { get; set; } = state;
+
+        /// <summary>조회 시점 값. 추가 행은 null.</summary>
+        public Dictionary<string, object?>? Original { get; } = original;
+    }
+}
