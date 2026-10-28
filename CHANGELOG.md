@@ -4,6 +4,10 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 소비자(QuroERP)는 버전을 올리기 전에 이 파일을 읽는다.
 
 ## Unreleased
+- Added: `<QuroGrid Definition="@gridDef">` (T-11, GS-D11~GS-D15, A-45) — 정의에서 열·고정 열·삭제 행 표시·클립보드·합계 행·페이지 크기·검증 규칙·`initRows`. `Quro.Grid`가 `Quro.Grid.Definition`을 참조
+- Added: `QuroGrid.Clipboard` (G-03), `QuroColumn.NewRowOnly` (G-01), `QuroColumn.Filterable`·`Sortable`·`Groupable` (G-04)
+- Added: `FieldRule.MinExclusive`·`MaxExclusive`·`NotEqual`·`MessageKey`, `ValidationKeys.MinExclusive`·`MaxExclusive`·`NotEqual` (G-02). 소비자 조치: 새 리소스 키 3개 `quro.validation.minExclusive`·`maxExclusive`·`notEqual`의 문구를 `IStringLocalizer`에 추가
+- Changed: `QuroDataSet` 필드 이름을 정확히 같은 이름이 없으면 대소문자 무시로도 찾는다 (정의 id camelCase ↔ DTO PascalCase). 기존 이름은 그대로 동작
 - Added: `Quro.Grid.Definition` 패키지 (GS-D01·GS-D02, A-44) — `ScreenDefLoader.Load`, `DefinitionResult<T>`, `DefinitionError`, `SourceInfo`, 모델 `ScreenDef`·`PermDef`·`FormDef`·`FieldDef`·`ReadOnlyRule`·`GridDef`·`ColumnDef`·`RuleDef`·`ValidateDef`, 열거형 `ScreenLayout`·`ToolbarCommand`·`FieldType`·`FieldMode`·`CaseRule`·`ColumnType`·`ColumnEdit`·`ColumnAlign`·`RuleAction`·`DeletedRowsMode`. strict TOON 서브셋(설계서 3장), 오류 V-01~V-03. 소비자 조치: 없음 (새 패키지)
 - Added: `RuleExpression.Parse`·`Evaluate(valueOf, columnValues)`, `LockExpression.Parse`·`Evaluate` (GS-D08~GS-D10) — 화이트리스트 식, `decimal`, 빈 값 0, 0으로 나누기 = null. `ScreenDefLoader.Load`가 식·lockWhen 문법과 lockWhen 필드를 V-18로 보고. 소비자 조치: 없음
 - Added: `ScreenDefValidator.Validate`, `IQuroDefinitionCatalog` (GS-D03·GS-D04·GS-D06) — 카탈로그 검사 V-19~V-24, SQL·Clean-room·색 V-30~V-32. `ScreenDefLoader.Load`가 기본값 토큰 문법(설계서 5.5)을 V-03으로 보고. `ReadOnlyRule`에 `Source` 추가 (아직 배포 전이라 소비자 조치 없음)

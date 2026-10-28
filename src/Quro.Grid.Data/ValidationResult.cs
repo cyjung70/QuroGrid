@@ -22,4 +22,10 @@ public static class ValidationKeys
     public const string Min = "quro.validation.min";
     /// <summary>Value is above the maximum.</summary>
     public const string Max = "quro.validation.max";
+    /// <summary>Value is not greater than the exclusive minimum.</summary>
+    public const string MinExclusive = "quro.validation.minExclusive";
+    /// <summary>Value is not less than the exclusive maximum.</summary>
+    public const string MaxExclusive = "quro.validation.maxExclusive";
+    /// <summary>Value equals the number that is not allowed.</summary>
+    public const string NotEqual = "quro.validation.notEqual";
 }

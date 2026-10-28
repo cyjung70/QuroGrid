@@ -53,15 +53,15 @@ TOBE의 Harness 8개 중 QuroGrid가 판정할 수 있는 것은 여기서, Quro
 | GS-D09 | 계산 값 | qty 3, unitPrice 12.50, dcRate 10 → 33.75 / dcRate null → 37.50 / qty 빈 값 → 0 / `x / 0` → null + 경고 / `sum(amount)`에 빈 행 60개 섞임 → 숫자 (NaN 없음, R11) | 모두 `decimal`. 같은 입력이면 서버·클라이언트 결과 같음. `round`는 0에서 먼 쪽 반올림 (2.5 → 3) | H8 |
 | GS-D10 | lockWhen | `status in [RE,CL]` status=RE → Locked, =SO → 아님 / `status = RE and type != X` / 없는 필드 | 참·거짓 일치, 마지막은 V-18 | H6 |
 
-### 3.3 그리드 연결 (bUnit, `Quro.Grid.Tests`) — 묶음 D-5, **T-11·G-01~G-04 승인 후**
+### 3.3 그리드 연결 (bUnit, `Quro.Grid.Tests`) — 묶음 D-5 (GS-D11~GS-D15 ✅, A-45)
 
 | ID | 시나리오 | 입력 | 기대 결과 | H |
 |---|---|---|---|---|
 | GS-D11 | 열 매핑 | 골든 `lines` 그리드를 `<QuroGrid Definition>`으로 연결 | 보이는 열 10, 헤더는 `label` 키의 문구, `amount`는 읽기 전용·합계 행 있음, `itemCd`는 Popup 셀, `qty` 표시는 `fmt` + 사용자 로캘 | H6 |
-| GS-D12 | `edit=new` (G-01) | `itemCd`를 `edit=new`로 바꾼 정의, 기존 행 1 + 추가 행 1 | 추가 행에서만 편집기 열림. 기존 행 F2는 무시 | H6 |
-| GS-D13 | 규칙 calc 연결 | qty 2 → 5 입력 커밋 | `amount` 즉시 갱신 (서버 왕복 1회, R2: 표시용), `OnCellValueChanged` 1회 | H8 |
-| GS-D14 | validate `gt 0` (G-02) | qty 0 커밋 | 셀 오류 표시, 메시지 키 `msg.qty.zero`, `Validate()` 결과에 포함 | H6 |
-| GS-D15 | 그리드 옵션 | `initRows: 3` / `clipboard: false` (G-03) / `frozen: 2` | 빈 행 3 (`AddRows` 1회, R3) / Ctrl+V 무시 / 왼쪽 2열 고정 | H6 |
+| GS-D12 | `edit=new` (G-01) | `itemCd`를 `edit=new`로 바꾼 정의, 기존 행 1 + 추가 행 1 | 추가 행에서만 편집기 열림. 기존 행 F2·커밋·붙여넣기는 무시, `aria-readonly` | H6 |
+| GS-D13 | 규칙 calc 연결 | qty 2 → 5 입력 커밋 | `amount` 즉시 갱신 (서버 왕복 1회, R2: 표시용), `OnCellValueChanged` 1회. 계산은 앱이 `RuleExpression`으로 (A-44) | H8 |
+| GS-D14 | validate `gt 0` (G-02) | qty 0 커밋 | 메시지 키 `msg.qty.zero`가 `Validate()` 결과에 포함, 앱이 그 결과로 `SetCellMark` → 셀 오류 표시 (Data: `GS_D14_*` 배타 범위·ne·`MessageKey`·camelCase 필드) | H6 |
+| GS-D15 | 그리드 옵션 | `initRows: 3` / `clipboard: false` (G-03) / `frozen: 2` | 빈 행 3 (그리기 1회, R3, DataSet이 비었을 때만) / Ctrl+V·복사 무시 / 왼쪽 2열 고정. 열 옵션 `Filterable`·`Sortable`·`Groupable=false` (G-04) | H6 |
 
 ### 3.4 CLI (xUnit) — 묶음 D-6, T-12 결정 후
 

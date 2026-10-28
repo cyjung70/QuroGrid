@@ -15,6 +15,11 @@ public sealed class QuroDataSet<T> where T : class
             .Where(p => p.CanRead && p.CanWrite && p.GetIndexParameters().Length == 0)
             .ToDictionary(p => p.Name);
 
+    private static readonly Dictionary<string, PropertyInfo> FieldsIgnoreCase =
+        Fields.Values.GroupBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() == 1)   // ambiguous names (Qty and QTY) only match exactly
+            .ToDictionary(g => g.Key, g => g.Single(), StringComparer.OrdinalIgnoreCase);
+
     private readonly List<Row> _rows = [];
     private readonly Dictionary<int, Row> _byKey = [];
     private readonly Dictionary<string, FieldRule> _rules = [];
@@ -275,10 +280,12 @@ public sealed class QuroDataSet<T> where T : class
 
             if (ToDecimal(value) is { } number)
             {
-                if (number < rule.Min)
-                    errors.Add(new ValidationError(row.Key, field, ValidationKeys.Min));
-                if (number > rule.Max)
-                    errors.Add(new ValidationError(row.Key, field, ValidationKeys.Max));
+                if (rule.Min is { } min && (rule.MinExclusive ? number <= min : number < min))
+                    errors.Add(new ValidationError(row.Key, field, rule.MessageKey ?? (rule.MinExclusive ? ValidationKeys.MinExclusive : ValidationKeys.Min)));
+                if (rule.Max is { } max && (rule.MaxExclusive ? number >= max : number > max))
+                    errors.Add(new ValidationError(row.Key, field, rule.MessageKey ?? (rule.MaxExclusive ? ValidationKeys.MaxExclusive : ValidationKeys.Max)));
+                if (number == rule.NotEqual)
+                    errors.Add(new ValidationError(row.Key, field, rule.MessageKey ?? ValidationKeys.NotEqual));
             }
         }
 
@@ -498,8 +505,9 @@ public sealed class QuroDataSet<T> where T : class
             ? row
             : throw new KeyNotFoundException($"행 키 {rowKey}가 없습니다.");
 
+    // Screen definition ids are camelCase while DTO properties are PascalCase (design v0.2 P2): exact name first, then ignoring case.
     private static PropertyInfo Field(string field) =>
-        Fields.TryGetValue(field, out var prop)
+        Fields.TryGetValue(field, out var prop) || FieldsIgnoreCase.TryGetValue(field, out prop)
             ? prop
             : throw new ArgumentException($"{typeof(T).Name}에 필드 '{field}'가 없습니다.", nameof(field));
 

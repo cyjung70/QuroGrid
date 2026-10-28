@@ -225,6 +225,7 @@ public partial class QuroGrid<TItem> where TItem : class
     /// </summary>
     protected override void OnParametersSet()
     {
+        ApplyDefinition();
         object layout = (DataSet, Localizer, Culture, FrozenColumns, CurrencyDigits, DeletedRows);
         if (!Equals(layout, _layoutParameters))
         {
@@ -324,7 +325,7 @@ public partial class QuroGrid<TItem> where TItem : class
     {
         using var step = DataSet.BeginUndoStep();   // 사용자 동작 하나 = Undo 한 단계 (앱의 이벤트 처리 포함, A-33)
         var col = Column(field);
-        if (col.ReadOnly)
+        if (col.ReadOnly || NewRowLocked(rowKey, col))
             return false;
 
         if (col.Type == CellType.Popup && col.Lookup is not null && !string.IsNullOrEmpty(text))
@@ -466,7 +467,14 @@ public partial class QuroGrid<TItem> where TItem : class
     }
 
     private bool Editable(int rowKey, QuroColumn col) =>
-        !col.ReadOnly && col.Type != CellType.Button && DataSet.GetState(rowKey) != RowState.Deleted;
+        !col.ReadOnly && col.Type != CellType.Button && DataSet.GetState(rowKey) != RowState.Deleted && !NewRowLocked(rowKey, col);
+
+    /// <summary>A <see cref="QuroColumn.NewRowOnly"/> column on a row that is not an added row (G-01).</summary>
+    private bool NewRowLocked(int rowKey, QuroColumn col) => col.NewRowOnly && DataSet.GetState(rowKey) != RowState.Inserted;
+
+    /// <summary>aria-readonly of a cell: read-only column, Button, or edit-new column on a saved row.</summary>
+    internal bool CellReadOnly(int rowKey, QuroColumn col) =>
+        col.ReadOnly || col.Type == CellType.Button || NewRowLocked(rowKey, col);
 
     private void EndEditing()
     {
@@ -648,6 +656,8 @@ public partial class QuroGrid<TItem> where TItem : class
     [JSInvokable]
     public async Task<bool> Paste(int startRowKey, string startField, string[][] cells)
     {
+        if (!Clipboard)
+            return false;   // G-03: copy and paste are off
         using var step = DataSet.BeginUndoStep();   // 사용자 동작 하나 = Undo 한 단계 (앱의 이벤트 처리 포함, A-33)
         var args = new PastingArgs(startRowKey, startField, cells);
         await OnPasting.InvokeAsync(args);
@@ -705,7 +715,7 @@ public partial class QuroGrid<TItem> where TItem : class
     [JSInvokable]
     public async Task<bool> PasteStream(int startRowKey, string startField)
     {
-        if (_module is null)
+        if (_module is null || !Clipboard)
             return false;
         var data = await _module.InvokeAsync<IJSStreamReference>("pasteData", _root);
         await using var stream = await data.OpenReadStreamAsync(MaxPasteBytes);
@@ -754,7 +764,7 @@ public partial class QuroGrid<TItem> where TItem : class
     [JSInvokable]
     public async Task Sort(string field, bool additive)
     {
-        if (Column(field).Type == CellType.Button)
+        if (!Column(field).CanSort)
             return;
 
         var index = _sort.FindIndex(s => s.Field == field);
@@ -784,7 +794,7 @@ public partial class QuroGrid<TItem> where TItem : class
     public void SetSort(IReadOnlyList<SortColumn> sort)
     {
         _sort.Clear();
-        _sort.AddRange(sort.Where(s => Column(s.Field).Type != CellType.Button));
+        _sort.AddRange(sort.Where(s => Column(s.Field).CanSort));
         SortChanged();
         StateHasChanged();
     }
@@ -1054,7 +1064,7 @@ public partial class QuroGrid<TItem> where TItem : class
         var col = Column(field);
         _filterDraft = null;
         _filterInvalid = null;
-        _filterField = col.Type == CellType.Button ? null : col.Field;
+        _filterField = col.CanFilter ? col.Field : null;
         StateHasChanged();
         return _filterField is not null;
     }
@@ -1078,7 +1088,7 @@ public partial class QuroGrid<TItem> where TItem : class
     public async Task<bool> ApplyFilter(string field, FilterInput input)
     {
         var col = Column(field);
-        if (col.Type == CellType.Button)
+        if (!col.CanFilter)
             return false;
         if (!TryBuildFilter(col, input, out var filter, out var invalid))
         {
@@ -1114,7 +1124,7 @@ public partial class QuroGrid<TItem> where TItem : class
     {
         _filters.Clear();
         _filters.AddRange(filters
-            .Where(f => _columns.Any(c => c.Field == f.Field && c.Type != CellType.Button))
+            .Where(f => _columns.Any(c => c.Field == f.Field && c.CanFilter))
             .DistinctBy(f => f.Field));
         _filterField = null;
         FiltersChanged();
@@ -1310,7 +1320,7 @@ public partial class QuroGrid<TItem> where TItem : class
         if (Paging)
             return;
         _groupBy.Clear();
-        _groupBy.AddRange(fields.Select(Column).Where(c => c.Type != CellType.Button).Select(c => c.Field).Distinct());
+        _groupBy.AddRange(fields.Select(Column).Where(c => c.CanGroup).Select(c => c.Field).Distinct());
         _groupOf.Clear();
         _collapsed.Clear();
         _ensureActive = true;   // 활성 행이 접힌 곳에 있지 않도록 (렌더 반영 뒤)
@@ -1720,7 +1730,9 @@ public partial class QuroGrid<TItem> where TItem : class
     /// <summary>컬럼의 Required·Min·Max를 DataSet 규칙 API로 넘긴다 (Addendum A-10).</summary>
     private void RegisterRule(QuroColumn col)
     {
-        if (col.Type != CellType.Button && (col.Required || col.Min is not null || col.Max is not null)
+        if (_definitionRules.TryGetValue(col.Field, out var defined))
+            DataSet.SetRule(col.Field, defined);   // column req/min/max merged with validate rows (QuroGrid.Definition.cs)
+        else if (col.Type != CellType.Button && (col.Required || col.Min is not null || col.Max is not null)
 )
             DataSet.SetRule(col.Field, new FieldRule { Required = col.Required, Min = col.Min, Max = col.Max });
     }
