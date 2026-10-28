@@ -13,6 +13,7 @@ namespace Quro.Grid.E2E;
 public class GS_055_058_PerformanceTests(SampleServer server, ITestOutputHelper output) : GridPageTest(server)
 {
     private const double OneFrameMs = 1000.0 / 60;
+    private const double MaxCircuitMb = 100;   // GS-058 회로당 메모리 상한 (Addendum A-27)
     private readonly SampleServer _server = server;
 
     private void Report(string id, string metric, string value, string target)
@@ -117,9 +118,9 @@ public class GS_055_058_PerformanceTests(SampleServer server, ITestOutputHelper 
         Assert.True(watch.ElapsedMilliseconds <= 2000, $"{watch.ElapsedMilliseconds}ms");
     }
 
-    /// <summary>GS-058: 회로당 서버 메모리 (측정만. 상한은 결과를 보고 정한다). 대량 조회 화면 5개</summary>
+    /// <summary>GS-058: 회로당 서버 메모리 100MB 이하 (A-27). 대량 조회 화면 5개</summary>
     [Fact]
-    public async Task GS_058_MemoryPerCircuit_Measured()
+    public async Task GS_058_MemoryPerCircuit_Under100MB()
     {
         using var http = new HttpClient { BaseAddress = new Uri(_server.BaseUrl) };
         async Task<long> HeapAsync() => (await http.GetFromJsonAsync<MemoryInfo>("/_diag/memory"))!.HeapBytes;
@@ -140,8 +141,9 @@ public class GS_055_058_PerformanceTests(SampleServer server, ITestOutputHelper 
 
         var perCircuit = (after - before) / 5.0 / 1024 / 1024;
         Report("GS-058", "회로당 관리 힙 증가 (대량 조회 화면, 5회로 평균)",
-            perCircuit.ToString("0.00", CultureInfo.InvariantCulture) + "MB", "측정 후 상한 설정");
+            perCircuit.ToString("0.00", CultureInfo.InvariantCulture) + "MB", "100MB 이하");
         Assert.True(after > before, $"before {before}, after {after}");
+        Assert.True(perCircuit <= MaxCircuitMb, $"{perCircuit}MB");
         foreach (var page in pages)
             await page.CloseAsync();
     }
