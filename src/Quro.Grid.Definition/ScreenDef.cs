@@ -19,7 +19,14 @@ namespace Quro.Grid.Definition;
 /// <param name="Source">Where the <c>screen</c> section starts</param>
 public sealed record ScreenDef(string Id, string Module, string Title, int Version, string Api, string Key,
     ScreenLayout Layout, PermDef Perm, string? LockWhen, IReadOnlyList<ToolbarCommand> Toolbar,
-    FormDef? Form, IReadOnlyList<GridDef> Grids, SourceInfo Source);
+    FormDef? Form, IReadOnlyList<GridDef> Grids, SourceInfo Source)
+{
+    /// <summary>Lines of <c>screen</c> and top-level entries (<c>title</c>, <c>perm.write</c>, <c>toolbar</c> ...) for error reports.</summary>
+    internal IReadOnlyDictionary<string, int> Lines { get; init; } = new Dictionary<string, int>();
+
+    /// <summary>Line of a <c>screen</c> or top-level entry, or the line of the <c>screen</c> section.</summary>
+    internal int LineOf(string key) => Lines.TryGetValue(key, out var line) ? line : Source.Line;
+}
 
 /// <summary>Permission ids of a screen.</summary>
 /// <param name="Read">Permission to open the screen</param>
@@ -50,7 +57,8 @@ public sealed record FieldDef(string Id, string? Label, FieldType Type, FieldMod
 /// <summary>Fields that become read-only for users with a permission.</summary>
 /// <param name="Perm">Permission id</param>
 /// <param name="Fields">Field ids</param>
-public sealed record ReadOnlyRule(string Perm, IReadOnlyList<string> Fields);
+/// <param name="Source">Where the row is defined</param>
+public sealed record ReadOnlyRule(string Perm, IReadOnlyList<string> Fields, SourceInfo Source);
 
 /// <summary>One grid.</summary>
 /// <param name="Id">Grid id</param>

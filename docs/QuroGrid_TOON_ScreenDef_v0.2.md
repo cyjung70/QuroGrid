@@ -365,7 +365,7 @@ public sealed record PermDef(string Read, string Write);
 public sealed record FormDef(int Cols, IReadOnlyList<FieldDef> Fields, IReadOnlyList<ReadOnlyRule> ReadOnlyFor);
 public sealed record FieldDef(string Id, string? Label, FieldType Type, FieldMode Mode, int? Max, CaseRule Case,
     string? Default, string? DataSource, int Span, string? On, SourceInfo Source);
-public sealed record ReadOnlyRule(string Perm, IReadOnlyList<string> Fields);
+public sealed record ReadOnlyRule(string Perm, IReadOnlyList<string> Fields, SourceInfo Source);
 public sealed record GridDef(string Id, string Bind, string RowKey, int InitRows, bool Clipboard, int PageSize,
     int Frozen, DeletedRowsMode DeletedRows, IReadOnlyList<ColumnDef> Columns, IReadOnlyList<RuleDef> Rules,
     IReadOnlyList<ValidateDef> Validate, SourceInfo Source);
@@ -400,7 +400,12 @@ public static class FieldModeResolver { public static FieldState Resolve(FieldMo
 // 열 edit·req → mode 환산(5.2)은 internal ModeOf. D-5 그리드 연결에서 Quro.Grid가 쓴다 (InternalsVisibleTo)
 // lockWhen 필드 존재(V-18)는 D-4 LockExpression과 함께
 
-// D-3 — 카탈로그 검사 V-19~V-32
+// ✅ D-3 — 카탈로그 검사 V-19~V-32 (V-30~V-32는 카탈로그와 무관하지만 같은 검사기에서). 기본값 토큰 문법(5.5)은 Load의 V-03
+public interface IQuroDefinitionCatalog
+{
+    IReadOnlySet<string> ResourceKeys { get; }  IReadOnlySet<string> CodeMajors { get; }  IReadOnlySet<string> LookupIds { get; }
+    IReadOnlySet<string> Handlers { get; }  IReadOnlySet<string> Permissions { get; }
+}
 public sealed class ScreenDefValidator(IQuroDefinitionCatalog catalog)
 {
     public IReadOnlyList<DefinitionError> Validate(ScreenDef def);

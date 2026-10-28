@@ -13,14 +13,6 @@ public class GS_D03_D05_StructureTests
         return ScreenDefLoader.Load(path ?? Golden.PathOf(Screen), text.Replace(from, to));
     }
 
-    private static int LineIn(string text, string fragment)
-    {
-        var lines = text.Replace("\r\n", "\n").Split('\n');
-        var hits = Enumerable.Range(0, lines.Length).Where(i => lines[i].Contains(fragment, StringComparison.Ordinal)).ToList();
-        Assert.Single(hits);
-        return hits[0] + 1;
-    }
-
     private static void AssertOnly(DefinitionResult<ScreenDef> result, string code, int line)
     {
         Assert.Null(result.Value);
@@ -32,7 +24,7 @@ public class GS_D03_D05_StructureTests
     private static void AssertCase(string from, string to, string code, string lineFragment)
     {
         var result = LoadMutated(from, to);
-        AssertOnly(result, code, LineIn(Golden.Read(Screen).Replace(from, to), lineFragment));
+        AssertOnly(result, code, Golden.LineIn(Golden.Read(Screen).Replace(from, to), lineFragment));
     }
 
     /// <summary>GS-D03: enum values outside the schema are V-03 at the row that has them</summary>
@@ -65,7 +57,7 @@ public class GS_D03_D05_StructureTests
 
         var result = ScreenDefLoader.Load(Golden.PathOf(Screen), formOnly);
 
-        AssertOnly(result, "V-14", LineIn(formOnly, "toolbar[9]"));
+        AssertOnly(result, "V-14", Golden.LineIn(formOnly, "toolbar[9]"));
         Assert.Single(result.Errors);
     }
 
@@ -90,7 +82,7 @@ public class GS_D03_D05_StructureTests
 
         var result = ScreenDefLoader.Load(Golden.PathOf(Screen), text);
 
-        AssertOnly(result, "V-17", LineIn(text, "amount.change,calc,dcRate"));
+        AssertOnly(result, "V-17", Golden.LineIn(text, "amount.change,calc,dcRate"));
     }
 
     /// <summary>Structure checks are skipped while the file has syntax or key errors, so one typo is not reported twice</summary>
