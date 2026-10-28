@@ -18,7 +18,8 @@ public partial class QuroGrid<TItem> where TItem : class
     /// <summary>숫자 기본 서식: 천 단위 구분 + 의미 있는 소수만.</summary>
     private const string DefaultNumberFormat = "#,0.##########";
 
-    private readonly List<QuroColumn> _columns = [];
+    private readonly List<QuroColumn> _columns = [];   // 정의 순서 (그룹 안의 컬럼은 그룹 자리에)
+    private readonly List<object> _definition = [];    // 정의 트리의 맨 위 (컬럼·그룹). 그룹 안 컬럼은 형제보다 늦게 등록되어 트리로 순서를 지킨다
     private (int RowKey, string Field)? _editing;
     private int _epoch;   // 그리드 전체를 다시 그려야 할 때 증가 (파라미터·컬럼 변경)
 
@@ -47,6 +48,7 @@ public partial class QuroGrid<TItem> where TItem : class
     private readonly HashSet<string> _hidden = [];            // 숨긴 컬럼 (GS-067)
     private List<QuroColumn>? _shown;                         // 화면에 보이는 컬럼 (화면 순서). 컬럼 구성이 바뀌면 null
     private int _frozenShown;                                 // 그중 앞쪽 고정 열 수
+    private int _groupDepth;                                  // 보이는 컬럼의 그룹 단 수 (다단 헤더 행 수, GS-070)
     private const int MinColumnWidth = 40;
 
     // 서버측 페이징 (R6, A-24): 화면 위치 = [추가 행(맨 위)] + [서버 조회 순서]. 보이는 범위의 페이지만 적재한다.
@@ -180,6 +182,7 @@ public partial class QuroGrid<TItem> where TItem : class
             {
                 _shown = OrderedColumns().Where(c => !_hidden.Contains(c.Field)).ToList();
                 _frozenShown = _shown.Count(IsFrozen);
+                _groupDepth = _shown.Select(c => GroupPath(c).Count).DefaultIfEmpty(0).Max();
             }
             return _shown;
         }
@@ -1024,8 +1027,14 @@ public partial class QuroGrid<TItem> where TItem : class
         if (from < 0)
             return;
         var (first, last) = IsFrozen(col) ? (0, _frozenShown - 1) : (_frozenShown, shown.Count - 1);
+        if (col.Group is { } group)
+        {
+            // 그룹 안의 컬럼은 그 그룹 안에서만 (GS-070)
+            var members = shown.Select((c, i) => (c, i)).Where(x => GroupPath(x.c).Contains(group)).Select(x => x.i).ToList();
+            (first, last) = (Math.Max(first, members[0]), Math.Min(last, members[^1]));
+        }
         toIndex = Math.Clamp(toIndex, first, last);
-        if (toIndex == from)
+        if (toIndex == from || SplitsGroup(shown, from, toIndex))
             return;
 
         // 숨긴 컬럼은 제자리를 지키도록 전체 순서(숨김 포함)에서 보이는 이웃 기준으로 넣는다
@@ -1091,6 +1100,65 @@ public partial class QuroGrid<TItem> where TItem : class
         return result.Where(IsFrozen).Concat(result.Where(c => !IsFrozen(c)));
     }
 
+    /// <summary>from에서 toIndex로 옮기면 어떤 그룹의 컬럼이 떨어지는지 (그룹 밖 컬럼이 그룹 가운데로 들어가는 경우)</summary>
+    private static bool SplitsGroup(List<QuroColumn> shown, int from, int toIndex)
+    {
+        var moved = shown.ToList();
+        var col = moved[from];
+        moved.RemoveAt(from);
+        moved.Insert(toIndex, col);
+        var paths = moved.Select(GroupPath).ToList();
+        foreach (var group in paths.SelectMany(p => p).Distinct())
+        {
+            var at = paths.Select((p, i) => p.Contains(group) ? i : -1).Where(i => i >= 0).ToList();
+            if (at[^1] - at[0] + 1 != at.Count)
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>컬럼의 그룹 경로 (바깥 → 안쪽). 그룹이 없으면 빈 목록</summary>
+    private static List<QuroColumnGroup> GroupPath(QuroColumn col) => col.Group?.Path() ?? [];
+
+    /// <summary>헤더 행 수: 그룹 단 + 컬럼 헤더 1 (GS-070). 본문 행의 aria-rowindex가 그만큼 밀린다</summary>
+    internal int HeaderRows
+    {
+        get
+        {
+            _ = Columns;
+            return _groupDepth + 1;
+        }
+    }
+
+    /// <summary>그룹 헤더 칸 (GS-070): 같은 그룹이 이어지는 컬럼을 한 칸으로, 고정 열 경계에서는 나눈다. 그룹이 없는 컬럼은 빈 칸</summary>
+    internal readonly record struct GroupCell(QuroColumnGroup? Group, int First, int Count, string Class, string Style);
+
+    internal List<GroupCell> GroupCells(int level)
+    {
+        var columns = Columns;
+        var cells = new List<GroupCell>();
+        var left = 0;
+        for (var i = 0; i < columns.Count;)
+        {
+            var path = GroupPath(columns[i]);
+            var group = level < path.Count ? path[level] : null;
+            var frozen = i < _frozenShown;
+            var count = 1;
+            while (group is not null && i + count < columns.Count && (i + count < _frozenShown) == frozen
+                   && GroupPath(columns[i + count]) is var next && level < next.Count && next[level] == group)
+                count++;
+
+            var width = columns.Skip(i).Take(count).Sum(WidthOf);
+            var kind = group is null ? "quro-cell quro-group-empty" : "quro-cell quro-group-header";
+            cells.Add(new GroupCell(group, i, count,
+                frozen ? kind + " quro-frozen" : kind,
+                frozen ? $"width:{width}px;left:{left}px" : $"width:{width}px"));
+            left += width;
+            i += count;
+        }
+        return cells;
+    }
+
     private bool IsFrozen(QuroColumn col) => _columns.IndexOf(col) is var i && i >= 0 && i < FrozenColumns;
 
     internal int WidthOf(QuroColumn col) => _widths.TryGetValue(col.Field, out var width) ? width : col.Width;
@@ -1131,9 +1199,40 @@ public partial class QuroGrid<TItem> where TItem : class
 
     void IColumnHost.AddColumn(QuroColumn column)
     {
-        _columns.Add(column);
+        (column.Group?.Members ?? _definition).Add(column);
+        RebuildColumns();
         RegisterRule(column);
         Relayout();
+        if (column.Group is not null)
+            StateHasChanged();   // 그룹 안 컬럼은 그리드 본문(Deferred)이 그려진 뒤에 등록된다 (GS-070)
+    }
+
+    void IColumnHost.AddGroup(QuroColumnGroup group) => (group.Parent?.Members ?? _definition).Add(group);
+
+    void IColumnHost.RemoveGroup(QuroColumnGroup group)
+    {
+        if ((group.Parent?.Members ?? _definition).Remove(group))
+        {
+            RebuildColumns();
+            Relayout();
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>정의 트리를 펼쳐 정의 순서의 컬럼 목록을 만든다.</summary>
+    private void RebuildColumns()
+    {
+        _columns.Clear();
+        Flatten(_definition);
+
+        void Flatten(List<object> members)
+        {
+            foreach (var member in members)
+                if (member is QuroColumn col)
+                    _columns.Add(col);
+                else if (member is QuroColumnGroup group)
+                    Flatten(group.Members);
+        }
     }
 
     void IColumnHost.ColumnChanged(QuroColumn column)
@@ -1150,10 +1249,17 @@ public partial class QuroGrid<TItem> where TItem : class
             DataSet.SetRule(col.Field, new FieldRule { Required = col.Required, Min = col.Min, Max = col.Max });
     }
 
+    void IColumnHost.GroupChanged()
+    {
+        Relayout();
+        StateHasChanged();
+    }
+
     void IColumnHost.RemoveColumn(QuroColumn column)
     {
-        if (_columns.Remove(column))
+        if ((column.Group?.Members ?? _definition).Remove(column))
         {
+            RebuildColumns();
             Relayout();
             StateHasChanged();
         }

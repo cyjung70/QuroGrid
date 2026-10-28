@@ -1,0 +1,122 @@
+@inherits GridTestContext
+
+@code {
+    // GS-070 다단 헤더 (P1 5-3): QuroColumnGroup으로 컬럼을 묶으면 그 위에 그룹 헤더 행을 그린다.
+
+    private static readonly CultureInfo En = new("en-US");
+
+    private IRenderedComponent<QuroGrid<PoLine>> RenderGrid(QuroDataSet<PoLine> ds, int frozen = 0) =>
+        Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" Culture="En" FrozenColumns="frozen" ShowFooter="true">
+                                     <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" Width="100" />
+                                     <QuroColumnGroup HeaderKey="mm.group.order">
+                                         <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" Width="80" />
+                                         <QuroColumn Field="UnitPrice" HeaderKey="mm.unit_price" Type="CellType.Number" />
+                                     </QuroColumnGroup>
+                                     <QuroColumn Field="Amount" HeaderKey="mm.amount" Type="CellType.Number" Width="90" />
+                                 </QuroGrid>);
+
+    /// <summary>그룹 헤더 행의 칸: (그룹 키 또는 빈 칸 "", 너비, aria-colspan)</summary>
+    private static (string, string?, string?)[] GroupRow(IRenderedComponent<QuroGrid<PoLine>> cut, int ariaRow) =>
+        cut.FindAll($".quro-head [role=row][aria-rowindex='{ariaRow}'] > *")
+            .Select(c => (c.TextContent.Trim(), c.GetAttribute("style"), c.GetAttribute("aria-colspan")))
+            .ToArray();
+
+    private static string[] Leaves(IRenderedComponent<QuroGrid<PoLine>> cut) =>
+        cut.FindAll("[role=columnheader][data-field]").Select(h => h.GetAttribute("data-field")!).ToArray();
+
+    /// <summary>GS-070: 그룹 헤더는 묶인 컬럼 너비의 합, 묶이지 않은 컬럼 위는 빈 칸. 헤더 행 수만큼 행 번호가 밀린다</summary>
+    [Fact]
+    public void GS_070_GroupHeader_SpansGroupedColumns()
+    {
+        var ds = TestData.ThreeLines();
+        var cut = RenderGrid(ds);
+
+        Assert.Equal(
+            [("", "width:100px", null), ("mm.group.order", "width:200px", "2"), ("", "width:90px", null)],
+            GroupRow(cut, 1));
+        var group = cut.Find(".quro-group-header");
+        Assert.Equal("columnheader", group.GetAttribute("role"));
+        Assert.Equal("2", group.GetAttribute("aria-colindex"));
+        Assert.Equal(["ItemCode", "Qty", "UnitPrice", "Amount"], Leaves(cut));
+        Assert.Equal("2", cut.Find("[role=columnheader][data-field=Qty]").ParentElement!.GetAttribute("aria-rowindex"));
+
+        var grid = cut.Find("[role=grid]");
+        Assert.Equal("2", grid.GetAttribute("data-header-rows"));
+        Assert.Equal("6", grid.GetAttribute("aria-rowcount"));                // 헤더 2 + 행 3 + 합계 1
+        Assert.Equal("3", cut.Find($"[role=row][data-row='{ds.RowKeys[0]}']").GetAttribute("aria-rowindex"));
+        Assert.Equal("6", cut.Find(".quro-footer-row").GetAttribute("aria-rowindex"));
+    }
+
+    /// <summary>GS-070: 리사이즈·숨김에 따라 그룹 폭이 바뀌고, 모두 숨기면 그룹 칸도 없다. 그룹이 없으면 헤더 1행</summary>
+    [Fact]
+    public async Task GS_070_GroupWidth_FollowsResizeAndHide()
+    {
+        var cut = RenderGrid(TestData.ThreeLines());
+
+        await cut.InvokeAsync(() => cut.Instance.ColumnResized("Qty", 150));
+        Assert.Equal(("mm.group.order", "width:270px", "2"), GroupRow(cut, 1)[1]);
+
+        await cut.InvokeAsync(() => cut.Instance.SetColumnVisible("UnitPrice", false));
+        Assert.Equal(("mm.group.order", "width:150px", "1"), GroupRow(cut, 1)[1]);
+
+        await cut.InvokeAsync(() => cut.Instance.SetColumnVisible("Qty", false));
+        Assert.Empty(cut.FindAll(".quro-group-header"));
+        Assert.Equal("1", cut.Find("[role=grid]").GetAttribute("data-header-rows"));
+        Assert.Equal(["ItemCode", "Amount"], Leaves(cut));
+    }
+
+    /// <summary>GS-070: 2단 이상 — 그룹 안의 그룹은 한 행 아래에</summary>
+    [Fact]
+    public void GS_070_NestedGroups_ThreeHeaderRows()
+    {
+        var cut = Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="TestData.ThreeLines()" Culture="En">
+                                               <QuroColumnGroup HeaderKey="g.outer">
+                                                   <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" Width="100" />
+                                                   <QuroColumnGroup HeaderKey="g.inner">
+                                                       <QuroColumn Field="Qty" HeaderKey="mm.qty" Width="80" />
+                                                       <QuroColumn Field="UnitPrice" HeaderKey="mm.unit_price" Width="70" />
+                                                   </QuroColumnGroup>
+                                               </QuroColumnGroup>
+                                               <QuroColumn Field="Amount" HeaderKey="mm.amount" Width="90" />
+                                           </QuroGrid>);
+
+        Assert.Equal("3", cut.Find("[role=grid]").GetAttribute("data-header-rows"));
+        Assert.Equal([("g.outer", "width:250px", "3"), ("", "width:90px", null)], GroupRow(cut, 1));
+        Assert.Equal([("", "width:100px", null), ("g.inner", "width:150px", "2"), ("", "width:90px", null)], GroupRow(cut, 2));
+        Assert.Equal("3", cut.Find("[role=columnheader][data-field=Qty]").ParentElement!.GetAttribute("aria-rowindex"));
+    }
+
+    /// <summary>GS-070: 그룹 안 컬럼은 그룹 안에서만 이동, 그룹 밖 컬럼은 그룹을 가르지 못한다</summary>
+    [Fact]
+    public async Task GS_070_MoveColumn_StaysInGroup_DoesNotSplitGroup()
+    {
+        var cut = RenderGrid(TestData.ThreeLines());
+
+        await cut.InvokeAsync(() => cut.Instance.MoveColumn("UnitPrice", 1));     // 그룹 안: 허용
+        Assert.Equal(["ItemCode", "UnitPrice", "Qty", "Amount"], Leaves(cut));
+
+        await cut.InvokeAsync(() => cut.Instance.MoveColumn("Qty", 0));           // 그룹 밖으로: 그룹 끝까지만 → 제자리 앞(1)
+        Assert.Equal(["ItemCode", "Qty", "UnitPrice", "Amount"], Leaves(cut));
+
+        await cut.InvokeAsync(() => cut.Instance.MoveColumn("ItemCode", 1));      // 그룹을 가름: 하지 않음
+        Assert.Equal(["ItemCode", "Qty", "UnitPrice", "Amount"], Leaves(cut));
+
+        await cut.InvokeAsync(() => cut.Instance.MoveColumn("Amount", 0));        // 그룹 앞으로: 허용
+        Assert.Equal(["Amount", "ItemCode", "Qty", "UnitPrice"], Leaves(cut));
+        Assert.Equal(("mm.group.order", "width:200px", "2"), GroupRow(cut, 1)[2]);
+    }
+
+    /// <summary>GS-070: 고정 열 경계에 걸친 그룹은 고정 쪽과 일반 쪽 두 칸으로 나뉜다 (고정 칸은 sticky)</summary>
+    [Fact]
+    public void GS_070_GroupAcrossFrozenBoundary_SplitsCell()
+    {
+        var cut = RenderGrid(TestData.ThreeLines(), frozen: 2);
+
+        var groups = cut.FindAll(".quro-group-header");
+        Assert.Equal(2, groups.Count);
+        Assert.Contains("quro-frozen", groups[0].ClassList);
+        Assert.Equal("width:80px;left:100px", groups[0].GetAttribute("style"));
+        Assert.DoesNotContain("quro-frozen", groups[1].ClassList);
+        Assert.Equal("width:120px", groups[1].GetAttribute("style"));
+    }
+}

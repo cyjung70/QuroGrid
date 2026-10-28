@@ -13,6 +13,7 @@ public sealed class SampleLocalizer : IStringLocalizer
         ["mm.qty"] = ("수량", "Quantity"),
         ["mm.unit_price"] = ("단가", "Unit Price"),
         ["mm.amount"] = ("금액", "Amount"),
+        ["mm.group.order"] = ("주문", "Order"),
         ["sample.po_lines.title"] = ("구매오더 라인", "Purchase Order Lines"),
         ["mm.due_date"] = ("납기일", "Due Date"),
         ["sample.changes"] = ("변경 행", "Changed rows"),

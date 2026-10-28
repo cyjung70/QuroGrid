@@ -85,6 +85,20 @@
     z-index: 2;
 }
 
+/* 다단 헤더 (GS-070): 그룹 칸은 가운데 정렬. 그룹이 없는 컬럼 위 빈 칸은 아래 선을 지워 컬럼 헤더와 이어 보이게 */
+.quro-group-row .quro-cell {
+    background: var(--quro-head-bg);
+    font-weight: 600;
+}
+
+.quro-group-header {
+    text-align: center;
+}
+
+.quro-group-empty {
+    border-bottom-color: transparent;
+}
+
 /* 헤더: 클릭 정렬(▲▼, 다중이면 순번), 오른쪽 경계 드래그 리사이즈 (A-22·A-23) */
 .quro-header {
     cursor: pointer;

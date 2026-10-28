@@ -9,6 +9,9 @@ public sealed class QuroColumn : ComponentBase, IDisposable
 {
     [CascadingParameter] internal IColumnHost? Host { get; set; }
 
+    /// <summary>이 컬럼을 묶은 다단 헤더 그룹 (GS-070). 없으면 null</summary>
+    [CascadingParameter] internal QuroColumnGroup? Group { get; set; }
+
     [Parameter, EditorRequired] public string Field { get; set; } = "";
 
     /// <summary>헤더 리소스 키 (Spec 4.8). 문자열을 하드코딩하지 않는다.</summary>
@@ -80,4 +83,7 @@ internal interface IColumnHost
     void AddColumn(QuroColumn column);
     void ColumnChanged(QuroColumn column);
     void RemoveColumn(QuroColumn column);
+    void AddGroup(QuroColumnGroup group);
+    void GroupChanged();
+    void RemoveGroup(QuroColumnGroup group);
 }

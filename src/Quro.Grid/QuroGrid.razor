@@ -13,10 +13,10 @@
 
 @* 컬럼 정의가 등록된 뒤에 그린다. 셀 단위 이벤트 핸들러를 두지 않는다 (R5): 클릭·키는 quro-grid.js가 좌표로 해석한다. *@
 <Deferred>
-    @{ var bodyRows = BodyRowCount(); }
+    @{ var bodyRows = BodyRowCount(); var headerRows = HeaderRows; }
     <div @ref="_root" class="@(Paging ? "quro-grid quro-paged" : "quro-grid")" style="@RootStyle"
          role="grid" tabindex="0" aria-colcount="@Columns.Count"
-         aria-rowcount="@(bodyRows + (ShowFooter ? 2 : 1))"
+         aria-rowcount="@(headerRows + bodyRows + (ShowFooter ? 1 : 0))" data-header-rows="@headerRows"
          data-dirty="@(DataSet.HasChanges ? "true" : null)"
          data-leave-message="@(ConfirmLeave ? Text(GridKeys.LeaveUnsaved) : null)">
         @* 연결 끊김 중에는 서버가 그릴 수 없으므로 안내를 미리 그려 두고 quro-grid.js가 보이게 한다 (R7, A-21) *@
@@ -26,7 +26,25 @@
         </div>
         <div class="quro-notice quro-notice-lost" role="alert">@Text(GridKeys.ChangesLost)</div>
         <div class="quro-head" role="rowgroup">
-            <div class="quro-row" role="row" aria-rowindex="1">
+            @for (var level = 0; level < headerRows - 1; level++)
+            {
+                @* 다단 헤더 (GS-070): 그룹 칸은 묶인 컬럼 너비의 합. 클릭·드래그는 받지 않는다 (data-field 없음) *@
+                <div class="quro-row quro-group-row" role="row" aria-rowindex="@(level + 1)">
+                    @foreach (var g in GroupCells(level))
+                    {
+                        if (g.Group is null)
+                        {
+                            <div class="@g.Class" style="@g.Style" role="columnheader" aria-colindex="@(g.First + 1)"></div>
+                        }
+                        else
+                        {
+                            <div class="@g.Class" style="@g.Style" role="columnheader" aria-colindex="@(g.First + 1)"
+                                 aria-colspan="@g.Count">@Text(g.Group.HeaderKey)</div>
+                        }
+                    }
+                </div>
+            }
+            <div class="quro-row" role="row" aria-rowindex="@headerRows">
                 @for (var i = 0; i < Columns.Count; i++)
                 {
                     var col = Columns[i];
@@ -70,7 +88,7 @@
         @if (ShowFooter)
         {
             <div class="quro-foot" role="rowgroup">
-                <div class="quro-row quro-footer-row" role="row" aria-rowindex="@(bodyRows + 2)">
+                <div class="quro-row quro-footer-row" role="row" aria-rowindex="@(headerRows + bodyRows + 1)">
                     @for (var i = 0; i < Columns.Count; i++)
                     {
                         var col = Columns[i];

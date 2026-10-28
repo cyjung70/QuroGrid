@@ -38,8 +38,19 @@
     <QuroColumn Field="LineNo" HeaderKey="mm.line_no" Type="CellType.Number" ReadOnly="true" Width="60" />
     <QuroColumn Field="ItemCode" HeaderKey="mm.item.code"
                 Type="@(Types == 1 ? CellType.Popup : CellType.Text)" Lookup="FindItems" />
-    <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" Aggregate="Aggregate.Sum" />
-    <QuroColumn Field="UnitPrice" HeaderKey="mm.unit_price" Type="CellType.Number" />
+    @if (Groups == 1)
+    {
+        @* 다단 헤더 (GS-070) *@
+        <QuroColumnGroup HeaderKey="mm.group.order">
+            <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" Aggregate="Aggregate.Sum" />
+            <QuroColumn Field="UnitPrice" HeaderKey="mm.unit_price" Type="CellType.Number" />
+        </QuroColumnGroup>
+    }
+    else
+    {
+        <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" Aggregate="Aggregate.Sum" />
+        <QuroColumn Field="UnitPrice" HeaderKey="mm.unit_price" Type="CellType.Number" />
+    }
     @if (Types == 1)
     {
         <QuroColumn Field="Unit" HeaderKey="mm.unit" Type="CellType.Combo" Options="_units" />
@@ -148,6 +159,9 @@
 
     /// <summary>1이면 텍스트 열 6개와 납기일 추가 (500행 × 10열 붙여넣기 성능, GS-057).</summary>
     [SupplyParameterFromQuery] public int? Wide { get; set; }
+
+    /// <summary>?groups=1: 수량·단가를 그룹 헤더로 묶는다 (GS-070)</summary>
+    [SupplyParameterFromQuery] public int? Groups { get; set; }
 
     /// <summary>1이면 대량 조회 (10,000행, 서버측 페이징 PageSize 100, GS-051·GS-052).</summary>
     [SupplyParameterFromQuery] public int? Large { get; set; }
