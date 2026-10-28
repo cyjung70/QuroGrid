@@ -9,7 +9,7 @@
 <h1>@L["sample.po_lines.title"]</h1>
 
 @* MudBlazor 테마와 다이얼로그(코드도움 팝업)를 이 대화형 화면에서 쓴다 *@
-<MudThemeProvider />
+<MudThemeProvider IsDarkMode="@(Dark == 1)" />
 <MudPopoverProvider />
 <MudDialogProvider />
 
@@ -159,6 +159,9 @@
 
     /// <summary>1이면 텍스트 열 6개와 납기일 추가 (500행 × 10열 붙여넣기 성능, GS-057).</summary>
     [SupplyParameterFromQuery] public int? Wide { get; set; }
+
+    /// <summary>?dark=1: MudBlazor 다크 모드 (GS-081)</summary>
+    [SupplyParameterFromQuery] public int? Dark { get; set; }
 
     /// <summary>?groups=1: 수량·단가를 그룹 헤더로 묶는다 (GS-070)</summary>
     [SupplyParameterFromQuery] public int? Groups { get; set; }
