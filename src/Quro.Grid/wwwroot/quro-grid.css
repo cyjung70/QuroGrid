@@ -74,6 +74,35 @@
     opacity: 0.6;
 }
 
+/* 헤더: 클릭 정렬(▲▼, 다중이면 순번), 오른쪽 경계 드래그 리사이즈 (A-22·A-23) */
+.quro-header {
+    cursor: pointer;
+    user-select: none;
+}
+
+.quro-header:not(.quro-frozen) {
+    position: relative;
+}
+
+.quro-sort::after {
+    margin-left: 4px;
+    font-size: 0.75em;
+    content: "\25B2" attr(data-order);
+}
+
+.quro-sort[data-dir=desc]::after {
+    content: "\25BC" attr(data-order);
+}
+
+.quro-resize {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 6px;
+    height: 100%;
+    cursor: col-resize;
+}
+
 /* 그리드가 직접 띄우는 안내 (R7): 연결 끊김 중 입력 잠금, 회로 소멸 후 변경 유실 */
 .quro-notice {
     display: none;

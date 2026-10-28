@@ -159,3 +159,28 @@ public sealed class LeavingArgs(string targetLocation)
     /// <summary>true면 이동하지 않는다.</summary>
     public bool Cancel { get; set; }
 }
+
+/// <summary>정렬 방향 (Addendum A-22).</summary>
+public enum SortDirection
+{
+    Ascending,
+    Descending,
+}
+
+/// <summary>정렬 조건 하나. 목록 순서가 1차·2차… 정렬 순서다.</summary>
+public sealed record SortColumn(string Field, SortDirection Direction);
+
+/// <summary>사용자가 헤더를 눌러 정렬이 바뀐 뒤 (OnSortChanged, Addendum A-22). 비어 있으면 정렬 해제.</summary>
+public sealed class SortChangedArgs(IReadOnlyList<SortColumn> sort)
+{
+    public IReadOnlyList<SortColumn> Sort { get; } = sort;
+}
+
+/// <summary>컬럼 경계 드래그가 끝난 뒤 (OnColumnResized, Addendum A-23). 레이아웃 저장(P1)에 쓴다.</summary>
+public sealed class ColumnResizedArgs(string field, int width)
+{
+    public string Field { get; } = field;
+
+    /// <summary>새 너비 (px, 최소 40)</summary>
+    public int Width { get; } = width;
+}
