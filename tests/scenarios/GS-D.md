@@ -45,12 +45,12 @@ TOBE의 Harness 8개 중 QuroGrid가 판정할 수 있는 것은 여기서, Quro
 | GS-D06 | SQL·Clean-room | 값에 `select name from codes where id = 1` / 열 id가 clean-room 금지 식별자 / 열 id `item_code`(snake_case) / 값 `#ffff00` | V-30, V-31, V-31, V-32 | H7 |
 | GS-D07 | mode × state 매트릭스 | `FieldModeResolver.Resolve`의 7 mode × 3 state × permReadOnly 2 = 42조합 (`[Theory]`) | 설계서 5.2 표와 일치. 그리드 열 환산: `edit=new` + Inserted → 편집, + Normal → 읽기 | H6 |
 
-### 3.2 식 (xUnit) — 묶음 D-4
+### 3.2 식 (xUnit) — 묶음 D-4 (GS-D08~GS-D10 ✅)
 
 | ID | 시나리오 | 입력 | 기대 결과 | H |
 |---|---|---|---|---|
-| GS-D08 | 식 화이트리스트 | `qty * unitPrice * (1 - dcRate/100)` 파싱 / `System.IO.File` / `qty + "a"` / `eval(x)` / 다른 그리드 열 | 첫째만 성공. 나머지 파싱 오류 (실행 단계까지 가지 않음) | H7 |
-| GS-D09 | 계산 값 | qty 3, unitPrice 12.50, dcRate 10 → 33.75 / dcRate null → 37.50 / qty 빈 값 → 0 / `x / 0` → null + 경고 / `sum(amount)`에 빈 행 60개 섞임 → 숫자 (NaN 없음, R11) | 모두 `decimal`. 같은 입력이면 서버·클라이언트 결과 같음 | H8 |
+| GS-D08 | 식 화이트리스트 | `qty * unitPrice * (1 - dcRate/100)` 파싱 / `System.IO.File` / `qty + "a"` / `eval(x)` / 다른 그리드 열 | 첫째만 성공. 나머지 파싱 오류 `FormatException` (실행 단계까지 가지 않음). 정의 안에서는 다른 그리드 열 = V-15, 문법 오류 = V-18 | H7 |
+| GS-D09 | 계산 값 | qty 3, unitPrice 12.50, dcRate 10 → 33.75 / dcRate null → 37.50 / qty 빈 값 → 0 / `x / 0` → null + 경고 / `sum(amount)`에 빈 행 60개 섞임 → 숫자 (NaN 없음, R11) | 모두 `decimal`. 같은 입력이면 서버·클라이언트 결과 같음. `round`는 0에서 먼 쪽 반올림 (2.5 → 3) | H8 |
 | GS-D10 | lockWhen | `status in [RE,CL]` status=RE → Locked, =SO → 아님 / `status = RE and type != X` / 없는 필드 | 참·거짓 일치, 마지막은 V-18 | H6 |
 
 ### 3.3 그리드 연결 (bUnit, `Quro.Grid.Tests`) — 묶음 D-5, **T-11·G-01~G-04 승인 후**
