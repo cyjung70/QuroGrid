@@ -1,6 +1,6 @@
 # QuroGrid 코드도움 정의 `*.lookup.toon` — v0.3 제안 (T-08)
 
-- 상태: **제안 (승인 대기)**. 승인되면 설계서 `QuroGrid_TOON_ScreenDef_v0.2.md`의 T-08을 이 문서로 닫고, 구현은 묶음 L-1~L-3으로 한다
+- 상태: **승인 (2026-10-29, Addendum A-48)**. 설계서 `QuroGrid_TOON_ScreenDef_v0.2.md`의 T-08을 이 문서로 닫는다. 구현은 묶음 L-1~L-3
 - 날짜: 2026-10-29
 - 관련: 설계서 v0.2 2장(경계)·5.4절(데이터 출처)·4.4절 `rules action=lookup`·6.2절 T-04·T-08, Addendum A-44·A-46, Harness `tests/scenarios/GS-D.md`
 
@@ -144,7 +144,7 @@ public sealed partial class ScreenDefValidator
 
 각 묶음은 브랜치·PR 1개, 테스트 먼저. 골든 lookup 파일은 공개 저장소용 중립 이름만 쓴다 (`item`, `customer`, `salesOrder`, `discount`).
 
-## 10. 결정해 주실 것
+## 10. 결정 (2026-10-29 스테이블영 승인, 1~5 모두 제안대로)
 
 1. 파일 단위: 코드도움 1개 = `{id}.lookup.toon` 1개 (3장)
 2. 스키마: 4장의 `lookup`·`params`·`queries`·`columns`
