@@ -135,6 +135,6 @@
 | 한 열의 validate 여러 줄 (A-45) | 범위는 합치고 메시지는 첫 줄의 `msg` |
 | validate 오류의 셀 표시 (A-45) | 그리드가 자동으로 표시하지 않는다. 앱이 `Validate()` 결과로 `SetCellMark` (Spec 4.9와 같은 원칙) |
 | `quro-deflint` 카탈로그 파일 (A-46) | JSON 문자열 배열 5개(`resourceKeys`·`codeMajors`·`lookupIds`·`handlers`·`permissions`) 모두 필수. 없거나 형식이 틀리면 종료 코드 2. `--catalog`가 없으면 로드 검사(V-01~V-18)만 |
-| `quro-deflint` 출력 (A-46) | 오류는 표준 출력 한 줄씩 `파일:줄: V-xx 메시지`(파일은 넘긴 폴더 기준, `/` 구분, 경로 순), 요약은 표준 오류. 0 = 통과, 1 = 오류, 2 = 사용법 |
+| `quro-deflint` 출력 (A-46) | 오류는 표준 출력 한 줄씩 `파일:줄: V-xx 메시지`(파일은 넘긴 폴더 기준, `/` 구분, 경로 순), 요약(`N screen(s), M lookup(s), K error(s)`)은 표준 오류. 0 = 통과, 1 = 오류, 2 = 사용법. lookup(A-48): 로드 실패 lookup이 있으면 화면 교차 검사(V-35~V-37)를 건너뛰고 요약에 알린다 (없는 정의로 V-37이 쏟아지지 않게). 같은 id의 lookup 파일이 둘이면 뒤 파일에 V-33 |
 | 정의 열의 코드도움·목록 (A-45·A-46) | `lookup` 열은 Popup 셀 + `LookupFor`, `select` 열은 Combo 셀 + `OptionsFor`. 파라미터가 없으면 함수·목록 없음 (앱이 `OnPopupRequested`로 처리). `OptionsFor`가 null을 주면 목록 없음 |
 | 큰 붙여넣기 중 앱 화면 (A-26) | 셀마다 값 변경 이벤트를 받은 앱 화면은 이벤트마다 다시 그려진다 (Blazor `EventCallback` 동작). 그리드는 그리지 않지만, 앱 화면에 변경분 전체 직렬화 같은 무거운 표시가 있으면 느려진다 (샘플의 저장 payload 미리보기로 500행 × 10열 약 7초 확인 → 붙여넣기 성능 화면에서 뺌). 앱 지침으로 둠 |

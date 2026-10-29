@@ -4,8 +4,9 @@ using Quro.Grid.Definition;
 namespace Quro.Grid.DefLint;
 
 /// <summary>
-/// <c>quro-deflint &lt;folder&gt; [--catalog catalog.json]</c> (T-12, GS-D16): loads every <c>*.screen.toon</c> under the
-/// folder with <see cref="ScreenDefLoader"/> and, with a catalog, checks it with <see cref="ScreenDefValidator"/>.
+/// <c>quro-deflint &lt;folder&gt; [--catalog catalog.json]</c> (T-12, GS-D16): loads every <c>*.lookup.toon</c> and
+/// <c>*.screen.toon</c> under the folder and, with a catalog, checks them with <see cref="ScreenDefValidator"/>. When the
+/// folder has lookups and all of them load, screens are also cross-checked against them (V-35..V-37, A-48).
 /// Errors go to standard output, one line each (<c>file:line: V-xx message</c>); usage and the summary go to standard error.
 /// </summary>
 internal static class DefLintCommand
@@ -39,33 +40,77 @@ internal static class DefLintCommand
         if (!Directory.Exists(folder))
             return Fail(error, $"folder not found: {folder}");
 
-        ScreenDefValidator? validator = null;
+        IQuroDefinitionCatalog? catalog = null;
         if (catalogPath is not null)
         {
-            if (JsonCatalog.Read(catalogPath, out var problem) is not { } catalog)
+            if (JsonCatalog.Read(catalogPath, out var problem) is not { } read)
                 return Fail(error, $"catalog {catalogPath}: {problem}");
-            validator = new ScreenDefValidator(catalog);
+            catalog = read;
         }
 
-        // Paths are shown as the folder was given, with '/' so the lines read the same on every OS (CI annotations).
+        var errors = new List<(string Shown, IReadOnlyList<DefinitionError> Errors)>();
+
+        // Lookups first (A-48): the screens are cross-checked against the ones that load.
+        var lookups = new Dictionary<string, LookupDef>(StringComparer.Ordinal);
+        var shownOf = new Dictionary<string, string>(StringComparer.Ordinal);
+        var brokenLookups = false;
+        var lookupFiles = Files(folder, "*.lookup.toon");
+        foreach (var (path, shown) in lookupFiles)
+        {
+            var loaded = LookupDefLoader.Load(shown, File.ReadAllText(path));
+            if (loaded.Value is not { } def)
+            {
+                brokenLookups = true;
+                errors.Add((shown, loaded.Errors));
+                continue;
+            }
+            if (!lookups.TryAdd(def.Id, def))
+            {
+                errors.Add((shown, [new DefinitionError("V-33", shown, def.Source.Line,
+                    $"lookup id '{def.Id}' is also defined in {shownOf[def.Id]}")]));
+                continue;
+            }
+            shownOf[def.Id] = shown;
+            if (catalog is not null)
+                errors.Add((shown, new ScreenDefValidator(catalog).Validate(def)));
+        }
+
+        // A lookup that does not load would make every screen that uses it report V-37, so cross-checks need all of them.
+        var crossCheck = catalog is not null && !brokenLookups && lookupFiles.Count > 0;
+        var validator = catalog is null ? null
+            : crossCheck ? new ScreenDefValidator(catalog, lookups) : new ScreenDefValidator(catalog);
+
+        var screenFiles = Files(folder, "*.screen.toon");
+        foreach (var (path, shown) in screenFiles)
+        {
+            var loaded = ScreenDefLoader.Load(shown, File.ReadAllText(path));
+            errors.Add((shown, loaded.Value is { } def && validator is not null ? validator.Validate(def) : loaded.Errors));
+        }
+
+        var count = 0;
+        foreach (var (_, list) in errors.OrderBy(e => e.Shown, StringComparer.Ordinal))
+        {
+            foreach (var e in list)
+                output.WriteLine(e);
+            count += list.Count;
+        }
+
+        var notes = catalog is null ? ", no catalog" : brokenLookups ? ", cross-checks skipped (lookup errors)" : "";
+        error.WriteLine($"quro-deflint: {screenFiles.Count} screen(s), {lookupFiles.Count} lookup(s), {count} error(s){notes}");
+        return count == 0 ? Ok : Errors;
+    }
+
+    /// <summary>
+    /// Files under the folder, in path order. Paths are shown as the folder was given, with '/' so the lines read the same
+    /// on every OS (CI annotations).
+    /// </summary>
+    private static List<(string Path, string Shown)> Files(string folder, string pattern)
+    {
         var root = folder.Replace('\\', '/').TrimEnd('/');
-        var files = Directory.EnumerateFiles(folder, "*.screen.toon", SearchOption.AllDirectories)
+        return Directory.EnumerateFiles(folder, pattern, SearchOption.AllDirectories)
             .Select(f => (Path: f, Shown: root + "/" + Path.GetRelativePath(folder, f).Replace('\\', '/')))
             .OrderBy(f => f.Shown, StringComparer.Ordinal)
             .ToList();
-
-        var count = 0;
-        foreach (var (path, shown) in files)
-        {
-            var loaded = ScreenDefLoader.Load(shown, File.ReadAllText(path));
-            var errors = loaded.Value is { } def && validator is not null ? validator.Validate(def) : loaded.Errors;
-            foreach (var e in errors)
-                output.WriteLine(e);
-            count += errors.Count;
-        }
-
-        error.WriteLine($"quro-deflint: {files.Count} file(s), {count} error(s){(validator is null ? ", no catalog" : "")}");
-        return count == 0 ? Ok : Errors;
     }
 
     private static int Fail(TextWriter error, string message)
