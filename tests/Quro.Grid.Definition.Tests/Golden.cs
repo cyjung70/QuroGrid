@@ -14,6 +14,9 @@ internal static class Golden
     public static DefinitionResult<ScreenDef> Load(string relative) =>
         ScreenDefLoader.Load(PathOf(relative), Read(relative));
 
+    public static DefinitionResult<LookupDef> LoadLookup(string relative) =>
+        LookupDefLoader.Load(PathOf(relative), Read(relative));
+
     /// <summary>1-based number of the only line of <paramref name="text"/> that contains <paramref name="fragment"/>.</summary>
     public static int LineIn(string text, string fragment)
     {
