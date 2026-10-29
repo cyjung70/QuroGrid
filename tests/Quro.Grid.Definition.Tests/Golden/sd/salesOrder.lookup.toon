@@ -1,0 +1,18 @@
+# QuroERP lookup definition (TOON v3 subset, delimiter = comma, indent = 2)
+lookup:
+  id: salesOrder
+  title: sd.so.lookup.title
+  version: 1
+  api: /api/sd/sales-orders/lookup
+  key: soNo
+  minChars: 0
+  perm: SD.SO.Read
+params[2]{id,type,req}:
+  customer,text,false
+  from,date,false
+queries[1]{id,params}:
+  open,"customer|from"
+columns[3]{id,label,type,width,fmt}:
+  soNo,sd.so.soNo,text,140,""
+  customerName,sd.customer.customerName,text,220,""
+  soDate,sd.so.soDate,date,100,""

@@ -1,0 +1,13 @@
+# QuroERP lookup definition (TOON v3 subset, delimiter = comma, indent = 2)
+lookup:
+  id: customer
+  title: sd.customer.lookup.title
+  version: 1
+  api: /api/sd/customers/lookup
+  key: customerCd
+  text: customerName
+queries[1]{id,params}:
+  all,""
+columns[2]{id,label,type,width,fmt}:
+  customerCd,sd.customer.customerCd,text,120,""
+  customerName,sd.customer.customerName,text,250,""
