@@ -1,0 +1,119 @@
+@inherits GridTestContext
+@using Quro.Grid.Definition
+
+@code {
+    // GS-D17 (G-05): CSV upload. The app parses the file and calls ImportRows(fields, rows); the grid adds rows at the end
+    // through the paste path (grid culture, events, skips) as one undo step and one render.
+
+    private static readonly CultureInfo En = new("en-US");
+
+    private sealed class Seen
+    {
+        public int RowsAdded;
+        public int CellsChanged;
+        public int Pasting;
+        public int Pasted;
+        public Func<CellValueChangingArgs<SoLine>, bool> Cancel = _ => false;
+    }
+
+    private IRenderedComponent<QuroGrid<SoLine>> RenderGrid(QuroDataSet<SoLine> ds, GridDef def, Seen seen) =>
+        Render<QuroGrid<SoLine>>(@<QuroGrid DataSet="ds" Definition="def" Culture="En" Localizer="new FakeLocalizer()"
+                                            OnRowAdded="(RowAddedArgs<SoLine> _) => seen.RowsAdded++" OnCellValueChanged="(CellValueChangedArgs<SoLine> _) => seen.CellsChanged++"
+                                            OnCellValueChanging="(CellValueChangingArgs<SoLine> e) => e.Cancel = seen.Cancel(e)"
+                                            OnPasting="(PastingArgs _) => seen.Pasting++" OnPasted="(PastedArgs _) => seen.Pasted++" />);
+
+    private static Task<ImportResult> Import(IRenderedComponent<QuroGrid<SoLine>> cut, string[] fields, params string[][] rows) =>
+        cut.InvokeAsync(() => cut.Instance.ImportRows(fields, rows));
+
+    /// <summary>GS-D17: rows are added after the existing rows, values read with the grid culture, events per row and cell</summary>
+    [Fact]
+    public async Task GS_D17_ImportRows_AppendsAtEnd()
+    {
+        var ds = GoldenScreen.OneLine();
+        var saved = ds.RowKeys[0];
+        var seen = new Seen();
+        var cut = RenderGrid(ds, GoldenScreen.Lines(), seen);
+
+        var result = await Import(cut, ["itemCd", "qty", "unitPrice"],
+            ["I-200", "3", "1,234.5"],
+            ["I-300", "4", "5"]);
+
+        Assert.Equal(2, result.AddedRowKeys.Count);
+        Assert.Empty(result.Skipped);
+        Assert.Equal([saved, .. result.AddedRowKeys], ds.RowKeys);
+        Assert.All(result.AddedRowKeys, k => Assert.Equal(RowState.Inserted, ds.GetState(k)));
+        var first = ds.GetItem(result.AddedRowKeys[0]);
+        Assert.Equal(("I-200", 3m, 1234.5m), (first.ItemCd, first.Qty, first.UnitPrice));
+        Assert.Equal(3, cut.FindAll("[role=row][data-row]").Count);
+        Assert.Equal((2, 6, 0, 0), (seen.RowsAdded, seen.CellsChanged, seen.Pasting, seen.Pasted));
+    }
+
+    /// <summary>GS-D17: works on an empty grid and with clipboard: false (it is not a paste)</summary>
+    [Fact]
+    public async Task GS_D17_ImportRows_EmptyGrid_ClipboardOff()
+    {
+        var ds = new QuroDataSet<SoLine>();
+        var cut = RenderGrid(ds, GoldenScreen.Lines("clipboard: true", "clipboard: false"), new Seen());
+
+        var result = await Import(cut, ["itemCd"], ["I-200"]);
+
+        Assert.Equal(result.AddedRowKeys, ds.RowKeys);
+        Assert.Equal("I-200", ds.GetItem(ds.RowKeys[0]).ItemCd);
+    }
+
+    /// <summary>GS-D17: read-only, unreadable and cancelled cells are skipped with the paste keys; such rows stay</summary>
+    [Fact]
+    public async Task GS_D17_ImportRows_SkipsCells()
+    {
+        var ds = GoldenScreen.OneLine();
+        var seen = new Seen { Cancel = e => e.Field == "unitPrice" };
+        var cut = RenderGrid(ds, GoldenScreen.Lines(), seen);
+
+        var result = await Import(cut, ["amount", "qty", "unitPrice"],
+            ["99", "abc", "5"]);
+
+        var row = Assert.Single(result.AddedRowKeys);
+        Assert.Equal(
+            [new PasteSkip(row, "amount", PasteKeys.ReadOnly), new PasteSkip(row, "qty", PasteKeys.Invalid),
+             new PasteSkip(row, "unitPrice", PasteKeys.Cancelled)],
+            result.Skipped);
+        Assert.Equal(2, ds.RowKeys.Count);   // the row stays so the user can fix it
+        Assert.Null(ds.GetItem(row).Amount);
+    }
+
+    /// <summary>GS-D17: the whole import is one undo step</summary>
+    [Fact]
+    public async Task GS_D17_ImportRows_OneUndoStep()
+    {
+        var ds = GoldenScreen.OneLine();
+        var cut = RenderGrid(ds, GoldenScreen.Lines(), new Seen());
+
+        await Import(cut, ["itemCd", "qty"], ["I-200", "3"], ["I-300", "4"], ["I-400", "5"]);
+        Assert.True(ds.Undo());
+
+        Assert.Single(ds.RowKeys);
+        Assert.False(ds.CanUndo);
+    }
+
+    /// <summary>GS-D17: an unknown field or a button column is refused before anything changes</summary>
+    [Theory]
+    [InlineData("noSuchField")]
+    [InlineData("invNo")]   // made a button column below
+    public async Task GS_D17_ImportRows_BadField_ChangesNothing(string field)
+    {
+        var ds = GoldenScreen.OneLine();
+        var lines = GoldenScreen.Lines();
+        var def = lines with
+        {
+            Columns = lines.Columns.Select(c => c.Id == "invNo" ? c with { Type = ColumnType.Button } : c).ToList(),
+        };
+        var seen = new Seen();
+        var cut = RenderGrid(ds, def, seen);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => Import(cut, ["itemCd", field], ["I-200", "x"]));
+
+        Assert.Single(ds.RowKeys);
+        Assert.Equal(0, seen.RowsAdded);
+        Assert.False(ds.CanUndo);
+    }
+}

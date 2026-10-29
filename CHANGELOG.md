@@ -4,6 +4,7 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 소비자(QuroERP)는 버전을 올리기 전에 이 파일을 읽는다.
 
 ## Unreleased
+- Added: `QuroGrid.ImportRows(fields, rows)`, `ImportResult` — CSV 올리기 (G-05, GS-D17, A-47). 앱이 파싱한 행을 붙여넣기 경로로 끝에 추가. 소비자 조치: 없음
 
 ## 0.2.0-alpha.1 — 2026-10-29
 화면 정의(TOON) 묶음 D-1~D-6. 새 패키지 `Quro.Grid.Definition`·`Quro.Grid.DefLint`, `Quro.Grid`가 `Quro.Grid.Definition`을 참조. BREAKING 없음. 소비자 조치: 새 리소스 키 3개(`quro.validation.minExclusive`·`maxExclusive`·`notEqual`) 문구 추가

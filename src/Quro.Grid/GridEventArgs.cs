@@ -157,6 +157,11 @@ public sealed class PastedArgs(int startRowKey, string startField, IReadOnlyList
 /// <summary>붙여넣기에서 건너뛴 셀.</summary>
 public sealed record PasteSkip(int RowKey, string Field, string MessageKey);
 
+/// <summary>Result of <see cref="QuroGrid{TItem}.ImportRows"/> (G-05).</summary>
+/// <param name="AddedRowKeys">Added rows, in the order of the imported rows</param>
+/// <param name="Skipped">Cells that were not set and why (<see cref="PasteKeys"/>)</param>
+public sealed record ImportResult(IReadOnlyList<int> AddedRowKeys, IReadOnlyList<PasteSkip> Skipped);
+
 /// <summary>붙여넣기 건너뜀 사유 리소스 키 (Addendum 2절).</summary>
 public static class PasteKeys
 {

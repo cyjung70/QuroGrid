@@ -62,6 +62,7 @@ TOBE의 Harness 8개 중 QuroGrid가 판정할 수 있는 것은 여기서, Quro
 | GS-D13 | 규칙 calc 연결 | qty 2 → 5 입력 커밋 | `amount` 즉시 갱신 (서버 왕복 1회, R2: 표시용), `OnCellValueChanged` 1회. 계산은 앱이 `RuleExpression`으로 (A-44) | H8 |
 | GS-D14 | validate `gt 0` (G-02) | qty 0 커밋 | 메시지 키 `msg.qty.zero`가 `Validate()` 결과에 포함, 앱이 그 결과로 `SetCellMark` → 셀 오류 표시 (Data: `GS_D14_*` 배타 범위·ne·`MessageKey`·camelCase 필드) | H6 |
 | GS-D15 | 그리드 옵션 | `initRows: 3` / `clipboard: false` (G-03) / `frozen: 2` | 빈 행 3 (그리기 1회, R3, DataSet이 비었을 때만, `AddBlankRow`: 손대기 전에는 `HasChanges`·`Validate`·`GetChanges` 대상 아님, Data `GS_D15_*`) / Ctrl+V·복사 무시 / 왼쪽 2열 고정. 열 옵션 `Filterable`·`Sortable`·`Groupable=false` (G-04) | H6 |
+| GS-D17 | CSV 올리기 (G-05, A-47) | 앱이 파싱한 행을 `ImportRows([itemCd, qty, unitPrice], rows)`로 | 행은 끝에 추가(빈 그리드·`clipboard: false`에서도), 값은 그리드 `Culture`(`1,234.5`), 행·셀 이벤트 발생, `OnPasting`/`OnPasted` 없음. 읽기 전용·해석 실패·취소 셀은 `Skipped`(`PasteKeys`)이고 행은 남음. Undo 한 단계. 모르는 필드·Button 열은 `ArgumentException`, 변경 없음 | H6 |
 
 ### 3.4 CLI (xUnit) — 묶음 D-6 (T-12 결정: A-46, GS-D16 ✅)
 
