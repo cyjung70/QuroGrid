@@ -377,3 +377,4 @@ D-1 → D-2 → D-3 → D-4 → D-5 → D-6. 시나리오는 `GS-D.md`, 설계�
 - D-5a (빈 행 `AddBlankRow`, `LookupFor`·`OptionsFor`, A-46): GS-D11·GS-D15 보강 — **완료**
 - D-6 (`quro-deflint` .NET 도구 `Quro.Grid.DefLint`, T-12): GS-D16 — **완료**. `0.2.0-alpha.1` 배포
 - G-05 (CSV 올리기 `ImportRows`, A-47): GS-D17 — **완료**
+- L-1 (`LookupDefLoader`·`LookupDef`, V-33, A-48): GS-D18·GS-D19 — **완료**. 다음 L-2 (카탈로그·교차 검사 V-34~V-37)

@@ -28,7 +28,7 @@ public static class ScreenDefLoader
 }
 
 /// <summary>Maps the TOON tree onto <see cref="ScreenDef"/>. Unknown or missing keys are V-02, bad values V-03.</summary>
-internal sealed class ScreenBuilder(string file, List<DefinitionError> errors)
+internal sealed class ScreenBuilder(string file, List<DefinitionError> errors) : DefinitionBuilder(file, errors)
 {
     private static readonly Dictionary<string, ScreenLayout> Layouts = new()
     {
@@ -83,10 +83,6 @@ internal sealed class ScreenBuilder(string file, List<DefinitionError> errors)
     {
         ["hide"] = DeletedRowsMode.Hide, ["strike"] = DeletedRowsMode.Strike,
     };
-
-    private void Error(string code, int line, string message) => errors.Add(new DefinitionError(code, file, line, message));
-
-    private SourceInfo At(int line) => new(file, line);
 
     public ScreenDef? Build(ToonObject root)
     {
@@ -219,156 +215,4 @@ internal sealed class ScreenBuilder(string file, List<DefinitionError> errors)
         }
         return grids;
     }
-
-    // ── object entries ──
-
-    private Dictionary<string, ToonEntry> Entries(ToonObject obj, string section, string[] required, string[] optional)
-    {
-        var map = new Dictionary<string, ToonEntry>();
-        foreach (var e in obj.Entries)
-        {
-            if (!required.Contains(e.Key) && !optional.Contains(e.Key))
-                Error("V-02", e.Line, $"unknown key '{e.Key}' in {section}");
-            else if (!map.TryAdd(e.Key, e))
-                Error("V-02", e.Line, $"duplicate key '{e.Key}' in {section}");
-        }
-        foreach (var key in required.Where(k => !map.ContainsKey(k)))
-            Error("V-02", obj.Line, $"missing key '{key}' in {section}");
-        return map;
-    }
-
-    private ToonObject? Obj(ToonEntry entry)
-    {
-        if (entry.Value is ToonObject o)
-            return o;
-        Error("V-02", entry.Line, $"'{entry.Key}' must be a nested object");
-        return null;
-    }
-
-    private string? Text(Dictionary<string, ToonEntry> map, string key) =>
-        map.TryGetValue(key, out var e) ? AsText(Scalar(e)) : null;
-
-    private int? Int(Dictionary<string, ToonEntry> map, string key) =>
-        map.TryGetValue(key, out var e) ? AsInt(Scalar(e), key) : null;
-
-    private bool? Bool(Dictionary<string, ToonEntry> map, string key) =>
-        map.TryGetValue(key, out var e) ? AsBool(Scalar(e), key) : null;
-
-    private T? Enum<T>(Dictionary<string, ToonEntry> map, string key, Dictionary<string, T> values) where T : struct =>
-        map.TryGetValue(key, out var e) ? EnumOf(Scalar(e), key, values) : null;
-
-    private ToonScalar? Scalar(ToonEntry entry)
-    {
-        if (entry.Value is ToonScalar s)
-            return s;
-        Error("V-02", entry.Line, $"'{entry.Key}' must be a single value");
-        return null;
-    }
-
-    // ── tables ──
-
-    private sealed record Row(Dictionary<string, ToonScalar> Cells, int Line);
-
-    private List<Row>? Table(ToonEntry entry, string[] required, string[] optional)
-    {
-        if (entry.Value is not ToonTable table)
-        {
-            Error("V-02", entry.Line, $"'{entry.Key}' must be a table: {entry.Key}[N]{{{string.Join(",", required)},...}}:");
-            return null;
-        }
-        foreach (var f in table.Fields.Where(f => !required.Contains(f) && !optional.Contains(f)))
-            Error("V-02", table.Line, $"unknown field '{f}' in {entry.Key}");
-        foreach (var f in required.Where(f => !table.Fields.Contains(f)))
-            Error("V-02", table.Line, $"missing field '{f}' in {entry.Key}");
-        if (table.Fields.Distinct().Count() != table.Fields.Count)
-            Error("V-02", table.Line, $"duplicate field in {entry.Key} header");
-
-        return table.Rows
-            .Select(r => new Row(table.Fields.Zip(r.Cells).DistinctBy(p => p.First).ToDictionary(p => p.First, p => p.Second), r.Line))
-            .ToList();
-    }
-
-    private string? Cell(Row row, string field) => row.Cells.TryGetValue(field, out var s) ? AsText(s) : null;
-
-    private int? CellInt(Row row, string field) => row.Cells.TryGetValue(field, out var s) ? AsInt(s, field) : null;
-
-    private bool? CellBool(Row row, string field) => row.Cells.TryGetValue(field, out var s) ? AsBool(s, field) : null;
-
-    private decimal? CellDecimal(Row row, string field)
-    {
-        if (!row.Cells.TryGetValue(field, out var s) || IsEmpty(s))
-            return null;
-        if (s is { Value: decimal d, Quoted: false })
-            return d;
-        Error("V-03", s.Line, $"'{field}' must be a number");
-        return null;
-    }
-
-    private T? CellEnum<T>(Row row, string field, Dictionary<string, T> values) where T : struct =>
-        row.Cells.TryGetValue(field, out var s) ? EnumOf(s, field, values) : null;
-
-    private ColumnEdit CellEdit(Row row)
-    {
-        if (!row.Cells.TryGetValue("edit", out var s) || IsEmpty(s))
-            return ColumnEdit.Editable;
-        return s switch
-        {
-            { Value: true, Quoted: false } => ColumnEdit.Editable,
-            { Value: false, Quoted: false } => ColumnEdit.ReadOnly,
-            { Value: "new" } => ColumnEdit.NewRowOnly,
-            _ => Invalid(s, "edit", "true, false, new", ColumnEdit.Editable),
-        };
-    }
-
-    // ── scalar conversion ──
-
-    private static bool IsEmpty(ToonScalar? s) => s is null || s.Value is null || s.Value is "";
-
-    private static string? AsText(ToonScalar? s) => IsEmpty(s)
-        ? null
-        : s!.Value switch
-        {
-            string str => str,
-            decimal d => d.ToString(CultureInfo.InvariantCulture),
-            bool b => b ? "true" : "false",
-            _ => null,
-        };
-
-    private int? AsInt(ToonScalar? s, string key)
-    {
-        if (IsEmpty(s))
-            return null;
-        if (s is { Value: decimal d, Quoted: false } && d == decimal.Truncate(d) && d is >= int.MinValue and <= int.MaxValue)
-            return (int)d;
-        Error("V-03", s!.Line, $"'{key}' must be a whole number");
-        return null;
-    }
-
-    private bool? AsBool(ToonScalar? s, string key)
-    {
-        if (IsEmpty(s))
-            return null;
-        if (s is { Value: bool b, Quoted: false })
-            return b;
-        Error("V-03", s!.Line, $"'{key}' must be true or false");
-        return null;
-    }
-
-    private T? EnumOf<T>(ToonScalar? s, string key, Dictionary<string, T> values) where T : struct
-    {
-        if (IsEmpty(s))
-            return null;
-        if (s!.Value is string str && values.TryGetValue(str, out var v))
-            return v;
-        return Invalid<T?>(s, key, string.Join(", ", values.Keys), null);
-    }
-
-    private T Invalid<T>(ToonScalar s, string key, string allowed, T fallback)
-    {
-        Error("V-03", s.Line, $"'{key}' value '{AsText(s)}' is not one of: {allowed}");
-        return fallback;
-    }
-
-    private static List<string> Ids(string? list) =>
-        string.IsNullOrEmpty(list) ? [] : [.. list.Split('|', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)];
 }

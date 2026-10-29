@@ -70,6 +70,17 @@ TOBE의 Harness 8개 중 QuroGrid가 판정할 수 있는 것은 여기서, Quro
 |---|---|---|---|---|
 | GS-D16 | 폴더 검증 CLI | 골든 폴더 + `bad/` 폴더, `--catalog catalog.json` | 정상 폴더 종료 코드 0, `bad/`는 1. 출력 한 줄 = `파일:줄: V-xx 메시지` (CI 주석으로 쓸 수 있는 형식). 카탈로그에 없는 키는 V-21 한 줄. 사용법 오류(폴더 없음·알 수 없는 옵션·카탈로그 읽기 실패)는 2 | H1~H4 H7 |
 
+### 3.5 코드도움 정의 `*.lookup.toon` (xUnit) — 묶음 L-1~L-3 (T-08 결정: A-48)
+
+골든: `Golden/sd/item.lookup.toon` (L-2에서 `customer`·`salesOrder`·`discount` 추가).
+
+| ID | 시나리오 | 입력 | 기대 결과 | H |
+|---|---|---|---|---|
+| GS-D18 ✅ | lookup 로드 (L-1) | 골든 `item.lookup.toon`, 선택 키를 뺀 판 | 오류 0, `params` 1·`queries` 2·`columns` 4, 값 타입·줄 정보. `text` 없음·`minChars` 1이 기본 | H1 |
+| GS-D19 ✅ | lookup 구조 오류 (L-1) | 한 곳씩 바꾼 골든 | 개수 V-01, 키 V-02, 값·범위(`version`<1, `minChars`<0, `api`가 `/`로 시작하지 않음, `width`≤0, 열 타입 `select`) V-03, id≠파일명·`key`/`text`가 열에 없음·조회 인수가 `params`에 없음·id 중복 V-33. 오류 1건, 그 줄 | H1 H2 |
+| GS-D20 | lookup 카탈로그 (L-2) | `title`·`label`·`perm`이 카탈로그에 없는 판 | V-34. SQL·Clean-room·색은 V-30~V-32 | H4 |
+| GS-D21 | 화면 × lookup 교차 (L-2) | 골든 화면 + 골든 lookup 4개, 한 곳씩 바꾼 판 | 오류 0. 없는 조회·인수 개수 V-35, 결과에 없는 대상 열 V-36, 정의 없는 lookup id V-37 | H4 |
+
 ## 4. 여기서 다루지 않는 것 (QuroERP)
 
 | 항목 | 이유 |

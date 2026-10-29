@@ -1,0 +1,19 @@
+# QuroERP lookup definition (TOON v3 subset, delimiter = comma, indent = 2)
+lookup:
+  id: item
+  title: mm.item.lookup.title
+  version: 1
+  api: /api/mm/items/lookup
+  key: itemCd
+  text: itemName
+  minChars: 1
+params[1]{id,type,req}:
+  customer,text,false
+queries[2]{id,params}:
+  all,""
+  byCustomer,customer
+columns[4]{id,label,type,width,fmt}:
+  itemCd,mm.item.itemCd,text,120,""
+  itemName,mm.item.itemName,text,250,""
+  unitPrice,mm.item.unitPrice,money,90,"#,##0.00"
+  stdPrice,mm.item.stdPrice,money,90,"#,##0.00"
