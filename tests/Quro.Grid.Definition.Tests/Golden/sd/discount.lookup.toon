@@ -1,0 +1,12 @@
+# QuroERP lookup definition (TOON v3 subset, delimiter = comma, indent = 2)
+lookup:
+  id: discount
+  title: sd.discount.lookup.title
+  version: 1
+  api: /api/sd/discounts/lookup
+  key: dcCode
+queries[1]{id,params}:
+  all,""
+columns[2]{id,label,type,width,fmt}:
+  dcCode,sd.discount.dcCode,text,80,""
+  dcRate,sd.discount.dcRate,number,80,"0.00"

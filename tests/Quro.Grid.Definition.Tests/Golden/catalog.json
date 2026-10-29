@@ -35,7 +35,19 @@
     "sd.so.line.invNo",
     "msg.qty.zero",
     "msg.price.zero",
-    "msg.customer.first"
+    "msg.customer.first",
+    "mm.item.lookup.title",
+    "mm.item.itemCd",
+    "mm.item.itemName",
+    "mm.item.unitPrice",
+    "mm.item.stdPrice",
+    "sd.customer.lookup.title",
+    "sd.customer.customerCd",
+    "sd.customer.customerName",
+    "sd.so.lookup.title",
+    "sd.discount.lookup.title",
+    "sd.discount.dcCode",
+    "sd.discount.dcRate"
   ],
   "codeMajors": [
     "S200",
