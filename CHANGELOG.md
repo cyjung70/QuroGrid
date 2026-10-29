@@ -4,6 +4,7 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 소비자(QuroERP)는 버전을 올리기 전에 이 파일을 읽는다.
 
 ## Unreleased
+- Changed: `quro-deflint`가 `*.lookup.toon`도 검사한다 (V-01~V-03·V-33, 카탈로그가 있으면 V-34와 화면 교차 검사 V-35~V-37, A-48). 표준 오류 요약이 `N screen(s), M lookup(s), K error(s)`로 바뀜. 소비자 조치: 없음
 - Added: `ScreenDefValidator.Validate(LookupDef)` (V-34), 생성자 `ScreenDefValidator(catalog, lookups)` — 화면 × lookup 교차 검사 V-35~V-37 (GS-D20·GS-D21, A-48). 기존 생성자 동작은 그대로. 소비자 조치: 없음
 - Added: `LookupDefLoader.Load`, `LookupDef`·`LookupParamDef`·`LookupQueryDef`·`LookupColumnDef`, `LookupParamType` — 코드도움 정의 `*.lookup.toon` (T-08, GS-D18·GS-D19, A-48). 구조 오류 V-33. 소비자 조치: 없음
 
