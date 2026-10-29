@@ -19,7 +19,7 @@ QuroERP Community용 공통 그리드 컴포넌트 **QuroGrid** 저장소다. Qu
 |---|---|---|
 | D-01 | 제작 방식 | 자체 제작. **명세 → Harness(테스트) → 구현** 3단계. Clean-room |
 | D-02 | 렌더 모드 | **Blazor Server** (SignalR 회로) |
-| D-03 | 라이선스 | **LGPL v3** |
+| D-03 | 라이선스 | **MIT** (Addendum A-41, `LICENSE.md`) |
 
 기술 스택: .NET 10 / Blazor Server, UI 보조로 MudBlazor. 저장 API(ASP.NET Core + Dapper + PostgreSQL)는 **이 저장소 밖**(QuroERP)이다.
 
@@ -30,7 +30,7 @@ QuroERP Community용 공통 그리드 컴포넌트 **QuroGrid** 저장소다. Qu
 참고 그리드에서는 **동작만** 가져오고 **코드는** 가져오지 않는다. 상세: `.claude/rules/clean-room.md` (항상 로드)
 
 - 금지: dhtmlxGrid 소스 복사·포팅, FarPoint 역공학, AG Grid Enterprise 코드 참고, Nexacro 런타임 분석
-- 새 의존성은 LGPL v3 호환 확인 후 PR에 라이선스 기록. GPL 계열·상용 금지
+- 새 의존성은 MIT 호환 확인 후 PR에 라이선스 기록. GPL 계열·상용 금지
 - 이 규칙에 어긋날 수 있는 요청은 작업을 멈추고 이유를 보고한다
 
 ---
