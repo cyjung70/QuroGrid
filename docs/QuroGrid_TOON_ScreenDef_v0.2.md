@@ -256,7 +256,7 @@ Critical(아키텍처·공개 API·데이터 모델) 항목은 확정 전까지 
 | T-05 | 그리드 `edit` 값 | `true`/`false`/`new` |
 | T-06 | TOON 파서 | 자체 서브셋 파서(새 의존성 없음) + 공식 스펙 픽스처 중 서브셋 해당분으로 검증 |
 | T-07 | 로드 시점 | 앱 시작 시 전체 로드·검증, 실패 시 앱 시작 실패 (개발 환경은 핫리로드) |
-| T-08 | `lookup.toon` 스키마 | v0.3로 미룸. v0.2는 lookup id 존재만 검사 |
+| T-08 | `lookup.toon` 스키마 | **결정 (A-48)**: `{id}.lookup.toon`, 문서 `QuroGrid_TOON_LookupDef_v0.3_Proposal.md` |
 | T-09 | `select` 값 | 값=코드, 표시=언어별 명칭 (TOBE 3.5). 이름 저장 금지 |
 | T-10 | 할인 식 부호 (TOBE D4·R3) | 업무 결정 사항. QuroGrid는 식을 그대로 평가할 뿐 — 골든 파일은 차감식 |
 | T-12 | 검증 CLI | **결정 (A-46)**: `dotnet quro-deflint <폴더>` dotnet tool |
