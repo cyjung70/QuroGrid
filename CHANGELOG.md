@@ -4,6 +4,9 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 소비자(QuroERP)는 버전을 올리기 전에 이 파일을 읽는다.
 
 ## Unreleased
+
+## 0.2.0-alpha.2 — 2026-10-29
+CSV 올리기 `ImportRows` (G-05). BREAKING 없음. 소비자 조치: 없음
 - Added: `QuroGrid.ImportRows(fields, rows)`, `ImportResult` — CSV 올리기 (G-05, GS-D17, A-47). 앱이 파싱한 행을 붙여넣기 경로로 끝에 추가. 소비자 조치: 없음
 
 ## 0.2.0-alpha.1 — 2026-10-29
