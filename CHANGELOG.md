@@ -4,6 +4,7 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 소비자(QuroERP)는 버전을 올리기 전에 이 파일을 읽는다.
 
 ## Unreleased
+- Changed (문서만): 소비자 계약 2·3장 확정 (A-49). `AddQuroGrid`·`IQuroCodeListSource`·`IQuroQueryResolver`는 만들지 않는다 — 앱은 `OptionsFor`·`LookupFor`·`ItemsProvider`·`Localizer` 파라미터로 넘긴다. 코드도움 정의 파일 이름은 `{id}.lookup.toon` 필수. 코드 변경 없음. 소비자 조치: 공통코드·코드도움 서비스를 파라미터 모양에 맞추고, lookup 파일을 `<id>.lookup.toon`으로
 
 ## 0.3.0-alpha.1 — 2026-10-29
 코드도움 정의 `*.lookup.toon` v0.3 (T-08, A-48, 묶음 L-1~L-3). BREAKING 없음. 소비자 조치: 없음 (쓰려면 `{id}.lookup.toon` 파일과 카탈로그 키를 추가)

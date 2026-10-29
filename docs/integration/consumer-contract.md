@@ -16,28 +16,31 @@
 - 정적 자산: `_content/Quro.Grid/quro-grid.js`, `_content/Quro.Grid/quro-grid.css`
 - 배포 피드: 로컬 폴더 피드 `/WRK/_nuget` (I-06). nuget.org 공개는 1.0 이후 별도 결정.
 
-## 2. 등록 [미정 — 이름]
-```csharp
-// Program.cs (QuroErp.Web)
-builder.Services.AddQuroGrid(options =>
-{
-    options.DefinitionRoot = Path.Combine(builder.Environment.ContentRootPath, "Definitions");
-    options.EnterDirection = EnterDirection.Right;   // O-05
-});
-builder.Services.AddSingleton<IQuroCodeListSource, ErpCodeListSource>();   // 공통코드 목록 (앱 구현)
-builder.Services.AddSingleton<IQuroQueryResolver, ErpQueryResolver>();     // queryId → 앱 API 호출 (I-03)
-builder.Services.AddSingleton<IQuroDefinitionCatalog, ErpDefinitionCatalog>(); // 리소스 키·queryId 목록 (검증용)
+## 2. 등록 (A-49)
+QuroGrid는 DI 등록 메서드(`AddQuroGrid`)와 서비스 인터페이스를 두지 않는다. 앱은 정적 자산을 넣고, 데이터와 동작은 컴포넌트 파라미터로 넘긴다.
+```razor
+@* App.razor (QuroErp.Web) *@
+<link rel="stylesheet" href="_content/Quro.Grid/quro-grid.css" />
+<script src="_content/Quro.Grid/quro-grid.js"></script>
+
+@* 화면 *@
+<QuroGrid DataSet="@lines" Definition="@gridDef"
+          Localizer="@L" Culture="@culture" EnterDirection="EnterDirection.Right"
+          OptionsFor="@codes.OptionsFor" LookupFor="@lookups.FindAsync" />
 ```
+- 앱의 공통코드·코드도움 서비스(이름·등록 방식은 앱이 정한다)가 아래 함수 모양을 구현해 파라미터로 넘긴다. QuroGrid는 그 서비스의 타입을 모른다.
+- 정의 로드·카탈로그 검사는 앱이 시작할 때 `ScreenDefLoader`·`LookupDefLoader`·`ScreenDefValidator`로 한다 (6장). 정의 폴더 위치도 앱이 정한다.
 
 ## 3. 앱(소비자)이 구현해야 하는 것
-| 추상화 [미정 — 이름] | 책임 | QuroGrid가 하지 않는 것 |
-|---|---|---|
-| `IQuroCodeListSource` | Major 코드 → (값, 표시명) 목록, 사용자 언어별 | 공통코드 테이블·API를 모름 |
-| `IQuroQueryResolver` | `queryId` + 파라미터 → 행 목록 (페이징) | HTTP·SQL을 모름 |
-| `IQuroDefinitionCatalog` | 존재하는 리소스 키·queryId·lookupId 목록 | resx·API를 직접 읽지 않음 |
-| `IStringLocalizer` | 리소스 키 → 문구 | 문구를 갖지 않음 |
-| 저장 URL | `QuroDataSet.SaveAsync(http, url)`에 전달 | 엔드포인트 이름을 모름 |
-| 업무 판정 | Minus 재고, 금액 계산, 저장 가능 여부 → `SetCellMark`, `OnCellValueChanged` | 판정하지 않음 |
+| 앱이 넘기는 것 | 모양 | 책임 | QuroGrid가 하지 않는 것 |
+|---|---|---|---|
+| `OptionsFor` (그리드) | `Func<string, IReadOnlyList<ComboOption>?>` | select 열 source(예 `code:S910`) → (값, 표시명) 목록, 사용자 언어별. 직접 선언한 열은 `QuroColumn.Options` | 공통코드 테이블·API를 모름 |
+| `LookupFor` (그리드) | `Func<string, string, Task<IReadOnlyList<string>>>` | lookup id, 입력 문자열 → 일치 코드 (0건·1건·복수, Tab·F4 규칙). 직접 선언한 열은 `QuroColumn.Lookup`. 팝업 목록은 `OnPopupRequested` | HTTP·SQL을 모름 |
+| `ItemsProvider` (그리드, 페이징) | `Func<GridItemsRequest, Task<GridItemsResult<TItem>>>` | 정렬·필터·페이지 → 행과 `TotalCount`·`Totals` | 조회 API를 모름 |
+| `IQuroDefinitionCatalog` (검증기) | 문자열 집합 5개 (6장) | 존재하는 리소스 키·code Major·lookup id·핸들러·권한 | resx·API를 직접 읽지 않음 |
+| `Localizer` (그리드) | `IStringLocalizer` | 리소스 키 → 문구 | 문구를 갖지 않음 |
+| 저장 URL | `QuroDataSet.SaveAsync(http, url)`에 전달 | 저장 API 호출 | 엔드포인트 이름을 모름 |
+| 업무 판정 | `SetCellMark`, `OnCellValueChanged` | Minus 재고, 금액 계산, 저장 가능 여부 | 판정하지 않음 |
 
 ## 4. 컴포넌트 · 이벤트 (요약)
 - `<QuroGrid DataSet="…">` + `<QuroColumn>` 직접 선언, 또는 `<QuroGrid Definition="@gridDef">` (`GridDef`는 `Quro.Grid.Definition`, Addendum A-44·A-45). 둘을 같이 쓰면 정의 열 뒤에 직접 선언한 열
@@ -96,13 +99,12 @@ builder.Services.AddSingleton<IQuroDefinitionCatalog, ErpDefinitionCatalog>(); /
 - 정의 파일(`*.screen.toon`)은 소비자 저장소 소유. id는 소비자 glossary의 영문 camelCase 식별자
 - 파서·검증기·`FieldModeResolver`·`RuleExpression`은 `Quro.Grid.Definition` (UI 무관 — 소비자 서버도 참조 가능). 공개 타입 목록은 설계서 9장
 - 로드: `ScreenDefLoader.Load(path, text)` → `DefinitionResult<ScreenDef>` (`Value`는 오류가 없을 때만, `Errors`는 모든 오류를 줄 순서로, 각 오류 `ToString()` = `파일:줄: V-xx 메시지`). 로드는 문법·키·값(V-01~V-03)과, 그것이 없을 때 구조(V-04~V-18)까지 검사한다. 카탈로그 검사(V-19~V-32)는 `new ScreenDefValidator(catalog).Validate(def)` — 오류 목록, 비면 통과
-- 카탈로그: 앱이 `IQuroDefinitionCatalog`를 구현한다 (`ResourceKeys`·`CodeMajors`·`LookupIds`·`Handlers`·`Permissions`, 각각 `IReadOnlySet<string>`). resx·공통코드 시드·`ILookupProvider` 등록·핸들러·권한 목록에서 만든다. QuroGrid는 이 값들을 해석하지 않고 존재만 확인한다
+- 카탈로그: 앱이 `IQuroDefinitionCatalog`를 구현한다 (`ResourceKeys`·`CodeMajors`·`LookupIds`·`Handlers`·`Permissions`, 각각 `IReadOnlySet<string>`). resx·공통코드 시드·`*.lookup.toon` 정의·핸들러·권한 목록에서 만든다. QuroGrid는 이 값들을 해석하지 않고 존재만 확인한다
 - 식: `RuleExpression.Parse(expr)`를 앱 시작 시 한 번 파싱해 캐시하고, 표시용 계산은 `OnCellValueChanged`에서 `Evaluate(열 값, 열 전체 값)`로, 저장값은 서버가 같은 코드로 다시 계산한다 (A-44). 결과 null = 0으로 나누기 → 경고. `LockExpression.Parse(lockWhen).Evaluate(폼 값)`이 참이면 `FormState.Locked`
 - 표시 상태: `FieldModeResolver.Resolve(mode, FormState, permReadOnly)` → `FieldState(Visible, Editable, Required)` (설계서 5.2). 폼 렌더러(QuroERP)가 쓴다. 앱은 시작할 때 모든 정의를 로드하고 오류가 있으면 시작을 멈춘다 (T-07 잠정)
 - 그리드 연결 `<QuroGrid Definition="@gridDef">` (설계서 7.1): 열 id = `Field`, `label` = `HeaderKey`, `edit` false/new = `ReadOnly`/`NewRowOnly`, `lookup` → Popup 셀, `select` → Combo 셀, `money`+`currency` → Currency 셀, `sum` → 합계, `hidden` → 열 없음(DataSet 필드는 있음). 그리드 옵션은 정의 값이 파라미터보다 우선. `validate`의 `gt ge lt le ne`는 DataSet 규칙(메시지 = `msg`). `initRows`는 DataSet이 비었을 때 1회. 규칙 식·`requires`·`stock`·코드도움 데이터·`Options`는 앱 (A-44·A-45)
 - 소비자가 맡는 것: 화면 레지스트리·폼 렌더러, `code:`·`lookup:`·`@` 기본값 토큰 해석, 권한 판정, 저장 커맨드 변환(`ChangeSet` → 소비자 DTO), 서버 권위 재계산
-- 카탈로그 `IQuroDefinitionCatalog`: 리소스 키, code Major, lookup id, 핸들러 id, 권한 id [이름 미정]
-- 코드도움 정의 (A-48, 설계 `docs/QuroGrid_TOON_LookupDef_v0.3_Proposal.md`): 파일 `{id}.lookup.toon` 하나에 코드도움 하나. `LookupDefLoader.Load(path, text)` → `DefinitionResult<LookupDef>` (V-01~V-03, V-33). 모델 `LookupDef`(`Id`·`Title`·`Version`·`Api`·`Key`·`Text`·`MinChars`·`Perm`·`Params`·`Queries`·`Columns`·`Source`), `LookupParamDef`, `LookupQueryDef`, `LookupColumnDef`, `LookupParamType`. 카탈로그 검사 `new ScreenDefValidator(catalog).Validate(lookupDef)` (V-34: `title`·`label` 리소스 키와 `perm`, 그 밖에 V-30~V-32). 화면 교차 검사는 `new ScreenDefValidator(catalog, lookups)`(lookup id → `LookupDef`)로 만든 검증기의 `Validate(screenDef)`: 규칙 `{lookupId}.{query}(인수)`의 조회·인수 개수 V-35, 규칙 대상 열이 lookup 결과 열에 없음 V-36, 화면이 쓰는 lookup(열 `lookup`, `lookup:` source, 규칙)의 정의 없음 V-37. 기존 생성자는 교차 검사를 하지 않는다
+- 코드도움 정의 (A-48, 설계 `docs/QuroGrid_TOON_LookupDef_v0.3_Proposal.md`): 파일 `{id}.lookup.toon` 하나에 코드도움 하나 (파일 이름 = `lookup.id`, 접미사 `.lookup.toon` 필수 — `quro-deflint`는 이 이름만 찾고, 다른 `.toon` 파일은 읽지 않는다. 폴더 구성은 소비자 자유, 예 `lookups/<module>/<id>.lookup.toon`). `LookupDefLoader.Load(path, text)` → `DefinitionResult<LookupDef>` (V-01~V-03, V-33). 모델 `LookupDef`(`Id`·`Title`·`Version`·`Api`·`Key`·`Text`·`MinChars`·`Perm`·`Params`·`Queries`·`Columns`·`Source`), `LookupParamDef`, `LookupQueryDef`, `LookupColumnDef`, `LookupParamType`. 카탈로그 검사 `new ScreenDefValidator(catalog).Validate(lookupDef)` (V-34: `title`·`label` 리소스 키와 `perm`, 그 밖에 V-30~V-32). 화면 교차 검사는 `new ScreenDefValidator(catalog, lookups)`(lookup id → `LookupDef`)로 만든 검증기의 `Validate(screenDef)`: 규칙 `{lookupId}.{query}(인수)`의 조회·인수 개수 V-35, 규칙 대상 열이 lookup 결과 열에 없음 V-36, 화면이 쓰는 lookup(열 `lookup`, `lookup:` source, 규칙)의 정의 없음 V-37. 기존 생성자는 교차 검사를 하지 않는다
 - 검증 CLI (T-12, A-46, GS-D16): `dotnet quro-deflint <폴더> [--catalog catalog.json]`. 폴더 아래(하위 폴더 포함) `*.lookup.toon`과 `*.screen.toon`을 모두 로드하고 (lookup: V-01~V-03·V-33, `--catalog`가 있으면 V-34. 폴더에 lookup이 있고 모두 로드되면 화면 교차 검사 V-35~V-37, A-48), `--catalog`가 있으면 카탈로그 검사(V-19~V-32)까지 한다. 표준 출력은 오류 한 줄씩 `파일:줄: V-xx 메시지` (파일 경로는 넘긴 폴더 기준, `/` 구분), 요약·사용법은 표준 오류. 종료 코드 0 = 오류 없음, 1 = 오류, 2 = 사용법 오류(폴더 없음, 알 수 없는 옵션, 카탈로그를 읽을 수 없음)
 - 카탈로그 파일 (`--catalog`): JSON 객체, 문자열 배열 5개 `resourceKeys`·`codeMajors`·`lookupIds`·`handlers`·`permissions` (모두 필수, 빈 배열 가능). 예: `tests/Quro.Grid.Definition.Tests/Golden/catalog.json`. 소비자가 빌드 때 resx·공통코드 시드·lookup 등록·핸들러·권한 목록에서 만든다
 
