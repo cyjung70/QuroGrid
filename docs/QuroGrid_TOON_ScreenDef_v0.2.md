@@ -296,7 +296,7 @@ Critical(아키텍처·공개 API·데이터 모델) 항목은 확정 전까지 
 - `validate gt/ge/lt/le/ne` → `DataSet.SetRule` (G-02 ✅): `MinExclusive`·`MaxExclusive`·`NotEqual`, 메시지 = `msg` (`FieldRule.MessageKey`)
 
 ### 7.3 툴바 → 그리드 API
-`addRow` → `AddRow()`, `deleteRow` → `DeleteSelectedRows()`, `undoRow` → `RevertRow(active)` (O-01), `exportXlsx`/`exportCsv` → `GetExportRequest(format)`, `uploadCsv` → 앱이 파일을 읽어 `PasteCells`와 같은 경로 (G-05). `query`·`new`·`save`·`delete`·`print`는 앱.
+`addRow` → `AddRow()`, `deleteRow` → `DeleteSelectedRows()`, `undoRow` → `RevertRow(active)` (O-01), `exportXlsx`/`exportCsv` → `GetExportRequest(format)`, `uploadCsv` → 앱이 파일을 읽어 `ImportRows(fields, rows)` (G-05, A-47: 붙여넣기 경로로 끝에 행 추가). `query`·`new`·`save`·`delete`·`print`는 앱.
 
 ### 7.4 v0.1 개념 → v0.2
 | v0.1 | v0.2 |
@@ -314,7 +314,7 @@ Critical(아키텍처·공개 API·데이터 모델) 항목은 확정 전까지 
 | G-02 | 초과·미만(배타) 범위, `ne` | ✅ `FieldRule.MinExclusive`·`MaxExclusive`·`NotEqual` (+ `MessageKey`) (A-45) |
 | G-03 | 복사·붙여넣기 끄기 | ✅ `QuroGrid.Clipboard` (A-45) |
 | G-04 | 열별 필터·정렬·그룹 허용 | ✅ `QuroColumn.Filterable`·`Sortable`·`Groupable` (A-45) |
-| G-05 | CSV 업로드 | 앱이 파싱 → 기존 붙여넣기 경로 공개 (`PasteAsync(cells)`) |
+| G-05 | CSV 업로드 | ✅ `QuroGrid.ImportRows(fields, rows)` → `ImportResult` (A-47). 파싱은 앱 |
 
 ---
 

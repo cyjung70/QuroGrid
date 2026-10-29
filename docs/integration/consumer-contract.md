@@ -42,6 +42,7 @@ builder.Services.AddSingleton<IQuroDefinitionCatalog, ErpDefinitionCatalog>(); /
 ## 4. 컴포넌트 · 이벤트 (요약)
 - `<QuroGrid DataSet="…">` + `<QuroColumn>` 직접 선언, 또는 `<QuroGrid Definition="@gridDef">` (`GridDef`는 `Quro.Grid.Definition`, Addendum A-44·A-45). 둘을 같이 쓰면 정의 열 뒤에 직접 선언한 열
 - 그리드 옵션: `Clipboard` (복사·붙여넣기, 기본 true, G-03)
+- CSV 올리기 (G-05, A-47): `Task<ImportResult> ImportRows(IReadOnlyList<string> fields, IReadOnlyList<string[]> rows)`. 앱이 파일을 읽고 헤더를 필드 이름에 맞춰 부른다. 행은 끝에 추가, 셀은 붙여넣기와 같이 그리드 `Culture`로 읽고 이벤트 발생, 건너뛴 셀은 `ImportResult.Skipped`(`PasteSkip`, `PasteKeys`). Undo 한 단계. `Clipboard`와 무관, `OnPasting`/`OnPasted` 없음. 모르는 필드·Button 열은 `ArgumentException`
 - 정의 열의 데이터 (A-46): `LookupFor` (`Func<string, string, Task<IReadOnlyList<string>>>`: lookup id, 입력 문자열 → 일치 코드. `Lookup`과 같은 규칙), `OptionsFor` (`Func<string, IReadOnlyList<ComboOption>?>`: select 열의 source(예 `code:S910`) → 목록). 정의나 이 파라미터가 바뀔 때만 다시 묻는다. 목록을 다시 읽으려면 새 함수를 넘긴다
 - 컬럼 옵션: `NewRowOnly` (추가 행에서만 편집, G-01), `Filterable`·`Sortable`·`Groupable` (기본 true, G-04)
 - 검증 규칙 `FieldRule`: `Required`, `Min`·`Max` (+ `MinExclusive`·`MaxExclusive`), `NotEqual`, `MessageKey` (범위·ne 오류 키를 바꿈, 필수는 그대로). 기본 키 `quro.validation.required`·`min`·`max`·`minExclusive`·`maxExclusive`·`notEqual` (G-02)

@@ -705,6 +705,50 @@ public partial class QuroGrid<TItem> where TItem : class
         return true;
     }
 
+    /// <summary>
+    /// Adds rows from text, for a CSV upload (G-05, A-47). The app reads the file and maps its header to
+    /// <paramref name="fields"/>; each row of <paramref name="rows"/> holds the texts in that order (extra texts are ignored).
+    /// Rows go at the end (at the top while paging, A-24) with OnRowAdding/OnRowAdded, and each cell goes through the paste
+    /// path: read with <see cref="Culture"/>, value-change events, read-only, unreadable and cancelled cells skipped. A row
+    /// whose cells were all skipped stays. One undo step and one render (R3). Not affected by <see cref="Clipboard"/> or
+    /// <see cref="AddRowsOnPaste"/>, and OnPasting/OnPasted are not raised.
+    /// </summary>
+    /// <exception cref="ArgumentException">A field is not a grid column or is a button column; nothing is changed.</exception>
+    public async Task<ImportResult> ImportRows(IReadOnlyList<string> fields, IReadOnlyList<string[]> rows)
+    {
+        ArgumentNullException.ThrowIfNull(fields);
+        ArgumentNullException.ThrowIfNull(rows);
+        var columns = fields.Select(Column).ToList();
+        if (columns.FirstOrDefault(c => c.Type == CellType.Button) is { } button)
+            throw new ArgumentException($"Button column '{button.Field}' has no value to import.", nameof(fields));
+
+        using var step = DataSet.BeginUndoStep();   // one user action = one undo step (A-33)
+        var added = new List<int>();
+        var skipped = new List<PasteSkip>();
+        _batch++;   // the grid renders once at the end (R4)
+        try
+        {
+            foreach (var cells in rows)
+            {
+                var rowKey = await AddRowCore();
+                added.Add(rowKey);
+                for (var c = 0; c < cells.Length && c < columns.Count; c++)
+                {
+                    var reason = await PasteCell(rowKey, columns[c], cells[c]);
+                    if (reason is not null)
+                        skipped.Add(new PasteSkip(rowKey, columns[c].Field, reason));
+                }
+            }
+        }
+        finally
+        {
+            _batch--;
+        }
+
+        StateHasChanged();
+        return new ImportResult(added, skipped);
+    }
+
     /// <summary>큰 붙여넣기 값의 최대 크기 (스트림).</summary>
     private const long MaxPasteBytes = 20 * 1024 * 1024;
 
