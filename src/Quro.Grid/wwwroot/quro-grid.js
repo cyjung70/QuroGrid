@@ -860,8 +860,11 @@ async function addRow(s, afterRow) {
     if (first) activate(s, key, first.dataset.field);
 }
 
-/** 활성 셀 이동. extend면 고정 끝(anchor)을 두고 범위를 넓힌다. 아니면 범위는 한 셀로 줄어든다. */
-function activate(s, row, field, extend = false) {
+/**
+ * 활성 셀 이동. extend면 고정 끝(anchor)을 두고 범위를 넓힌다. 아니면 범위는 한 셀로 줄어든다.
+ * focus가 false면 포커스를 가져오지 않는다 (앱이 DataSet 현재 행을 옮긴 경우, A-51).
+ */
+function activate(s, row, field, extend = false, focus = true) {
     // 화면 위치(aria-rowindex)도 기억한다: 페이징 중 범위의 끝 행이 화면 밖으로 나가 그려지지 않아도 범위를 안다 (A-25)
     const index = rowIndexOf(rowEl(s, row));
     if (s.header) leaveHeader(s);
@@ -884,12 +887,12 @@ function activate(s, row, field, extend = false) {
     s.style.textContent = css;
     markSelected(s, sel.rowEls.flatMap(r => sel.fields.map(f => cellAt(s, rowKey(r), f))).filter(Boolean));
     currentCell(s)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-    if (!s.editing && document.activeElement !== s.root) s.root.focus({ preventScroll: true });
+    if (focus && !s.editing && document.activeElement !== s.root) s.root.focus({ preventScroll: true });
     notifySelection(s);
 }
 
 /**
- * 활성 행이 바뀌면 서버에 알린다 (Addendum A-13). 앱이 구독한 경우에만, 같은 행 안의 이동은 보내지 않는다.
+ * 활성 행이 바뀌면 서버에 알린다 (Addendum A-13·A-62: DataSet 현재 행을 맞추므로 항상). 같은 행 안의 이동은 보내지 않는다.
  * 빠르게 여러 행을 지나가면 멈춘 행만 보낸다 (100ms, 잠정).
  */
 function notifySelection(s) {
@@ -1033,6 +1036,32 @@ export function ensureActive(root) {
     const cells = cellsOf(row);
     const cell = cells.find(c => c.dataset.field === s.active.field) ?? cells[0];
     activate(s, rowKey(row), cell.dataset.field);
+}
+
+/**
+ * 앱(또는 다른 컨트롤)이 DataSet 현재 행을 옮긴 뒤 서버가 호출한다 (A-51, GS-085): 활성 셀을 그 행의 같은 열(없으면 첫 열)로.
+ * 포커스는 가져오지 않고 서버로 되돌려 보내지 않는다. 편집 중이면 옮기지 않는다.
+ * 페이징 중 그려지지 않은 행이면 index 위치로 스크롤한 뒤 그려지면 옮긴다 (index가 -1이면 그려진 경우에만).
+ */
+export function activateRow(root, row, index) {
+    const s = grids.get(root);
+    if (!s || s.editing) return;
+    const place = () => {
+        const el = rowEl(s, row);
+        if (!el) return false;
+        const cells = cellsOf(el);
+        if (cells.length === 0) return true;
+        const cell = cells.find(c => c.dataset.field === s.active?.field) ?? cells[0];
+        s.notifiedRow = row;   // 서버가 이미 아는 행
+        activate(s, row, cell.dataset.field, false, false);
+        return true;
+    };
+    if (place() || !s.options.paging || index < 0) return;
+    const height = parseFloat(getComputedStyle(s.root).getPropertyValue('--quro-row-height')) || 28;
+    s.root.scrollTop = index * height;
+    let frames = 0;
+    const retry = () => { if (!place() && ++frames < 30) requestAnimationFrame(retry); };
+    requestAnimationFrame(retry);
 }
 
 // ── 선택 범위 ──

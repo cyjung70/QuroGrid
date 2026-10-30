@@ -11,11 +11,17 @@ namespace Quro.Grid.E2E;
 [Collection(SampleCollection.Name)]
 public abstract class GridPageTest(SampleServer server) : PageTest
 {
-    /// <summary>브라우저 → 서버로 보낸 WebSocket(SignalR) 프레임 수.</summary>
+    /// <summary>
+    /// 브라우저 → 서버로 보낸 WebSocket(SignalR) 프레임 수. 활성 행 알림(<see cref="RowNotifyFrames"/>)은 빼고 센다:
+    /// 행이 멈출 때마다 100ms 뒤 한 번 가는 알림이라(A-13·A-51) 사용자 동작의 서버 호출과 따로 검증한다.
+    /// </summary>
     protected int SentFrames { get; private set; }
 
-    /// <summary>그중 .NET 메서드 호출(JS → 서버 Interop) 프레임 수. 렌더 완료 통지 등은 제외 (R3 검증용).</summary>
+    /// <summary>그중 .NET 메서드 호출(JS → 서버 Interop) 프레임 수. 렌더 완료 통지 등은 제외 (R3 검증용). 활성 행 알림도 제외.</summary>
     protected int InvokeFrames { get; private set; }
+
+    /// <summary>활성 행 알림(SelectionChanged) 호출 프레임 수 (GS-059·GS-085).</summary>
+    protected int RowNotifyFrames { get; private set; }
 
     protected ILocator Grid => Page.Locator("[role=grid]");
 
@@ -26,9 +32,15 @@ public abstract class GridPageTest(SampleServer server) : PageTest
     {
         Page.WebSocket += (_, ws) => ws.FrameSent += (_, f) =>
         {
-            SentFrames++;
             var payload = f.Binary is { } bytes ? Encoding.UTF8.GetString(bytes) : f.Text ?? "";
-            if (payload.Contains("BeginInvokeDotNetFromJS", StringComparison.Ordinal))
+            var invoke = payload.Contains("BeginInvokeDotNetFromJS", StringComparison.Ordinal);
+            if (invoke && payload.Contains("SelectionChanged", StringComparison.Ordinal))
+            {
+                RowNotifyFrames++;
+                return;
+            }
+            SentFrames++;
+            if (invoke)
                 InvokeFrames++;
         };
         await Page.GotoAsync($"{server.BaseUrl}/po-lines{query}");

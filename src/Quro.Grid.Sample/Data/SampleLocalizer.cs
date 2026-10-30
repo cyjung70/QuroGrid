@@ -28,6 +28,8 @@ public sealed class SampleLocalizer : IStringLocalizer
         ["sample.delete_rows"] = ("행 삭제", "Delete rows"),
         ["sample.toggle_price"] = ("단가 숨김/표시", "Hide/show unit price"),
         ["sample.selected_row"] = ("선택 행", "Selected row"),
+        ["sample.current_row"] = ("현재 행 (DataSet)", "Current row (DataSet)"),
+        ["sample.move_last"] = ("마지막 행으로", "Go to last row"),
         ["mm.remark"] = ("비고", "Remark"),
         ["mm.spec"] = ("규격", "Spec"),
         ["mm.maker"] = ("제조사", "Maker"),

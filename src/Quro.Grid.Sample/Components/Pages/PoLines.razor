@@ -20,6 +20,7 @@
     <button type="button" data-testid="delete-rows" @onclick="() => _grid.DeleteSelectedRows()">@L["sample.delete_rows"]</button>
     <button type="button" data-testid="toggle-price" @onclick="TogglePrice">@L["sample.toggle_price"]</button>
     <button type="button" data-testid="refresh-status" @onclick="() => _refreshes++">@L["sample.refresh_status"]</button>
+    <button type="button" data-testid="move-last" @onclick="() => _lines.MoveTo(_lines.RowKeys[^1])">@L["sample.move_last"]</button>
 </div>
 
 <QuroGrid @ref="_grid" TItem="PoLine" DataSet="_lines" Localizer="L" Culture="_culture" ShowFooter="true" FrozenColumns="1"
@@ -92,6 +93,8 @@
     <dd data-testid="button-row">@_buttonRow</dd>
     <dt>@L["sample.selected_row"]</dt>
     <dd data-testid="selected-row">@_selectedRow</dd>
+    <dt>@L["sample.current_row"]</dt>
+    <dd data-testid="current-row" data-refresh="@_refreshes">@_lines.CurrentRowKey</dd>
     <dt>@L["sample.loaded_rows"]</dt>
     <dd data-testid="loaded-rows" data-refresh="@_refreshes">@_lines.RowKeys.Count</dd>
     <dt>@L["sample.provider_calls"]</dt>

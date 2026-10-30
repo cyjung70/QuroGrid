@@ -35,6 +35,9 @@ public partial class QuroGrid<TItem> where TItem : class
     private IJSObjectReference? _module;
     private DotNetObjectReference<QuroGrid<TItem>>? _self;
     private bool _ensureActive;   // 행 삭제 후 JS에 활성 셀을 남은 행으로 옮기게 한다 (렌더 반영 뒤)
+    private QuroDataSet<TItem>? _bound;   // CurrentRowChanged를 구독한 DataSet (A-51)
+    private int? _activateRow;            // 앱이 옮긴 현재 행: 렌더 반영 뒤 JS 활성 셀을 그 행으로
+    private bool _movingFromGrid;         // 그리드가 옮긴 현재 행은 JS로 되돌려 보내지 않는다
     private bool _endEdit;        // 선택 목록에서 골라 서버가 편집을 끝냈을 때 JS 편집 상태를 정리한다 (렌더 반영 뒤)
     private int _batch;   // 일괄 처리(붙여넣기·여러 행 삭제·행 복사) 중이면 그리드를 다시 그리지 않는다 (R4)
     private readonly string _instanceId = Guid.NewGuid().ToString("N");   // 재연결 후 같은 회로인지 JS가 확인 (A-21)
@@ -225,6 +228,7 @@ public partial class QuroGrid<TItem> where TItem : class
     /// </summary>
     protected override void OnParametersSet()
     {
+        BindDataSet();
         ApplyDefinition();
         object layout = (DataSet, Localizer, Culture, FrozenColumns, CurrencyDigits, DeletedRows);
         if (!Equals(layout, _layoutParameters))
@@ -256,7 +260,7 @@ public partial class QuroGrid<TItem> where TItem : class
             var options = new GridJsOptions(
                 EnterDirection == EnterDirection.Down ? "down" : "right",
                 AddRowOnLastEnter,
-                NotifySelection: OnSelectionChanged.HasDelegate,
+                NotifySelection: true,   // DataSet 현재 행을 맞추므로 구독과 관계없이 (A-51)
                 InstanceId: _instanceId,
                 Paging: Paging);
             await _module.InvokeVoidAsync("init", _root, _self, options);
@@ -273,12 +277,56 @@ public partial class QuroGrid<TItem> where TItem : class
                 _endEdit = false;
                 await _module.InvokeVoidAsync("endEdit", _root);
             }
+            if (_activateRow is { } row)
+            {
+                _activateRow = null;
+                if (DisplayIndexOf(row) is { } index)
+                    await _module.InvokeVoidAsync("activateRow", _root, row, index);
+            }
         }
+    }
+
+    // ── DataSet 현재 행 ↔ 그리드 활성 행 (A-51, GS-085) ──
+
+    private void BindDataSet()
+    {
+        if (ReferenceEquals(_bound, DataSet))
+            return;
+        if (_bound is not null)
+            _bound.CurrentRowChanged -= OnCurrentRowChanged;
+        _bound = DataSet;
+        _bound.CurrentRowChanged += OnCurrentRowChanged;
+    }
+
+    /// <summary>앱(또는 다른 컨트롤)이 현재 행을 옮기면 렌더 반영 뒤 그리드 활성 셀도 옮긴다. 포커스는 가져오지 않는다.</summary>
+    private void OnCurrentRowChanged(object? sender, CurrentRowChangedEventArgs e)
+    {
+        if (_movingFromGrid || e.NewRowKey is null)
+            return;
+        _activateRow = e.NewRowKey;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>화면 순번. 페이징 중이면 서버 기준 위치(모르면 -1, 그려져 있을 때만 옮김), 화면에 없는 행(걸러짐·접힘·숨긴 삭제 행)이면 null</summary>
+    private int? DisplayIndexOf(int rowKey)
+    {
+        if (Paging)
+            return _rowIndex.TryGetValue(rowKey, out var paged) ? paged : -1;
+        var index = 0;
+        foreach (var key in VisibleRowKeys())
+        {
+            if (key == rowKey)
+                return index;
+            index++;
+        }
+        return null;
     }
 
     /// <summary>Releases the JS module and its event handlers.</summary>
     public async ValueTask DisposeAsync()
     {
+        if (_bound is not null)
+            _bound.CurrentRowChanged -= OnCurrentRowChanged;
         try
         {
             if (_module is not null)
@@ -603,10 +651,28 @@ public partial class QuroGrid<TItem> where TItem : class
         return key;
     }
 
-    /// <summary>활성 행이 바뀌었을 때 JS가 호출한다 (Addendum A-13, 구독한 경우에만).</summary>
+    /// <summary>
+    /// 활성 행이 바뀌었을 때 JS가 호출한다 (Addendum A-13). DataSet 현재 행을 옮기고(A-51), 앱이 구독했으면 OnSelectionChanged.
+    /// 그 사이 행이 없어졌으면 무시한다.
+    /// </summary>
     [JSInvokable]
-    public Task SelectionChanged(int rowKey) =>
-        OnSelectionChanged.InvokeAsync(new SelectionChangedArgs<TItem>(rowKey, DataSet.GetItem(rowKey)));
+    public Task SelectionChanged(int rowKey)
+    {
+        _movingFromGrid = true;
+        try
+        {
+            DataSet.MoveTo(rowKey);
+        }
+        catch (KeyNotFoundException)
+        {
+            return Task.CompletedTask;
+        }
+        finally
+        {
+            _movingFromGrid = false;
+        }
+        return OnSelectionChanged.InvokeAsync(new SelectionChangedArgs<TItem>(rowKey, DataSet.GetItem(rowKey)));
+    }
 
     /// <summary>여러 행 삭제. OnRowDeleting은 행마다 발생하고, 취소한 행은 남는다. 삭제한 행 수를 돌려준다.</summary>
     [JSInvokable]

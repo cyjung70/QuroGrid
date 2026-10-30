@@ -98,25 +98,7 @@
         Assert.Equal("A1002", seen.Item.ItemCode);
     }
 
-    /// <summary>GS-059: 구독할 때만 JS가 선택 변경을 보낸다 (불필요한 서버 호출 방지)</summary>
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void GS_059_NotifySelection_OnlyWhenSubscribed(bool subscribe)
-    {
-        var module = JSInterop.SetupModule(ModulePath);
-        module.SetupVoid("init", _ => true);
-        var ds = TestData.ThreeLines();
-        var handler = EventCallback.Factory.Create<SelectionChangedArgs<PoLine>>(this, () => { });
-
-        if (subscribe)
-            Render(@<QuroGrid DataSet="ds" OnSelectionChanged="handler"><QuroColumn Field="Qty" HeaderKey="mm.qty" /></QuroGrid>);
-        else
-            Render(@<QuroGrid DataSet="ds"><QuroColumn Field="Qty" HeaderKey="mm.qty" /></QuroGrid>);
-
-        var options = Assert.IsType<GridJsOptions>(Assert.Single(module.Invocations["init"]).Arguments[2]);
-        Assert.Equal(subscribe, options.NotifySelection);
-    }
+    // GS-059 "구독할 때만 JS가 보냄"은 A-51로 바뀌었다: GS_085_NotifySelection_AlwaysOn (DataSet 현재 행 동기화)
 
     /// <summary>A-10: QuroColumn의 Required·Min·Max는 DataSet 규칙 API로 등록된다</summary>
     [Fact]
