@@ -4,6 +4,8 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 소비자(QuroERP)는 버전을 올리기 전에 이 파일을 읽는다.
 
 ## Unreleased
+
+## 0.5.0-alpha.1 — 2026-10-31
 MudBlazor 제거 (A-67). **BREAKING (의존성)**. 소비자 조치: MudBlazor를 쓰면 앱에 `MudBlazor` 패키지 참조 추가, 다크 모드는 `--quro-*` 토큰으로
 - BREAKING (의존성): `Quro.Grid` 패키지가 MudBlazor를 참조하지 않는다 (A-67, GS-090). 소비자 조치: 앱이 MudBlazor 컴포넌트(다이얼로그 등)를 쓰면 `<PackageReference Include="MudBlazor" …>`를 직접 추가. 쓰지 않으면 `AddMudServices()`·MudBlazor CSS·JS 등록을 지워도 된다
 - Changed: 셀 달력(Date)·목록(Combo)을 그리드가 직접 그린다 (A-67, GS-060·GS-061). 달력은 브라우저에서 그리고 달 넘김은 서버 호출 없음, 날짜·항목을 고를 때만 1회. 키·동작(Alt+↓, 고르면 확정, Esc 취소)은 그대로. 소비자 조치: 없음 (`.mud-*` 클래스로 목록을 고친 CSS가 있으면 `.quro-calendar`·`.quro-cal-*`·`.quro-options`·`.quro-option`으로)
