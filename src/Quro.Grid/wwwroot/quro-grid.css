@@ -244,6 +244,13 @@
     border-color: var(--qg-active);
 }
 
+/* 키보드 강조 (GS-091) */
+.quro-cal-day[data-active],
+.quro-option[data-active] {
+    outline: 2px solid var(--qg-active);
+    outline-offset: -2px;
+}
+
 .quro-cal-day[aria-selected=true] {
     background: var(--qg-active);
     color: var(--qg-check-mark);
