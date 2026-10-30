@@ -1,11 +1,12 @@
 # CLAUDE.md — QuroGrid
 
-QuroERP Community용 공통 그리드 컴포넌트 **QuroGrid** 저장소다. QuroERP(`/WRK/QuroERP`)는 이 저장소를 **NuGet 패키지로 가져다 쓰는 소비자**다.
+QuroERP Community용 공통 그리드 컴포넌트 **QuroGrid**와 공통 입력 컨트롤 **QuroUI**(텍스트 박스·콤보·날짜·정적 텍스트·마스크, A-53) 저장소다. QuroERP(`/WRK/QuroERP`)는 이 저장소를 **NuGet 패키지로 가져다 쓰는 소비자**다.
 
 기준 문서 (우선순위 순):
 1. `docs/QuroGrid_Spec_v1_Addendum.pdf` — 결정 사항. Spec 본문보다 우선
 2. `docs/QuroGrid_FeatureMatrix_Spec_v1.pdf` — Spec v1 초안 (2026-10-28)
 3. `docs/QuroGrid_TOON_ScreenDef_v0.2.md` (PDF 동봉) — 화면 정의(TOON) 설계서 v0.2. Harness: `tests/scenarios/GS-D.md`
+   - `docs/QuroGrid_Control_Spec_Draft_v0.1.md` — Control Spec 초안 v0.1. 반영 결정은 Addendum A-50~A-61, 대조·질의는 `docs/QuroGrid_Control_Spec_v0.1_Review.md`
 4. 이 파일과 `.claude/rules/*.md`
 
 이 파일과 Spec이 충돌하면 **Spec이 우선**이며 충돌 사실을 보고한다. 새 결정은 Addendum에 추가한다.
@@ -78,6 +79,7 @@ src/
   Quro.Grid.Definition/  TOON 화면 정의 파서·검증기·불변 모델·규칙 식 (UI 무관)  → NuGet  [I-02 결정: A-44]
   Quro.Grid/             QuroGrid.razor, QuroColumn, 셀 타입, 이벤트      → NuGet (RCL)
     wwwroot/quro-grid.js   소비자에서는 _content/Quro.Grid/quro-grid.js
+  Quro.UI/               QuroUI 컨트롤 (MudBlazor 감쌈, DataSet 열 바인딩)     → NuGet (RCL)  [A-53]
   Quro.Grid.Sample/      Blazor Server 샘플 (패키지로 배포하지 않음)
 tests/
   Quro.Grid.Data.Tests/  Quro.Grid.Definition.Tests/  Quro.Grid.Tests/  Quro.Grid.E2E/
@@ -88,7 +90,7 @@ scripts/
   pack-local.ps1          로컬 피드로 패키지 배포
 ```
 
-의존 방향: `Quro.Grid` → `Quro.Grid.Definition` → `Quro.Grid.Data`. 반대 방향 금지.
+의존 방향: `Quro.Grid` → `Quro.Grid.Definition` → `Quro.Grid.Data`, `Quro.UI` → `Quro.Grid.Data`. 반대 방향 금지.
 
 ---
 
@@ -107,7 +109,7 @@ scripts/
 
 ## 6. 소비자(QuroERP) 계약
 
-- QuroERP는 **패키지**(`Quro.Grid`, `Quro.Grid.Data`, `Quro.Grid.Definition`)만 참조한다. 이 저장소 소스를 복사하지 않는다.
+- QuroERP는 **패키지**(`Quro.Grid`, `Quro.Grid.Data`, `Quro.Grid.Definition`, `Quro.UI`)만 참조한다. 이 저장소 소스를 복사하지 않는다.
 - 공개 API(public 타입·멤버, 컴포넌트 파라미터, 이벤트, TOON 스키마)는 `docs/integration/consumer-contract.md`가 정본이다. 바꾸면 그 문서와 `CHANGELOG.md`를 같은 PR에서 고친다.
 - 버전은 SemVer. 1.0 전에는 `0.MINOR.PATCH-alpha.N`. 공개 API를 깨는 변경은 MINOR를 올리고 CHANGELOG에 `BREAKING`으로 적는다.
 - 배포: 스킬 `qurogrid-release` (로컬 피드 `/WRK/_nuget`). **같은 버전 번호로 다시 배포하지 않는다** (NuGet 캐시 때문에 소비자에게 반영되지 않음).
