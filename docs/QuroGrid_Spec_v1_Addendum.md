@@ -1,7 +1,7 @@
 # QuroGrid Spec v1 보완 문서 (Addendum A)
 
 - 대상: `docs/QuroGrid_FeatureMatrix_Spec_v1.pdf` (Spec v1 초안 Draft v0.2, 2026-10-28 — 4.9·5장 본문 개정)
-- 문서 상태: A.22 (2026-10-29) · 스테이블영 결정 사항 반영
+- 문서 상태: A.24 (2026-10-30) · 스테이블영 결정 사항 반영
 - 이 문서는 Spec v1의 일부입니다. **아래 항목은 Spec 본문보다 우선합니다.** 본문에 없는 내용은 "보완", 본문과 다른 내용은 "변경"으로 표시합니다.
 
 ---
@@ -59,6 +59,18 @@
 | A-47 | 신규 (G-05) | 결정 | **CSV 올리기 `QuroGrid.ImportRows(fields, rows)` → `ImportResult(AddedRowKeys, Skipped)` (2026-10-29 스테이블영 승인, GS-D17)**: 앱이 파일을 읽고 CSV 헤더를 필드 이름에 맞춘다 (그리드는 파일·CSV를 다루지 않는다). 행은 끝에 추가(페이징 중에는 맨 위, A-24), 행마다 `OnRowAdding`/`OnRowAdded`. 셀은 붙여넣기 경로: 그리드 `Culture`로 읽고 값 변경 이벤트, 읽기 전용·해석 실패·취소 셀은 건너뛰고 `PasteKeys`로 `Skipped`에. 모든 셀을 건너뛴 행도 남긴다. Undo 한 단계, 그리기 1회 (R3). `Clipboard`·`AddRowsOnPaste`와 무관하고 `OnPasting`/`OnPasted`는 발생하지 않는다 (호출하는 앱이 결과를 받음). 그리드 열이 아니거나 Button 열인 필드는 아무것도 바꾸기 전에 `ArgumentException` | 2026-10-29 |
 | A-48 | 신규 (T-08) | 결정 | **코드도움 정의 `*.lookup.toon` v0.3 (2026-10-29 스테이블영 승인)**: 문서 `docs/QuroGrid_TOON_LookupDef_v0.3_Proposal.md`. (1) 코드도움 1개 = `{id}.lookup.toon` 1개. (2) 절 `lookup`(id·title·version·api·key·text·minChars·perm)·`params`·`queries`·`columns`. (3) 규칙 `action=lookup`의 대상 열은 같은 id의 결과 열에서 값을 받는다 (명시 매핑은 필요하면 v0.4). (4) 오류 V-33(구조)·V-34(카탈로그)·V-35(조회·인수)·V-36(대상)·V-37(정의 없음), 공개 API `LookupDefLoader`·`LookupDef` 레코드·`ScreenDefValidator(catalog, lookups)`·`Validate(LookupDef)` — 비파괴 추가, `IQuroDefinitionCatalog`는 그대로. (5) 범위는 파서·검증기·`quro-deflint`, 그리드 컴포넌트는 바꾸지 않음. 묶음 L-1~L-3 후 `0.3.0-alpha.1` | 2026-10-29 |
 | A-49 | 신규 (소비자 계약 2·3장) | 결정 | **앱 데이터는 컴포넌트 파라미터로 (2026-10-29 스테이블영 결정 b1)**: (1) `AddQuroGrid` DI 등록과 `IQuroCodeListSource`·`IQuroQueryResolver` 인터페이스를 만들지 않는다. 공통코드 목록은 `OptionsFor`(직접 열은 `QuroColumn.Options`), 코드 조회는 `LookupFor`(직접 열은 `QuroColumn.Lookup`), 페이징 조회는 `ItemsProvider`, 문구는 `Localizer`. 앱 서비스의 이름·등록은 앱이 정한다. (2) 카탈로그 인터페이스 이름은 `IQuroDefinitionCatalog`로 확정. (3) 코드도움 정의 파일 이름은 `{id}.lookup.toon` 그대로 (A-48). 소비자 문서·파일이 이 이름을 따른다 |
+| A-50 | 신규 (Control Spec) | 보완 | **QuroGrid & QuroDataSet Control Spec Draft v0.1 수신 (2026-10-30)**: 원문 `docs/QuroGrid_Control_Spec_Draft_v0.1.md`, 대조·질의 `docs/QuroGrid_Control_Spec_v0.1_Review.md`. 기존 결정과 같은 항목은 그대로, 충돌하지 않는 신규 항목(DataSet `LoadAsync`·`Clear`, 집계 Count·Avg·Min·Max, 열 정렬, 행 번호·행 상태 표시, 연속 같은 값 합쳐 보이기, 잘린 텍스트 툴팁)은 v1 백로그로 받는다. **충돌 항목(서버 페이징 A-24, 셀 식·조건부 스타일 A-44 ④, CSV 가져오기 A-47, 트리 그리드, 현재 행 공유 바인딩, 표시·편집 방식 분리, TOON `dataset` 절 등)은 질의 Q-01~Q-24 답변 전까지 기존 결정을 유지한다.** QuroUI 컨트롤(텍스트 박스·콤보·날짜·정적 텍스트)의 위치·구현 방식도 Q-03·Q-21 대기 | 2026-10-30 |
+| A-51 | Control Spec 1·2, Q-01 | 결정 | **DataSet 현재 행·변경 알림 (여러 컨트롤 바인딩)**: `QuroDataSet`에 `CurrentRowKey`·`MoveTo(rowKey)`와 C# 이벤트 `CurrentRowChanged`·`ValueChanged`·`RowAdded`·`RowDeleted`·`Loaded`·`Saved`를 둔다 (UI 무관 유지). 그리드 활성 행 = DataSet 현재 행 (양방향). `OnSelectionChanged`(A-13)는 그대로이고 내부에서 `MoveTo`를 부른다. 페이징 중 놓인 행이 현재 행이면 행 키로 유지 | 2026-10-30 |
+| A-52 | Control Spec 2.1, Q-02 | 결정 | **형식 있는 `QuroDataSet<T>` 유지** + 열 메타 API `Columns` (`DataSetColumn(Name, Type, Key, Required, Default, MaxLength, Scale)`). `T`에서 만들고 화면 정의로 보완한다. 기본값은 `AddRow` 때 채운다. 형식 없는 DataSet은 만들지 않는다 | 2026-10-30 |
+| A-53 | Control Spec 8~11, Q-03 | 결정 | **QuroUI 컨트롤(텍스트 박스·콤보·날짜·정적 텍스트·마스크)은 이 저장소의 새 패키지 `Quro.UI`** (RCL, NuGet). 의존 `Quro.UI` → `Quro.Grid.Data`. 그리드 셀 에디터와의 공통 부분은 나중에 정리 | 2026-10-30 |
+| A-54 | Control Spec 2.2, Q-06 | 결정 | **정렬·필터는 그리드 화면 순서에 둔다** (A-22·A-31·A-40 유지, 다른 컨트롤에는 영향 없음). DataSet에는 정렬·필터 조건으로 행 키 목록을 돌려주는 조회 함수만 추가한다 (순서·상태는 바꾸지 않음) | 2026-10-30 |
+| A-55 | Control Spec 3.1·6, Q-08 | 결정 | **서버 페이징(`ItemsProvider`, A-24) 유지.** Control Spec의 "v1 = 가상 스크롤만"은 "v1에서 서버 페이징을 요구하지 않음"으로 읽는다 | 2026-10-30 |
+| A-56 | Control Spec 3.2, Q-09 | 결정 | **셀 타입은 `Type`(CellType) 하나 + `ReadOnly` 유지** (표시·편집 방식을 나누지 않음). 새 타입 `Mask`(+ 열 `Mask` 패턴)·`Image`·`Label`(정적) 추가. Number·Currency·Popup·Button 유지. Image 값은 URL 문자열, 클릭은 `OnCellClick` | 2026-10-30 |
+| A-57 | Control Spec 3.2·9, Q-10 | 결정 | **콤보 DataSet 바인딩 추가 (비파괴)**: 열 `OptionsSource`(코드 DataSet)·`ValueField`·`TextField`, 연동 콤보는 `FilterField`(부모 값으로 거름). 기존 `Options`·`OptionsFor`(A-49)도 유지 | 2026-10-30 |
+| A-58 | Control Spec 3.2·7(8), Q-11 | 결정 | **선택 즉시 편집은 그리드 옵션 `EditOnSelect`, 기본 끔.** 켜면 셀에 서는 즉시 브라우저 에디터가 열리고(서버 호출 없음, R2), 화살표는 에디터 밖으로 이동, Shift+화살표 범위 선택 유지 | 2026-10-30 |
+| A-59 | Control Spec 3.3·7(2)(3), Q-14 | 결정 | **A-44 ④ 유지 — 그리드는 식을 평가하지 않는다.** 열 파라미터 `Compute`(행 → 값, 앱 함수, **표시 전용**: 편집·저장 안 함)와 `CellStyle`(행·값 → 스타일 클래스, 앱 함수; 글자색·배경·굵게만, 임의 CSS 금지)을 추가. TOON 식은 `Quro.Grid.Definition`이 함수로 만들어 넘긴다. 저장할 계산은 지금처럼 `rules`의 `calc` | 2026-10-30 |
+| A-60 | Control Spec 4, Q-16 | 결정 | **TOON v0.2 이름 유지**, v0.3에서 비파괴 추가: `datasets[N]{id,api,...}`, 열 `align`·`frozen`, 형식(Q-19). Control Spec 이름 대응: `captionKey` → `label`, `editType` → `type`/`edit`, `visible` → `hidden`. 공개 저장소 예시의 `api`는 중립 이름 | 2026-10-30 |
+| A-61 | Control Spec 6, Q-17 | 변경 | **트리 그리드를 v1에 포함** (구: v1 범위 외). 데이터 = 평면 행 + 부모 키 열(`ParentField`). 전체 적재만 (자식 지연 조회 없음). 트리 모드에서는 페이징·그룹핑 끔, 정렬은 형제 안에서. 편집은 자식 추가·삭제만, 끌어 옮기기 없음 | 2026-10-30 |
 
 ## 2. 이벤트 API 보완 (4.10)
 
@@ -139,3 +151,4 @@
 | `quro-deflint` 출력 (A-46) | 오류는 표준 출력 한 줄씩 `파일:줄: V-xx 메시지`(파일은 넘긴 폴더 기준, `/` 구분, 경로 순), 요약(`N screen(s), M lookup(s), K error(s)`)은 표준 오류. 0 = 통과, 1 = 오류, 2 = 사용법. lookup(A-48): 로드 실패 lookup이 있으면 화면 교차 검사(V-35~V-37)를 건너뛰고 요약에 알린다 (없는 정의로 V-37이 쏟아지지 않게). 같은 id의 lookup 파일이 둘이면 뒤 파일에 V-33 |
 | 정의 열의 코드도움·목록 (A-45·A-46) | `lookup` 열은 Popup 셀 + `LookupFor`, `select` 열은 Combo 셀 + `OptionsFor`. 파라미터가 없으면 함수·목록 없음 (앱이 `OnPopupRequested`로 처리). `OptionsFor`가 null을 주면 목록 없음 |
 | 큰 붙여넣기 중 앱 화면 (A-26) | 셀마다 값 변경 이벤트를 받은 앱 화면은 이벤트마다 다시 그려진다 (Blazor `EventCallback` 동작). 그리드는 그리지 않지만, 앱 화면에 변경분 전체 직렬화 같은 무거운 표시가 있으면 느려진다 (샘플의 저장 payload 미리보기로 500행 × 10열 약 7초 확인 → 붙여넣기 성능 화면에서 뺌). 앱 지침으로 둠 |
+| Control Spec 질의 미답 (A-50) | Q-04 `Normal` 유지 · Q-05 추가 행 삭제 즉시 제거 · Q-07 `SaveAsync` 먼저 검증 + 오류 셀 자동 표시 · Q-12 `SelectionMode` 기본 `Range`, 선택 체크는 화면 상태, 페이징 중 헤더 체크는 적재된 행만 · Q-13 위쪽 고정 행 P1, 다중 레코드 행 P2 · Q-15 `On…` 이름 유지 + 대응표 · Q-18 `Wrap`·`AutoRowHeight`는 메모리 모드만 · Q-19 TOON `formats` + `ViewId`·`SetView` · Q-20 `ImportRows` 유지 · Q-21 MudBlazor를 감싸 구현 · Q-22 연노랑 필수 배경을 그리드에도, 빨간 별 없음 · Q-23 다중 선택 = 구분자 문자열 · Q-24 기간 = 열 2개, 월 모드 = `yyyy-MM` |

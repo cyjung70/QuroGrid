@@ -28,13 +28,13 @@ Enter(확정·이동, 기본 오른쪽 O-05, 마지막 셀 새 행은 옵션·�
 
 ## 합계 · 계산
 - 합계(`summary`)는 그리드 기능. 행 변경 시 재계산.
-- 셀 수식은 v1 범위 밖. 금액 계산은 앱이 `OnCellValueChanged`에서 한다.
+- 그리드는 식을 평가하지 않는다 (A-44 ④·A-59). 저장할 계산(금액)은 앱이 `OnCellValueChanged`에서 한다. 표시 전용 계산 열은 앱 함수 `Compute`, 조건부 스타일은 앱 함수 `CellStyle`.
 
 ## 이벤트 API
 `OnCellValueChanging`(취소 가능), `OnCellValueChanged`, `OnRowAdding`/`OnRowAdded`, `OnRowDeleting`(취소 가능), `OnPopupRequested`, `OnPasting`(취소 가능), `OnSelectionChanged`
 
 ## v1 범위 외
-셀 수식, 피벗, 트리 그리드, 인쇄 레이아웃. 요청이 오면 Spec 범위 밖임을 알린다.
+그리드가 평가하는 셀 수식, 피벗, 인쇄 레이아웃, 본문 셀 병합, 행 끌어 놓기 순서 변경. 요청이 오면 Spec 범위 밖임을 알린다. 트리 그리드는 v1 포함 (A-61).
 
 ## 성능 목표 (초안, 벤치로 확정)
 | 항목 | 목표 |
