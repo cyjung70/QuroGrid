@@ -36,6 +36,8 @@ public sealed class QuroDataSet<T> where T : class
     private Step? _step;      // 열린 단계
     private int _stepDepth;   // BeginUndoStep 중첩 깊이
 
+    private int? _current;    // 현재 행 (A-51). 페이징으로 놓인 행이어도 유지
+
     /// <summary>Creates an empty data set.</summary>
     public QuroDataSet()
     {
@@ -106,6 +108,60 @@ public sealed class QuroDataSet<T> where T : class
 
         foreach (var item in rows)
             Append(new Row(_nextLoadedKey++, item, RowState.Normal, Snapshot(item)));
+
+        SetCurrent(_rows.Count > 0 ? _rows[0].Key : null);
+        Loaded?.Invoke(this, EventArgs.Empty);
+    }
+
+    // ── 현재 행·변경 알림 (A-51): 한 DataSet을 여러 컨트롤이 바인딩한다 ──
+
+    /// <summary>
+    /// 바인딩한 모든 컨트롤이 함께 쓰는 현재 행. <see cref="Load"/> 뒤 첫 행(없으면 null).
+    /// 현재 행이 목록에서 빠지면 같은 위치의 다음 행, 없으면 앞 행으로 옮긴다.
+    /// </summary>
+    public int? CurrentRowKey => _current;
+
+    /// <summary>현재 행을 옮긴다. 바뀌면 <see cref="CurrentRowChanged"/>.</summary>
+    public void MoveTo(int rowKey)
+    {
+        Find(rowKey);
+        SetCurrent(rowKey);
+    }
+
+    /// <summary>Raised when <see cref="CurrentRowKey"/> changes.</summary>
+    public event EventHandler<CurrentRowChangedEventArgs>? CurrentRowChanged;
+
+    /// <summary>값이 실제로 바뀔 때마다 (SetValue, 되돌리기 포함).</summary>
+    public event EventHandler<DataSetValueChangedEventArgs>? ValueChanged;
+
+    /// <summary>행이 목록에 들어올 때 (AddRow·AddBlankRow, Redo 등으로 되살아난 행).</summary>
+    public event EventHandler<DataSetRowEventArgs>? RowAdded;
+
+    /// <summary>행이 삭제될 때 (Deleted 표시, 추가 행 제거, 되돌리기로 빠진 행). 저장 후 Deleted 행 제거에서는 다시 내지 않는다.</summary>
+    public event EventHandler<DataSetRowEventArgs>? RowDeleted;
+
+    /// <summary>Raised after <see cref="Load"/>.</summary>
+    public event EventHandler? Loaded;
+
+    /// <summary>SaveAsync가 성공해 AcceptChanges를 마친 뒤.</summary>
+    public event EventHandler<DataSetSavedEventArgs>? Saved;
+
+    private void SetCurrent(int? rowKey)
+    {
+        if (_current == rowKey)
+            return;
+        var old = _current;
+        _current = rowKey;
+        CurrentRowChanged?.Invoke(this, new CurrentRowChangedEventArgs(old, rowKey));
+    }
+
+    private void RaiseValueChanges(int rowKey, Dictionary<string, object?> before, T item)
+    {
+        if (ValueChanged is null)
+            return;
+        foreach (var prop in Fields.Values)
+            if (prop.GetValue(item) is var now && !Equals(before[prop.Name], now))
+                ValueChanged(this, new DataSetValueChangedEventArgs(rowKey, prop.Name, before[prop.Name], now));
     }
 
     /// <summary>Load 때마다 바뀐다. 화면이 다시 조회됐는지 알 때 쓴다 (정렬 재적용, Addendum A-22).</summary>
@@ -182,7 +238,9 @@ public sealed class QuroDataSet<T> where T : class
         if (response.IsSuccessStatusCode)
         {
             AcceptChanges();
-            return new SaveResult(SaveStatus.Saved, response.StatusCode);
+            var saved = new SaveResult(SaveStatus.Saved, response.StatusCode);
+            Saved?.Invoke(this, new DataSetSavedEventArgs(saved));
+            return saved;
         }
 
         var status = response.StatusCode == HttpStatusCode.Conflict ? SaveStatus.Conflict : SaveStatus.Failed;
@@ -212,11 +270,15 @@ public sealed class QuroDataSet<T> where T : class
 
         using var _ = Record();
         Touch(row);
+        var old = prop.GetValue(row.Item);
         prop.SetValue(row.Item, value);
         row.Revision++;
 
         if (row.State is RowState.Normal or RowState.Updated)
             row.State = MatchesOriginal(row) ? RowState.Normal : RowState.Updated;
+
+        if (!Equals(old, value))
+            ValueChanged?.Invoke(this, new DataSetValueChangedEventArgs(rowKey, prop.Name, old, value));
     }
 
     /// <summary>행 추가. 상태는 Inserted. <paramref name="afterRowKey"/>가 있으면 그 행 바로 아래, 없으면 끝.</summary>
@@ -235,6 +297,7 @@ public sealed class QuroDataSet<T> where T : class
             _rows.Insert(_rows.IndexOf(Find(afterRowKey.Value)) + 1, row);
             _byKey.Add(row.Key, row);
         }
+        RowAdded?.Invoke(this, new DataSetRowEventArgs(row.Key));
         return row.Key;
     }
 
@@ -249,6 +312,7 @@ public sealed class QuroDataSet<T> where T : class
         var item = template is null ? Activator.CreateInstance<T>() : Clone(template);
         var row = new Row(_nextInsertedKey--, item, RowState.Inserted, original: null) { Blank = Snapshot(item) };
         Append(row);
+        RowAdded?.Invoke(this, new DataSetRowEventArgs(row.Key));
         return row.Key;
     }
 
@@ -264,6 +328,7 @@ public sealed class QuroDataSet<T> where T : class
         {
             row.State = RowState.Deleted;
             row.Revision++;
+            RowDeleted?.Invoke(this, new DataSetRowEventArgs(row.Key));
         }
     }
 
@@ -328,7 +393,7 @@ public sealed class QuroDataSet<T> where T : class
         {
             if (row.State == RowState.Deleted)
             {
-                Remove(row);
+                Remove(row, notify: false);   // RowDeleted was raised when it was marked
                 continue;
             }
 
@@ -431,7 +496,9 @@ public sealed class QuroDataSet<T> where T : class
         foreach (var (row, image) in images.Where(x => x.Value.Index >= 0).OrderBy(x => x.Value.Index))
         {
             // 페이징으로 놓았다가 다시 적재한 행은 새 객체일 수 있어 행 키로 찾는다
-            if (!_byKey.TryGetValue(row.Key, out var target))
+            var returned = !_byKey.TryGetValue(row.Key, out var target);
+            var before = returned ? null : Snapshot(target!.Item);
+            if (returned)
             {
                 target = row;
                 _rows.Insert(Math.Min(image.Index, _rows.Count), target);
@@ -444,9 +511,14 @@ public sealed class QuroDataSet<T> where T : class
                 }
             }
             foreach (var (field, value) in image.Values)
-                Fields[field].SetValue(target.Item, value);
-            target.State = image.State;
+                Fields[field].SetValue(target!.Item, value);
+            target!.State = image.State;
             target.Revision++;
+
+            if (returned)
+                RowAdded?.Invoke(this, new DataSetRowEventArgs(target.Key));
+            else
+                RaiseValueChanges(target.Key, before!, target.Item);
         }
     }
 
@@ -489,10 +561,15 @@ public sealed class QuroDataSet<T> where T : class
         }
     }
 
-    private void Remove(Row row)
+    private void Remove(Row row, bool notify = true)
     {
-        _rows.Remove(row);
+        var index = _rows.IndexOf(row);
+        _rows.RemoveAt(index);
         Forget(row);
+        if (_current == row.Key)
+            SetCurrent(index < _rows.Count ? _rows[index].Key : index > 0 ? _rows[index - 1].Key : null);
+        if (notify)
+            RowDeleted?.Invoke(this, new DataSetRowEventArgs(row.Key));
     }
 
     /// <summary>키·ID 색인에서 뺀다 (목록에서는 호출한 쪽이 뺀다).</summary>
@@ -511,10 +588,12 @@ public sealed class QuroDataSet<T> where T : class
             return;
         }
 
+        var before = Snapshot(row.Item);
         foreach (var (field, value) in row.Original!)
             Fields[field].SetValue(row.Item, value);
         row.State = RowState.Normal;
         row.Revision++;
+        RaiseValueChanges(row.Key, before, row.Item);
     }
 
     private Row Find(int rowKey) =>
