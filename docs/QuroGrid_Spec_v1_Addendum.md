@@ -71,6 +71,7 @@
 | A-59 | Control Spec 3.3·7(2)(3), Q-14 | 결정 | **A-44 ④ 유지 — 그리드는 식을 평가하지 않는다.** 열 파라미터 `Compute`(행 → 값, 앱 함수, **표시 전용**: 편집·저장 안 함)와 `CellStyle`(행·값 → 스타일 클래스, 앱 함수; 글자색·배경·굵게만, 임의 CSS 금지)을 추가. TOON 식은 `Quro.Grid.Definition`이 함수로 만들어 넘긴다. 저장할 계산은 지금처럼 `rules`의 `calc` | 2026-10-30 |
 | A-60 | Control Spec 4, Q-16 | 결정 | **TOON v0.2 이름 유지**, v0.3에서 비파괴 추가: `datasets[N]{id,api,...}`, 열 `align`·`frozen`, 형식(Q-19). Control Spec 이름 대응: `captionKey` → `label`, `editType` → `type`/`edit`, `visible` → `hidden`. 공개 저장소 예시의 `api`는 중립 이름 | 2026-10-30 |
 | A-61 | Control Spec 6, Q-17 | 변경 | **트리 그리드를 v1에 포함** (구: v1 범위 외). 데이터 = 평면 행 + 부모 키 열(`ParentField`). 전체 적재만 (자식 지연 조회 없음). 트리 모드에서는 페이징·그룹핑 끔, 정렬은 형제 안에서. 편집은 자식 추가·삭제만, 끌어 옮기기 없음 | 2026-10-30 |
+| A-63 | Control Spec 8, A-52·A-53, Q-21 | 결정 | **QuroUI 텍스트 박스 (2026-10-30 스테이블영 결정 1~4)**: ① 공개 API `QuroTextBox<TItem>`(`DataSet`·`Field`·`PlaceholderKey`·`Localizer`·`CharType`(`Any`·`Digits`·`Alpha`·`AlphaNumeric`)·`MaxLength`·`Password`·`AutoSelect`·`ReadOnly`), 문자열 열만, 필수·최대 길이 기본값은 열 메타. ② `Validate`가 열 메타 `Required`도 검사 (GS-089, A-52 보완을 뒤집음). `MaxLength`는 검사하지 않음. ③ 문자 거르기·전체 선택은 `quro-ui.js` (R2). ④ TOON v0.3 그리드 열 키는 폼 필드와 같은 이름 `max`·`default` + `scale` (구현은 컨트롤이 필요할 때). **Q-21 잠정안과 다름**: `MudTextField`는 키 입력마다 서버로 4프레임을 보내(R2 위반, GS-U04 측정) 텍스트 박스는 자체 `<input>` + MudBlazor CSS 변수로 만든다. `Quro.UI`는 지금 MudBlazor를 참조하지 않는다 | 2026-10-30 |
 
 ## 2. 이벤트 API 보완 (4.10)
 

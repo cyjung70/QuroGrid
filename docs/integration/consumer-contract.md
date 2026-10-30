@@ -10,10 +10,11 @@
 | `Quro.Grid.Data` | QuroDataSet, RowState, ChangeSet, SaveResult | `QuroErp.Web` (전이 참조로 충분) |
 | `Quro.Grid.Definition` | TOON 화면 정의 파서·검증기·불변 모델 | `QuroErp.Web` (전이 참조로 충분) |
 | `Quro.Grid` | Blazor 컴포넌트(RCL), quro-grid.js | `QuroErp.Web` |
+| `Quro.UI` | QuroUI 컨트롤(RCL): `QuroTextBox`, quro-ui.js (A-53·A-63) | `QuroErp.Web` |
 | `Quro.Grid.DefLint` | .NET 도구 `quro-deflint` (화면 정의 린트, CI용) | 저장소 도구 매니페스트 (`dotnet tool install --local`) |
 
 - 대상 프레임워크: `net10.0`. 렌더 모드: Interactive Server만 지원.
-- 정적 자산: `_content/Quro.Grid/quro-grid.js`, `_content/Quro.Grid/quro-grid.css`
+- 정적 자산: `_content/Quro.Grid/quro-grid.js`, `_content/Quro.Grid/quro-grid.css`, `_content/Quro.UI/quro-ui.css` (앱이 `<link>`로 넣는다), `_content/Quro.UI/quro-ui.js` (컨트롤이 가져온다)
 - 배포 피드: 로컬 폴더 피드 `/WRK/_nuget` (I-06). nuget.org 공개는 1.0 이후 별도 결정.
 
 ## 2. 등록 (A-49)
@@ -52,7 +53,7 @@ QuroGrid는 DI 등록 메서드(`AddQuroGrid`)와 서비스 인터페이스를 �
 - `QuroDataSet` 필드 이름은 정확히 같은 이름을 먼저(대소문자 구분), 없으면 대소문자를 무시하고 찾는다 (정의 id `qty` → 속성 `Qty`). 대소문자만 다른 속성이 둘 이상이면 정확한 이름만 (A-46)
 - `QuroDataSet.AddBlankRow(template)`: 입력용 빈 행 (A-46). 추가할 때의 값 그대로인 동안은 `Validate`·`GetChanges`·`HasChanges`가 건너뛰고 `AcceptChanges` 뒤에도 추가 행으로 남는다. Undo 단계가 아니다. `initRows`가 이것을 쓴다
 - `QuroDataSet` 현재 행·변경 알림 (A-51, GS-082~GS-084): `int? CurrentRowKey`, `MoveTo(rowKey)`(없는 키는 `KeyNotFoundException`), C# 이벤트 `CurrentRowChanged`(`OldRowKey`·`NewRowKey`), `ValueChanged`(`RowKey`·`Field`·`OldValue`·`NewValue`, 값이 실제로 바뀔 때만, `RevertRow`·`RejectChanges`·`Undo`·`Redo` 포함), `RowAdded`·`RowDeleted`(`RowKey`; 되돌리기로 들어오고 빠진 행 포함, 저장 후 Deleted 행 제거에서는 다시 내지 않음), `Loaded`, `Saved`(`Result`, `SaveAsync` 성공 후). `Load` 뒤 현재 행은 첫 행(없으면 null). 현재 행이 목록에서 빠지면 같은 위치의 다음 행 → 앞 행 → null. 페이징으로 놓인 행이면 행 키 유지. 이벤트는 호출한 스레드(회로)에서 동기로 발생한다. 그리드 활성 행과의 연동은 GS-085에서
-- `QuroDataSet` 열 메타 (A-52, GS-086~GS-088): `IReadOnlyList<DataSetColumn> Columns`(`T`의 읽기·쓰기 공개 속성, 선언 순서), `GetColumn(field)`, `SetColumn(column)`(이 DataSet에만, 이름은 속성 이름으로 맞춤; 없는 필드·형식 불일치·바꿀 수 없는 기본값은 `ArgumentException`). `DataSetColumn(Name, Type, Key, Required, Default, MaxLength, Scale)` — `T`의 `[Key]`·`[Required]`·`[MaxLength]`/`[StringLength]`·`[DefaultValue]`에서 만들고 `Scale`은 null. 템플릿 없이 `AddRow`·`AddBlankRow`하면 `Default`를 채운다. 설명 정보이며 `Validate`는 `SetRule`만 본다
+- `QuroDataSet` 열 메타 (A-52, GS-086~GS-088): `IReadOnlyList<DataSetColumn> Columns`(`T`의 읽기·쓰기 공개 속성, 선언 순서), `GetColumn(field)`, `SetColumn(column)`(이 DataSet에만, 이름은 속성 이름으로 맞춤; 없는 필드·형식 불일치·바꿀 수 없는 기본값은 `ArgumentException`). `DataSetColumn(Name, Type, Key, Required, Default, MaxLength, Scale)` — `T`의 `[Key]`·`[Required]`·`[MaxLength]`/`[StringLength]`·`[DefaultValue]`에서 만들고 `Scale`은 null. 템플릿 없이 `AddRow`·`AddBlankRow`하면 `Default`를 채운다. `Validate`는 `SetRule` 규칙과 열 `Required`를 함께 본다(같은 필드 오류는 1건, `MaxLength`는 검사하지 않음, A-63·GS-089)
 - 이벤트: `OnCellValueChanging`(취소 가능), `OnCellValueChanged`, `OnRowAdding`/`OnRowAdded`, `OnRowDeleting`(취소 가능), `OnPopupRequested`, `OnPasting`(취소 가능), `OnSelectionChanged`
 - 셀 표시: `SetCellMark(row, field, CellMark(Error|Warning, resourceKey))`
 
@@ -90,6 +91,23 @@ QuroGrid는 DI 등록 메서드(`AddQuroGrid`)와 서비스 인터페이스를 �
 | `ExportFormat` | `Xlsx`, `Csv` |
 
 - 파일은 저장 API가 저장된 데이터로 만든다 (화면의 저장 전 변경분은 넣지 않음, A-29). CSV의 구분자·인코딩·따옴표 처리도 저장 API가 정한다.
+
+### 4.4 QuroUI 텍스트 박스 (Addendum A-53·A-63, GS-U01~GS-U04)
+```razor
+<QuroTextBox TItem="Customer" DataSet="@header" Field="zip" CharType="QuroCharType.Digits" AutoSelect="true"
+             PlaceholderKey="sd.so.shipZip.hint" Localizer="@L" />
+```
+| 파라미터 | 설명 |
+|---|---|
+| `DataSet`·`Field` (필수) | DataSet 현재 행(A-51)의 문자열 열. 없는 필드·문자열이 아닌 열은 `ArgumentException` |
+| `PlaceholderKey`·`Localizer` | 빈 칸 안내 문구의 리소스 키와 해석기. 해석기가 없으면 키를 그대로 |
+| `CharType` | `Any`(기본)·`Digits`(0-9)·`Alpha`(모든 언어 글자)·`AlphaNumeric`. 브라우저가 입력·붙여넣기 때 거른다(IME 조합이 끝날 때) |
+| `MaxLength` | null이면 열 메타 `MaxLength` |
+| `Password`·`AutoSelect`·`ReadOnly` | 가림 입력 / 포커스 때 전체 선택 / 읽기 전용(회색). 현재 행이 `Deleted`여도 읽기 전용 |
+
+- 값은 입력 확정(포커스 이탈·Enter) 때 `SetValue` 1회. 입력하는 동안 서버 호출 없음 (R2). 현재 행이 없으면 비활성
+- 열 메타 `Required`면 연노랑 배경(빨간 별 없음), 저장 막기는 `Validate`(GS-089)
+- CSS 클래스 `quro-ui-textbox`·`quro-ui-input`·`quro-ui-required`·`quro-ui-readonly`, 변수 `--quro-required-bg`·`--quro-readonly-bg`(그 밖 `--quro-bg`·`--quro-text`·`--quro-border`·`--quro-active`·`--quro-placeholder`). 없으면 MudBlazor 팔레트
 
 ## 5. 저장 계약
 - payload `{ inserted[], updated[], deleted[] }`, 수정·삭제 행은 `version` 포함

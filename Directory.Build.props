@@ -1,5 +1,5 @@
 <Project>
-  <!-- Package metadata shared by Quro.Grid.Data, Quro.Grid.Definition, Quro.Grid.
+  <!-- Package metadata shared by Quro.Grid.Data, Quro.Grid.Definition, Quro.Grid, Quro.UI.
        Version is overridden by scripts/pack-local.ps1 (-p:Version=...). -->
   <PropertyGroup>
     <VersionPrefix>0.3.0</VersionPrefix>
