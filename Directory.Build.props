@@ -3,7 +3,7 @@
        Version is overridden by scripts/pack-local.ps1 (-p:Version=...). -->
   <PropertyGroup>
     <VersionPrefix>0.3.0</VersionPrefix>
-    <VersionSuffix>alpha.1</VersionSuffix>
+    <VersionSuffix>alpha.2</VersionSuffix>
     <Authors>QuroERP Community</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <!-- TODO: PackageProjectUrl / RepositoryUrl when the public repository exists -->
