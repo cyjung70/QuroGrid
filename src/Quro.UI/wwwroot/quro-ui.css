@@ -1,10 +1,11 @@
 /*
  * QuroUI controls (Control Spec 8, Q-22). The app changes colors with --quro-* variables on the control or an
- * ancestor. Without them the defaults below are used; for dark mode the app sets dark token values (A-67).
+ * ancestor (text, mask, combo and date boxes). Without them the defaults below are used; for dark mode the app sets dark token values (A-67).
  * Required = light yellow background (no red star), read-only = grey. The yellow is mixed into the surface color so
  * text stays readable in light and dark mode (A-38).
  */
 .quro-ui-textbox,
+.quro-ui-mask,
 .quro-ui-combo,
 .quro-ui-date {
     --qu-bg: var(--quro-bg, #fff);

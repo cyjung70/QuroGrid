@@ -28,11 +28,13 @@ public sealed class Customer
 
     public double Rate { get; set; }
 
-    /// <summary>Two loaded customers: keys 1 (Kim, 04524) and 2 (Lee, no zip).</summary>
+    public string? BizNo { get; set; }
+
+    /// <summary>Two loaded customers: keys 1 (Kim, 04524, business no. 1234567890) and 2 (Lee, no zip).</summary>
     public static QuroDataSet<Customer> Two()
     {
         var ds = new QuroDataSet<Customer>();
-        ds.Load([new Customer { Id = 1, Name = "Kim", Zip = "04524" }, new Customer { Id = 2, Name = "Lee" }]);
+        ds.Load([new Customer { Id = 1, Name = "Kim", Zip = "04524", BizNo = "1234567890" }, new Customer { Id = 2, Name = "Lee" }]);
         return ds;
     }
 }

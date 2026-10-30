@@ -1,0 +1,214 @@
+@inherits UiTestContext
+
+@code {
+    // GS-U17 ~ GS-U20: QuroMaskBox and QuroStaticText.Mask (Control Spec 11, A-69)
+
+    private const string BizMask = "000-00-00000";
+
+    private IRenderedComponent<QuroMaskBox<Customer>> RenderBox(QuroDataSet<Customer> ds, string field = "BizNo",
+        string mask = BizMask, bool readOnly = false, bool autoSelect = false, string? placeholderKey = null,
+        IStringLocalizer? localizer = null) =>
+        Render<QuroMaskBox<Customer>>(@<QuroMaskBox TItem="Customer" DataSet="ds" Field="@field" Mask="@mask"
+                                                    ReadOnly="readOnly" AutoSelect="autoSelect"
+                                                    PlaceholderKey="@placeholderKey" Localizer="localizer" />);
+
+    private static AngleSharp.Dom.IElement Input(IRenderedComponent<QuroMaskBox<Customer>> cut) => cut.Find("input");
+
+    private static AngleSharp.Dom.IElement Root(IRenderedComponent<QuroMaskBox<Customer>> cut) => cut.Find(".quro-ui-mask");
+
+    // ── GS-U17 binding ──
+
+    /// <summary>GS-U17: the stored typed characters are shown with the fixed characters, and follow the data set</summary>
+    [Fact]
+    public void GS_U17_ShowsFormatted_FollowsDataSet()
+    {
+        var ds = Customer.Two();
+        var cut = RenderBox(ds);
+        Assert.Equal("123-45-67890", Input(cut).GetAttribute("value"));
+        Assert.Equal("BizNo", Root(cut).GetAttribute("data-field"));
+        Assert.Equal(BizMask, Root(cut).GetAttribute("data-quro-mask"));
+        Assert.Equal("12", Input(cut).GetAttribute("maxlength"));   // mask length
+
+        cut.InvokeAsync(() => ds.MoveTo(2));
+        cut.WaitForAssertion(() => Assert.True(string.IsNullOrEmpty(Input(cut).GetAttribute("value"))));
+
+        cut.InvokeAsync(() => ds.SetValue(2, "BizNo", "2208162517"));
+        cut.WaitForAssertion(() => Assert.Equal("220-81-62517", Input(cut).GetAttribute("value")));
+    }
+
+    /// <summary>GS-U17: a complete input stores only the typed characters, once</summary>
+    [Fact]
+    public void GS_U17_Commit_StoresTypedCharacters()
+    {
+        var ds = Customer.Two();
+        var changes = new List<DataSetValueChangedEventArgs>();
+        ds.ValueChanged += (_, e) => changes.Add(e);
+        var cut = RenderBox(ds);
+
+        Input(cut).Change("220-81-62517");
+
+        var change = Assert.Single(changes);
+        Assert.Equal(("1234567890", "2208162517"), ((string?)change.OldValue, (string?)change.NewValue));
+        Assert.Equal(RowState.Updated, ds.GetState(1));
+        Assert.Equal("220-81-62517", Input(cut).GetAttribute("value"));
+    }
+
+    /// <summary>GS-U17: typed characters without the fixed ones (e.g. pasted) are accepted too</summary>
+    [Fact]
+    public void GS_U17_Commit_WithoutFixedCharacters()
+    {
+        var ds = Customer.Two();
+        var cut = RenderBox(ds);
+
+        Input(cut).Change("2208162517");
+
+        Assert.Equal("2208162517", ds.GetValue(1, "BizNo"));
+    }
+
+    /// <summary>GS-U17: an empty box sets null</summary>
+    [Fact]
+    public void GS_U17_Empty_SetsNull()
+    {
+        var ds = Customer.Two();
+        var cut = RenderBox(ds);
+
+        Input(cut).Change("");
+
+        Assert.Null(ds.GetValue(1, "BizNo"));
+        Assert.True(string.IsNullOrEmpty(Input(cut).GetAttribute("value")));
+    }
+
+    /// <summary>GS-U17: incomplete or wrong input goes back to the last value without a change</summary>
+    [Theory]
+    [InlineData("123-45")]
+    [InlineData("123-45-6789")]
+    [InlineData("12a-45-67890")]
+    [InlineData("123-45-678901")]
+    public void GS_U17_IncompleteOrWrong_RevertsToLastValue(string typed)
+    {
+        var ds = Customer.Two();
+        var changes = 0;
+        ds.ValueChanged += (_, _) => changes++;
+        var cut = RenderBox(ds);
+
+        Input(cut).Change(typed);
+
+        Assert.Equal(0, changes);
+        Assert.Equal(RowState.Normal, ds.GetState(1));
+        cut.WaitForAssertion(() => Assert.Equal("123-45-67890", Input(cut).GetAttribute("value")));
+    }
+
+    /// <summary>GS-U17: string columns only; unknown field throws</summary>
+    [Fact]
+    public void GS_U17_NonStringOrUnknownField_Throws()
+    {
+        var ds = Customer.Two();
+
+        Assert.Throws<ArgumentException>(() => RenderBox(ds, field: "Credit"));
+        Assert.Throws<ArgumentException>(() => RenderBox(ds, field: "Nope"));
+    }
+
+    /// <summary>GS-U17: an empty mask or one with no input position throws</summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("---")]
+    [InlineData("\\0\\A")]
+    public void GS_U17_MaskWithoutInputPosition_Throws(string mask)
+    {
+        Assert.Throws<ArgumentException>(() => RenderBox(Customer.Two(), mask: mask));
+    }
+
+    // ── GS-U18 mask characters and attributes ──
+
+    /// <summary>GS-U18: 0 digit, A letter of any language, * letter or digit, \ makes the next character fixed</summary>
+    [Theory]
+    [InlineData("AA-000", "가B-123", "가B123")]
+    [InlineData("**-**", "a1-Z9", "a1Z9")]
+    [InlineData("\\A-0", "A-7", "7")]
+    [InlineData("(000) 0000", "(010) 1234", "0101234")]
+    public void GS_U18_MaskCharacters(string mask, string typed, string stored)
+    {
+        var ds = Customer.Two();
+        var cut = RenderBox(ds, field: "Zip", mask: mask);
+
+        Input(cut).Change(typed);
+
+        Assert.Equal(stored, ds.GetValue(1, "Zip"));
+        Assert.Equal(typed, Input(cut).GetAttribute("value"));
+    }
+
+    /// <summary>GS-U18: letters are refused in a digit position and digits in a letter position</summary>
+    [Theory]
+    [InlineData("00", "1a")]
+    [InlineData("AA", "a1")]
+    [InlineData("**", "a-")]
+    public void GS_U18_WrongCharacter_Refused(string mask, string typed)
+    {
+        var ds = Customer.Two();
+        var cut = RenderBox(ds, field: "Zip", mask: mask);
+
+        Input(cut).Change(typed);
+
+        Assert.Equal("04524", ds.GetValue(1, "Zip"));
+    }
+
+    /// <summary>GS-U18: a stored value that doesn't fit the mask is shown as it is</summary>
+    [Fact]
+    public void GS_U18_StoredValueNotFitting_ShownAsIs()
+    {
+        var ds = Customer.Two();
+        ds.SetValue(1, "BizNo", "12-34");
+        ds.AcceptChanges();
+
+        Assert.Equal("12-34", Input(RenderBox(ds)).GetAttribute("value"));
+    }
+
+    /// <summary>GS-U18: required and read-only marks, placeholder, auto select, attach once</summary>
+    [Fact]
+    public void GS_U18_Attributes()
+    {
+        var ds = Customer.Two();
+        ds.SetColumn(ds.GetColumn("BizNo") with { Required = true });
+        var module = JSInterop.SetupModule(ModulePath);
+        module.Mode = JSRuntimeMode.Loose;
+
+        var cut = RenderBox(ds, autoSelect: true, placeholderKey: "cust.zip.hint", localizer: new FakeLocalizer());
+
+        Assert.Contains("quro-ui-required", Root(cut).ClassList);
+        Assert.Equal("true", Root(cut).GetAttribute("data-quro-autoselect"));
+        Assert.Equal("Postal code", Input(cut).GetAttribute("placeholder"));
+        Assert.Single(module.Invocations, i => i.Identifier == "attach");
+
+        var readOnly = RenderBox(ds, readOnly: true);
+        Assert.Contains("quro-ui-readonly", Root(readOnly).ClassList);
+        Assert.DoesNotContain("quro-ui-required", Root(readOnly).ClassList);
+        Assert.True(Input(readOnly).HasAttribute("readonly"));
+    }
+
+    /// <summary>GS-U18: a read-only box ignores a change</summary>
+    [Fact]
+    public void GS_U18_ReadOnly_IgnoresChange()
+    {
+        var ds = Customer.Two();
+        var cut = RenderBox(ds, readOnly: true);
+
+        Input(cut).Change("220-81-62517");
+
+        Assert.Equal("1234567890", ds.GetValue(1, "BizNo"));
+    }
+
+    // ── GS-U20 static text mask ──
+
+    /// <summary>GS-U20: QuroStaticText.Mask shows a stored value with the fixed characters</summary>
+    [Fact]
+    public void GS_U20_StaticText_Mask()
+    {
+        var ds = Customer.Two();
+
+        var cut = Render<QuroStaticText<Customer>>(@<QuroStaticText TItem="Customer" DataSet="ds" Field="BizNo" Mask="@BizMask" />);
+
+        Assert.Equal("123-45-67890", cut.Find(".quro-ui-static").TextContent);
+        cut.InvokeAsync(() => ds.SetValue(1, "BizNo", "12"));
+        cut.WaitForAssertion(() => Assert.Equal("12", cut.Find(".quro-ui-static").TextContent));   // doesn't fit → as is
+    }
+}

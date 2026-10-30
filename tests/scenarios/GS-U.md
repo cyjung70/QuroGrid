@@ -1,6 +1,6 @@
 # QuroUI 시나리오 (GS-Uxx)
 
-- 근거: `docs/QuroGrid_Control_Spec_Draft_v0.1.md` 8~11장, Addendum A-53·A-63
+- 근거: `docs/QuroGrid_Control_Spec_Draft_v0.1.md` 8~11장, Addendum A-53·A-63~A-66·A-69
 - 패키지: `Quro.UI` (RCL, `Quro.UI` → `Quro.Grid.Data`). 자체 input + `--quro-*` CSS 변수 (A-63, Q-21 잠정안과 다름. MudBlazor 대체값은 A-67로 제거)
 - 테스트 이름은 시나리오 ID로 시작한다: `GS_U01_...`
 
@@ -47,3 +47,12 @@
 | GS-U14 | 다국어 라벨 | `QuroLabel`은 `<label class="quro-ui-label">`에 `Localizer[TextKey]`. 해석기가 없거나 번역이 없으면 키 그대로 | bUnit | 11장, A-66 ① |
 | GS-U15 | 열 값 표시 | `QuroStaticText`는 DataSet 현재 행의 `Field` 값을 `<span class="quro-ui-static">`에 보인다. `MoveTo`·`Load`·`SetValue` 뒤 새 값. 값 null·현재 행 없음 → 빈 칸. `Format`이 있으면 `Culture`(기본 현재 culture)로 적용. 없는 필드는 `ArgumentException`. 숫자 열이면 `quro-ui-static-number`(오른쪽 정렬). JS 없음 | bUnit | 11장, A-66 ①③ |
 | GS-U16 | 기본 형식 | `Format`이 없으면: 정수는 천 단위 구분, 실수는 천 단위 구분 + 열 메타 `Scale` 자릿수(없으면 값의 자릿수), `DateOnly`·`DateTime`은 culture 짧은 날짜, 그 밖은 culture `ToString()` | bUnit | 11장, A-66 ② |
+
+## 5. 마스크 박스 `QuroMaskBox<TItem>` (Control Spec 11장, A-69)
+
+| ID | 시나리오 | 기대 결과 | 계층 | 근거 |
+|---|---|---|---|---|
+| GS-U17 | DataSet 열 바인딩·확정 | 저장된 입력 문자를 고정 문자와 함께 보인다(`1234567890` → `123-45-67890`). 행 이동·`SetValue` 뒤 새 값. 마스크 끝까지 채운 입력(고정 문자 있든 없든) 확정 → 입력 문자만 `SetValue` 1회. 빈 칸 → null. 덜 채움·자리에 맞지 않음·더 김 → 변경 없이 마지막 값. 문자열이 아닌 열·없는 필드·입력 자리 없는 마스크는 `ArgumentException` | bUnit | 11장, A-69 ①③④ |
+| GS-U18 | 마스크 문자·속성 | `0` 숫자, `A` 모든 언어의 글자, `*` 글자나 숫자, `\` 다음 문자 고정. 자리에 맞지 않는 문자는 거부. 맞지 않는 저장 값은 그대로 표시. `maxlength` = 마스크 길이, `data-quro-mask`. 필수·읽기 전용·자리 표시·`AutoSelect`는 텍스트 박스와 같다. 읽기 전용이면 변경 무시 | bUnit | 11장, A-69 ①② |
+| GS-U19 | 브라우저 입력 | 입력 중 고정 문자를 넣고 맞지 않는 문자는 버림(`010x1234` → `010-1234`), 마스크 끝에서 멈춤. 고정 문자 없이 붙여넣기 → 형식을 갖춤. 가운데 입력 뒤 커서는 같은 입력 문자 뒤. 입력 중 서버 호출 없음(R2), 포커스 이탈·Enter 때 1회. 덜 채우고 떠나면 마지막 값 | E2E | 11장, R2, A-69 |
+| GS-U20 | 정적 텍스트 마스크 | `QuroStaticText.Mask`면 저장 값을 고정 문자와 함께 보인다. 맞지 않는 값은 그대로 | bUnit | 11장, A-69 ⑤ |

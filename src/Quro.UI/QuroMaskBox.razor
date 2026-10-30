@@ -1,0 +1,10 @@
+@namespace Quro.UI
+@typeparam TItem where TItem : class
+@implements IAsyncDisposable
+
+@* Own input: quro-ui.js fits typed characters to the mask in the browser; the value is sent once on commit (R2, GS-U19) *@
+<div @ref="_root" class="@RootClass" data-field="@Field" data-quro-mask="@Mask"
+     data-quro-autoselect="@(AutoSelect ? "true" : null)">
+    <input class="quro-ui-input" type="text" value="@_text" @onchange="OnChange" maxlength="@_mask.Length"
+           placeholder="@PlaceholderText" readonly="@IsReadOnly" disabled="@(_row is null)" />
+</div>

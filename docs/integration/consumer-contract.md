@@ -10,7 +10,7 @@
 | `Quro.Grid.Data` | QuroDataSet, RowState, ChangeSet, SaveResult | `QuroErp.Web` (전이 참조로 충분) |
 | `Quro.Grid.Definition` | TOON 화면 정의 파서·검증기·불변 모델 | `QuroErp.Web` (전이 참조로 충분) |
 | `Quro.Grid` | Blazor 컴포넌트(RCL), quro-grid.js | `QuroErp.Web` |
-| `Quro.UI` | QuroUI 컨트롤(RCL): `QuroTextBox`, `QuroComboBox`, `QuroDatePicker`, `QuroLabel`, `QuroStaticText`, quro-ui.js (A-53·A-63~A-66) | `QuroErp.Web` |
+| `Quro.UI` | QuroUI 컨트롤(RCL): `QuroTextBox`, `QuroComboBox`, `QuroDatePicker`, `QuroLabel`, `QuroStaticText`, `QuroMaskBox`, quro-ui.js (A-53·A-63~A-66·A-69) | `QuroErp.Web` |
 | `Quro.Grid.DefLint` | .NET 도구 `quro-deflint` (화면 정의 린트, CI용) | 저장소 도구 매니페스트 (`dotnet tool install --local`) |
 
 - 대상 프레임워크: `net10.0`. 렌더 모드: Interactive Server만 지원.
@@ -163,6 +163,23 @@ QuroGrid는 DI 등록 메서드(`AddQuroGrid`)와 서비스 인터페이스를 �
 | `Format`·`Culture` | .NET 형식 문자열과 culture(기본 현재 culture). `Format`이 없으면 정수 천 단위 구분, 실수 천 단위 구분 + 열 메타 `Scale` 자릿수(없으면 값의 자릿수), 날짜는 culture 짧은 날짜, 그 밖은 `ToString()` |
 
 - 숫자 열은 `quro-ui-static-number`(오른쪽 정렬). 변수 `--quro-label`(라벨 색), `--quro-text`. 브라우저 스크립트 없음
+- `Mask` (A-69): 문자열 값을 마스크의 고정 문자와 함께 보인다(4.8과 같은 규칙). 맞지 않는 값은 그대로
+
+### 4.8 QuroUI 마스크 박스 (Addendum A-69, GS-U17~GS-U20)
+```razor
+<QuroMaskBox TItem="Vendor" DataSet="@header" Field="bizNo" Mask="000-00-00000" PlaceholderKey="mm.vendor.bizNo" Localizer="@L" />
+```
+| 파라미터 | 설명 |
+|---|---|
+| `DataSet`·`Field` (필수) | DataSet 현재 행(A-51)의 **문자열** 열. 문자열이 아니거나 없는 필드는 `ArgumentException` |
+| `Mask` (필수) | `0` 숫자, `A` 모든 언어의 글자, `*` 글자나 숫자, `\` 다음 문자를 고정 문자로, 그 밖은 고정 문자. 입력 자리가 없으면 `ArgumentException` |
+| `PlaceholderKey`·`Localizer`·`AutoSelect`·`ReadOnly` | 텍스트 박스(4.4)와 같다 |
+
+- 저장 값: 고정 문자를 뺀 입력 문자만 (`123-45-67890` → `1234567890`). 마스크 끝까지 채우면 확정(포커스 이탈·Enter) 때 `SetValue` 1회. 빈 칸은 null. 덜 채우거나 자리에 맞지 않으면 마지막 값으로 돌아간다(변경 없음)
+- 고정 문자 없이 붙여넣은 값(`1234567890`)도 받는다. 마스크에 맞지 않는 저장 값은 그대로 보인다
+- 브라우저(`quro-ui.js`)가 입력 중 고정 문자를 넣고, 자리에 맞지 않는 문자를 버리고, 커서를 같은 입력 문자 뒤에 둔다. 입력 중 서버 호출 없음(R2). `maxlength` = 마스크 길이
+- 길이가 달라지는 값(10·11자리 전화번호 등)은 앱이 마스크를 고르거나 텍스트 박스를 쓴다
+- CSS 클래스 `quro-ui-mask`·`quro-ui-input`, 상태 `quro-ui-required`·`quro-ui-readonly`, 변수는 4.4와 같다
 
 ## 5. 저장 계약
 - payload `{ inserted[], updated[], deleted[] }`, 수정·삭제 행은 `version` 포함
