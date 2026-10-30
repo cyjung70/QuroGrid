@@ -4,6 +4,7 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 소비자(QuroERP)는 버전을 올리기 전에 이 파일을 읽는다.
 
 ## Unreleased
+- Added: `Quro.UI` `QuroComboBox<TItem, TCode>`, `QuroListColumn` — 코드 DataSet 목록 콤보 박스: 브라우저 거르기, 빈 항목, 코드 표시, 여러 열 목록, 연동 콤보, 체크 다중 선택(`Separator` 기본 `|`) (Control Spec 9, A-57·A-64, GS-U05~GS-U09). 소비자 조치: 없음 (`quro-ui.css` 링크는 0.4.0-alpha.1과 같다)
 
 ## 0.4.0-alpha.1 — 2026-10-30
 DataSet 열 메타 (A-52), 새 패키지 `Quro.UI`의 `QuroTextBox` (A-53·A-63), 그리드 활성 행 ↔ DataSet 현재 행 (A-62). **BREAKING (동작)**: `Validate`가 열 `Required`도 검사. 소비자 조치: DTO의 `[Required]`·`[DefaultValue]`가 화면 의도와 맞는지 확인, `Quro.UI`를 쓰려면 패키지 참조와 `quro-ui.css` 링크 추가

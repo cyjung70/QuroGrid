@@ -1,0 +1,57 @@
+@page "/combo"
+@rendermode InteractiveServer
+@implements IDisposable
+@using Quro.Grid.Data
+@using Quro.Grid.Sample.Data
+@using Quro.UI
+
+<PageTitle>@L["sample.combo.title"]</PageTitle>
+
+<h1>@L["sample.combo.title"]</h1>
+
+<MudThemeProvider />
+
+@* QuroUI combo boxes bound to one data set (GS-U09): country → city (linked, code + name, extra column), tags (multi) *@
+<div class="sample-form">
+    <QuroComboBox TItem="SampleCustomer" TCode="SampleCode" DataSet="_customer" Field="Country" OptionsSource="_countries"
+                  ValueField="Code" TextField="Name" EmptyKey="sample.combo.select" Localizer="L" />
+    <QuroComboBox TItem="SampleCustomer" TCode="SampleCode" DataSet="_customer" Field="City" OptionsSource="_cities"
+                  ValueField="Code" TextField="Name" FilterField="Parent" ParentField="Country" ShowCode="true"
+                  ListColumns="_cityColumns" Localizer="L" />
+    <QuroComboBox TItem="SampleCustomer" TCode="SampleCode" DataSet="_customer" Field="Tags" OptionsSource="_cities"
+                  ValueField="Code" TextField="Name" Multiple="true" />
+</div>
+
+<p>
+    <span data-testid="state">@_customer.GetState(1)</span> ·
+    <span data-testid="country-value">@_customer.GetValue(1, "Country")</span> ·
+    <span data-testid="city-value">@_customer.GetValue(1, "City")</span> ·
+    <span data-testid="tags-value">@_customer.GetValue(1, "Tags")</span>
+</p>
+
+@code {
+    private static readonly SampleLocalizer L = new();
+    private static readonly IReadOnlyList<QuroListColumn> _cityColumns =
+        [new("Name", "sample.combo.name"), new("Region", "sample.combo.region")];
+    private readonly QuroDataSet<SampleCustomer> _customer = new();
+    private readonly QuroDataSet<SampleCode> _countries = new();
+    private readonly QuroDataSet<SampleCode> _cities = new();
+
+    protected override void OnInitialized()
+    {
+        _countries.Load([new SampleCode { Code = "KR", Name = "Korea" }, new SampleCode { Code = "JP", Name = "Japan" }]);
+        _cities.Load([
+            new SampleCode { Code = "01", Name = "Seoul", Parent = "KR", Region = "Capital" },
+            new SampleCode { Code = "02", Name = "Busan", Parent = "KR", Region = "Yeongnam" },
+            new SampleCode { Code = "03", Name = "Incheon", Parent = "KR", Region = "Capital" },
+            new SampleCode { Code = "11", Name = "Tokyo", Parent = "JP", Region = "Kanto" },
+            new SampleCode { Code = "12", Name = "Osaka", Parent = "JP", Region = "Kansai" },
+        ]);
+        _customer.Load([new SampleCustomer { Id = 1, Name = "Kim", Country = "KR", City = "01" }]);
+        _customer.ValueChanged += OnValueChanged;
+    }
+
+    private void OnValueChanged(object? sender, DataSetValueChangedEventArgs e) => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => _customer.ValueChanged -= OnValueChanged;
+}

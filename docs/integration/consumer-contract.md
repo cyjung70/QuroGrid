@@ -10,7 +10,7 @@
 | `Quro.Grid.Data` | QuroDataSet, RowState, ChangeSet, SaveResult | `QuroErp.Web` (전이 참조로 충분) |
 | `Quro.Grid.Definition` | TOON 화면 정의 파서·검증기·불변 모델 | `QuroErp.Web` (전이 참조로 충분) |
 | `Quro.Grid` | Blazor 컴포넌트(RCL), quro-grid.js | `QuroErp.Web` |
-| `Quro.UI` | QuroUI 컨트롤(RCL): `QuroTextBox`, quro-ui.js (A-53·A-63) | `QuroErp.Web` |
+| `Quro.UI` | QuroUI 컨트롤(RCL): `QuroTextBox`, `QuroComboBox`, quro-ui.js (A-53·A-63·A-64) | `QuroErp.Web` |
 | `Quro.Grid.DefLint` | .NET 도구 `quro-deflint` (화면 정의 린트, CI용) | 저장소 도구 매니페스트 (`dotnet tool install --local`) |
 
 - 대상 프레임워크: `net10.0`. 렌더 모드: Interactive Server만 지원.
@@ -108,6 +108,27 @@ QuroGrid는 DI 등록 메서드(`AddQuroGrid`)와 서비스 인터페이스를 �
 - 값은 입력 확정(포커스 이탈·Enter) 때 `SetValue` 1회. 입력하는 동안 서버 호출 없음 (R2). 현재 행이 없으면 비활성
 - 열 메타 `Required`면 연노랑 배경(빨간 별 없음), 저장 막기는 `Validate`(GS-089)
 - CSS 클래스 `quro-ui-textbox`·`quro-ui-input`·`quro-ui-required`·`quro-ui-readonly`, 변수 `--quro-required-bg`·`--quro-readonly-bg`(그 밖 `--quro-bg`·`--quro-text`·`--quro-border`·`--quro-active`·`--quro-placeholder`). 없으면 MudBlazor 팔레트
+
+### 4.5 QuroUI 콤보 박스 (Addendum A-57·A-64, GS-U05~GS-U09)
+```razor
+<QuroComboBox TItem="Customer" TCode="CityCode" DataSet="@header" Field="city" OptionsSource="@cityCodes"
+              ValueField="Code" TextField="Name" FilterField="Country" ParentField="country"
+              EmptyKey="common.select" ShowCode="true" Localizer="@L" />
+```
+| 파라미터 | 설명 |
+|---|---|
+| `DataSet`·`Field` (필수) | DataSet 현재 행(A-51)의 열. 형식은 `ValueField`와 같아야 한다(nullable 무시). 다르면 `ArgumentException` |
+| `OptionsSource`·`ValueField`·`TextField` (필수) | 코드 DataSet과 값·글자 필드. 목록 = 삭제 표시가 아닌 행, 행 순서. 코드 DataSet이 바뀌면(`Load`·`SetValue`·행 추가·삭제) 목록도 바뀐다 |
+| `FilterField`·`ParentField` | 연동 콤보: 코드 행 `FilterField` = 바인딩 행 `ParentField`인 코드만 (문자열로 비교, 부모가 null이면 빈 목록). 둘 다 지정하거나 둘 다 비운다. 부모 값이 바뀌어 값이 목록을 벗어나면 null로 지운다(`SetValue` 1회, Undo 가능). 행 이동·`Load`로는 지우지 않는다 |
+| `EmptyKey` | 맨 위 빈 항목(“전체”·“선택”)의 리소스 키. 고르면 null |
+| `ShowCode` | “01 Seoul”처럼 코드와 글자 |
+| `ListColumns` | 펼친 목록의 열 `QuroListColumn(Field, HeaderKey)` (머리글 + 열마다 칸) |
+| `Multiple`·`Separator` | 체크 다중 선택. 고른 코드를 `Separator`(기본 `\|`)로 이어 코드 목록 순서로 문자열 열에 저장, 없으면 null (Q-23). 문자열 열만 |
+| `PlaceholderKey`·`Localizer`·`ReadOnly` | 텍스트 박스와 같다. `Localizer`는 `EmptyKey`·머리글 키도 해석 |
+
+- 목록 전체를 한 번 렌더한다. 입력으로 거르기(코드·글자 포함, 대소문자 무시)·↓↑·Enter·Esc·마우스는 브라우저(`quro-ui.js`), 서버 호출은 선택할 때 1회 (R2). 같은 값을 고르면 호출 없음
+- 자유 입력은 받지 않는다: 고르지 않고 포커스를 잃거나 Esc면 마지막 선택 글자로 돌아간다. 다중 선택 입력 칸은 읽기 전용(Space·클릭으로 체크, 거르기 없음)
+- CSS 클래스 `quro-ui-combo`·`quro-ui-combo-list`·`quro-ui-option`·`quro-ui-combo-empty`·`quro-ui-combo-head`·`quro-ui-check`, 상태 `quro-ui-required`·`quro-ui-readonly`, 변수는 4.4와 같고 `--quro-hover-bg` 추가
 
 ## 5. 저장 계약
 - payload `{ inserted[], updated[], deleted[] }`, 수정·삭제 행은 `version` 포함

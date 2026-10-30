@@ -1,0 +1,56 @@
+@namespace Quro.UI
+@typeparam TItem where TItem : class
+@typeparam TCode where TCode : class
+@implements IAsyncDisposable
+
+@* Own input and list, not MudSelect/MudAutocomplete: filtering and arrow keys stay in the browser (R2, GS-U09).
+   quro-ui.js reports a choice through the hidden input's change event: indexes into the rendered list *@
+<div @ref="_root" class="@RootClass" data-field="@Field" data-quro-display="@_text"
+     data-quro-multiple="@(Multiple ? "true" : null)" data-quro-readonly="@(IsReadOnly ? "true" : null)">
+    <input class="quro-ui-input" type="text" role="combobox" aria-expanded="false" aria-autocomplete="list" autocomplete="off"
+           value="@_text" placeholder="@PlaceholderText" readonly="@(IsReadOnly || Multiple)" disabled="@(_row is null)" />
+    <span class="quro-ui-combo-toggle" aria-hidden="true"></span>
+    <input class="quro-ui-combo-choice" type="hidden" @onchange="OnChoose" />
+    <ul class="quro-ui-combo-list" role="listbox" aria-multiselectable="@(Multiple ? "true" : null)">
+        @if (ListColumns is { Count: > 0 } columns)
+        {
+            <li class="quro-ui-combo-head" role="presentation">
+                @if (Multiple)
+                {
+                    <i class="quro-ui-check" aria-hidden="true"></i>
+                }
+                @foreach (var column in columns)
+                {
+                    <span>@Text(column.HeaderKey)</span>
+                }
+            </li>
+        }
+        @if (EmptyKey is not null)
+        {
+            <li class="quro-ui-combo-empty" role="option" data-index="" data-display="">@Text(EmptyKey)</li>
+        }
+        @for (var i = 0; i < _options.Count; i++)
+        {
+            var option = _options[i];
+            <li @key="option.RowKey" class="quro-ui-option" role="option" data-index="@i" data-display="@option.Display"
+                data-search="@option.Search" aria-selected="@(Multiple ? null : (option.Selected ? "true" : "false"))"
+                aria-checked="@(Multiple ? (option.Selected ? "true" : "false") : null)">
+                @if (Multiple)
+                {
+                    <i class="quro-ui-check" aria-hidden="true"></i>
+                }
+                @if (option.Cells is { } cells)
+                {
+                    @foreach (var cell in cells)
+                    {
+                        <span>@cell</span>
+                    }
+                }
+                else
+                {
+                    @option.Display
+                }
+            </li>
+        }
+    </ul>
+</div>
