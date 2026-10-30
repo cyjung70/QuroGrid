@@ -4,6 +4,7 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 소비자(QuroERP)는 버전을 올리기 전에 이 파일을 읽는다.
 
 ## Unreleased
+- Added: `Quro.UI` `QuroDatePicker<TItem>` — 날짜·기간(`ToField`)·월 모드(`Month`, `yyyy-MM`) 선택기: culture 짧은 날짜 표시·입력(숫자만 입력 포함), 브라우저 달력, 끝이 시작보다 앞이면 거부 (Control Spec 10, A-65, GS-U10~GS-U13). 소비자 조치: 없음
 
 ## 0.4.0-alpha.2 — 2026-10-30
 QuroUI 콤보 박스 (A-64). BREAKING 없음. 소비자 조치: 없음 (쓰려면 `QuroGridVersion`을 0.4.0-alpha.2로)

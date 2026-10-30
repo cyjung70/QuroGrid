@@ -50,6 +50,7 @@ public sealed class SampleLocalizer : IStringLocalizer
         ["sample.home"] = ("처음 화면", "Home"),
         ["sample.textbox.title"] = ("QuroUI 텍스트 박스", "QuroUI text boxes"),
         ["sample.textbox.zip"] = ("우편번호", "Postal code"),
+        ["sample.date.title"] = ("QuroUI 날짜 선택기", "QuroUI date pickers"),
         ["sample.combo.title"] = ("QuroUI 콤보 박스", "QuroUI combo boxes"),
         ["sample.combo.select"] = ("(선택)", "(Select)"),
         ["sample.combo.name"] = ("이름", "Name"),

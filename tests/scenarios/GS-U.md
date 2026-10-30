@@ -28,3 +28,14 @@
 
 - 목록 전체를 한 번 렌더한다. 입력 중 서버에서 목록을 불러오지 않는다 (9장).
 - 다중 선택 입력 칸은 읽기 전용(거르기 없음)이다. 거르기는 단일 선택만.
+
+## 3. 날짜 선택기 `QuroDatePicker<TItem>` (Control Spec 10장, A-65)
+
+| ID | 시나리오 | 기대 결과 | 계층 | 근거 |
+|---|---|---|---|---|
+| GS-U10 | 날짜 바인딩·표시·입력 | `DateOnly`·`DateTime`(nullable 포함) 열. 현재 행 값을 `Culture`(기본 현재 culture)의 짧은 날짜(`d`)로 보인다. 입력 확정 때 `SetValue` 1회: culture 짧은 날짜, `yyyy-MM-dd`, 숫자 8자리(culture 순서: ko `yyyyMMdd`, en-US `MMddyyyy`). 같은 값이면 호출 없음. 읽을 수 없는 입력은 마지막 값으로 돌아감. 빈 입력은 nullable이면 null, 아니면 돌아감. 그 밖의 열 형식은 `ArgumentException`. 필수·읽기 전용은 텍스트 박스와 같다 | bUnit | 10장, Q-24 ③, A-65 ③ |
+| GS-U11 | 월 모드 | `Month`면 문자열 열에 `yyyy-MM` 저장. 표시는 culture 짧은 날짜에서 일을 뺀 형식(ko `2026-10`, en-US `10/2026`). 입력: 그 형식, `yyyy-MM`, 숫자 6자리(culture 순서). 문자열이 아닌 열은 `ArgumentException` | bUnit | 10장, Q-24 ② |
+| GS-U12 | 기간 | `ToField`면 입력 칸 2개(시작 `Field`, 끝 `ToField`, 같은 종류 열). 끝이 시작보다 앞이 되는 변경은 거부하고 그 칸은 마지막 값으로 돌아감 | bUnit | 10장, Q-24 ①, A-65 ④ |
+| GS-U13 | 브라우저 달력 | 칸을 누르면 달력(culture 언어의 월·요일 이름, culture 주 시작 요일). 이전·다음 달 이동은 서버 호출 없음(R2). 날짜를 누르면 값 1회 설정·닫힘. 월 모드는 12달 표. Esc로 닫힘 | E2E | 10장, R2 |
+
+- 달력은 `quro-ui.js`가 `Intl.DateTimeFormat`으로 그린다. 고른 날짜는 `yyyy-MM-dd`(월 모드 `yyyy-MM`)로 서버에 보내고 서버가 culture 형식으로 다시 보인다.
