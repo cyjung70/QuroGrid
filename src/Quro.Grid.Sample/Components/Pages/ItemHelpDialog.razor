@@ -1,24 +1,41 @@
 @using Quro.Grid.Sample.Data
 
-@* 품목 코드도움 팝업 (Spec 4.6: 화면별 구현). 그리드가 넘긴 후보 중 하나를 고르면 그 코드로 닫는다. *@
-<MudDialog>
-    <DialogContent>
-        <MudStack Spacing="1">
-            @foreach (var itemCode in Codes)
+@* 품목 코드도움 팝업 (Spec 4.6: 화면별 구현). 그리드가 넘긴 후보 중 하나를 고르면 그 코드로, 취소하면 null로 닫는다. *@
+<div class="sample-dialog-backdrop">
+    <div class="sample-dialog" role="dialog" aria-modal="true" aria-label="@L["sample.item_help"]">
+        <div class="sample-dialog-items">
+            @for (var i = 0; i < Codes.Count; i++)
             {
-                <MudButton Variant="Variant.Text" data-testid="help-item" OnClick="() => MudDialog.Close(DialogResult.Ok(itemCode))">@itemCode</MudButton>
+                var itemCode = Codes[i];
+                if (i == 0)
+                {
+                    <button type="button" data-testid="help-item" @ref="_first" @onclick="() => OnClose.InvokeAsync(itemCode)">@itemCode</button>
+                }
+                else
+                {
+                    <button type="button" data-testid="help-item" @onclick="() => OnClose.InvokeAsync(itemCode)">@itemCode</button>
+                }
             }
-        </MudStack>
-    </DialogContent>
-    <DialogActions>
-        <MudButton data-testid="help-cancel" OnClick="() => MudDialog.Cancel()">@L["sample.cancel"]</MudButton>
-    </DialogActions>
-</MudDialog>
+        </div>
+        <div class="sample-dialog-actions">
+            <button type="button" data-testid="help-cancel" @onclick="() => OnClose.InvokeAsync(null)">@L["sample.cancel"]</button>
+        </div>
+    </div>
+</div>
 
 @code {
     private static readonly SampleLocalizer L = new();
-
-    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    private ElementReference _first;
 
     [Parameter] public IReadOnlyList<string> Codes { get; set; } = [];
+
+    /// <summary>고른 코드, 취소하면 null</summary>
+    [Parameter] public EventCallback<string?> OnClose { get; set; }
+
+    // 열리면 첫 후보에 포커스 (키보드로 바로 고를 수 있게)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && Codes.Count > 0)
+            await _first.FocusAsync();
+    }
 }

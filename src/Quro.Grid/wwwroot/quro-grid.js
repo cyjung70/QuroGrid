@@ -114,7 +114,7 @@ function onKeyDown(s, e) {
         }
         return;
     }
-    // 선택 목록(달력·Combo 목록, MudBlazor) 안의 키는 목록이 받는다. Esc만 편집 취소.
+    // 선택 목록(달력·Combo 목록) 안의 키는 목록이 받는다. Esc만 편집 취소.
     if (e.target.closest('.quro-picker')) {
         if (e.key === 'Escape') {
             e.preventDefault();
@@ -159,9 +159,11 @@ function onMouseDown(s, e) {
         return;
     }
     if (e.target.closest('.quro-picker')) {
-        // 목록 항목은 포커스를 받지 않을 수 있어(relatedTarget 없음) 셀 이탈로 보지 않게 한다
+        // 포커스는 에디터에 둔다. 목록을 눌러도 셀 이탈로 보지 않게 한다
+        e.preventDefault();
         s.pickerMouseDown = true;
         setTimeout(() => { s.pickerMouseDown = false; });
+        if (e.button === 0) pickerAction(s, e.target);
         return;
     }
     if (e.target.closest('.quro-filter-panel')) {
@@ -745,7 +747,7 @@ async function commit(s, byKey = false) {
 }
 
 /**
- * 앱이 띄운 팝업(MudDialog 등)이 닫히면서 포커스가 문서(body)로 빠지는 경우가 있어,
+ * 앱이 띄운 팝업(다이얼로그 등)이 닫히면서 포커스가 문서(body)로 빠지는 경우가 있어,
  * 잠시(500ms) 지켜보며 포커스가 아무 곳에도 없으면 그리드로 되돌린다. 사용자가 다른 요소를 고른 경우는 건드리지 않는다.
  */
 function reclaimFocus(s, el) {
@@ -781,7 +783,81 @@ async function openPicker(s) {
     if (!s.editing && !(await beginEdit(s, null))) return;
     if (!(await s.dotnet.invokeMethodAsync('OpenPicker', s.editing.row, s.editing.field, s.editing.input.value))) return;
     await waitFor(() => s.root.querySelector('.quro-picker'));
+    const calendar = s.root.querySelector('.quro-picker .quro-calendar');
+    if (calendar) {
+        const m = /^(\d{4})-(\d{2})/.exec(calendar.dataset.iso ?? '');
+        const today = new Date();
+        s.calendar = m ? { year: +m[1], month: +m[2] - 1 } : { year: today.getFullYear(), month: today.getMonth() };
+        drawCalendar(s, calendar);
+    }
     placePicker(s);
+}
+
+/**
+ * 선택 목록 안 누름 (A-67): 달 넘김은 브라우저에서 다시 그리고(서버 호출 없음, R2),
+ * 날짜·항목을 고르면 서버 1회 (PickDate·PickOption). 서버가 확정하고 endEdit를 부른다.
+ */
+function pickerAction(s, target) {
+    const nav = target.closest('.quro-calendar [data-nav]');
+    if (nav) {
+        const d = new Date(Date.UTC(s.calendar.year, s.calendar.month + +nav.dataset.nav, 1));
+        s.calendar = { year: d.getUTCFullYear(), month: d.getUTCMonth() };
+        drawCalendar(s, nav.closest('.quro-calendar'));
+        placePicker(s);
+        return;
+    }
+    const day = target.closest('.quro-calendar [data-value]');
+    if (day) {
+        enqueue(s, () => s.dotnet.invokeMethodAsync('PickDate', day.dataset.value));
+        return;
+    }
+    const option = target.closest('.quro-options [data-index]');
+    if (option) enqueue(s, () => s.dotnet.invokeMethodAsync('PickOption', +option.dataset.index));
+}
+
+/** 달력 그리기: 문화권(data-culture)의 달 이름·요일, 주 시작 요일(data-firstday), 6주. 선택 날짜는 data-iso */
+function drawCalendar(s, calendar) {
+    const { year, month } = s.calendar;
+    const pad = (n, width) => String(n).padStart(width, '0');
+    const iso = (y, m, d) => `${pad(y, 4)}-${pad(m + 1, 2)}-${pad(d, 2)}`;
+    const utc = (y, m, d) => new Date(Date.UTC(y, m, d));
+    const format = (date, options) =>
+        new Intl.DateTimeFormat(calendar.dataset.culture || undefined, { ...options, timeZone: 'UTC' }).format(date);
+    const element = (tag, cls, text) => {
+        const el = document.createElement(tag);
+        el.className = cls;
+        if (text !== undefined) el.textContent = text;
+        return el;
+    };
+    const button = (cls, text, data) => {
+        const b = element('button', cls, text);
+        b.type = 'button';
+        b.tabIndex = -1;
+        Object.assign(b.dataset, data);
+        return b;
+    };
+
+    const head = element('div', 'quro-cal-head');
+    head.append(button('quro-cal-nav', '‹', { nav: '-1' }),
+        element('span', 'quro-cal-title', format(utc(year, month, 1), { year: 'numeric', month: 'long' })),
+        button('quro-cal-nav', '›', { nav: '1' }));
+    const days = element('div', 'quro-cal-days');
+    const first = +(calendar.dataset.firstday || 0);
+    for (let i = 0; i < 7; i++)   // 2023-01-01은 일요일
+        days.append(element('span', 'quro-cal-dow', format(utc(2023, 0, 1 + (first + i) % 7), { weekday: 'short' })));
+    const now = new Date();
+    const today = iso(now.getFullYear(), now.getMonth(), now.getDate());
+    const lead = (utc(year, month, 1).getUTCDay() - first + 7) % 7;
+    for (let i = 0; i < 42; i++) {
+        const date = utc(year, month, 1 - lead + i);
+        const value = iso(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+        const b = button('quro-cal-day', String(date.getUTCDate()), { value });
+        if (date.getUTCMonth() !== month) b.dataset.outside = '';
+        if (value === calendar.dataset.iso) b.setAttribute('aria-selected', 'true');
+        if (value === today) b.dataset.today = '';
+        days.append(b);
+    }
+    calendar.replaceChildren(head, days);
 }
 
 /** 선택 목록을 편집 셀 바로 아래(공간이 없으면 위)에 둔다. 화면 기준(fixed)이라 그리드 스크롤 영역에 잘리지 않는다. */

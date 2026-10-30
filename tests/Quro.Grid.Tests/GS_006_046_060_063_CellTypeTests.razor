@@ -187,10 +187,13 @@
 
         var picker = Assert.Single(cut.FindAll(".quro-picker"));
         Assert.Same(picker, Cell(cut, row, "DueDate").QuerySelector(".quro-picker"));
-        var date = cut.FindComponent<MudBlazor.MudDatePicker>();
-        Assert.Equal(new DateTime(2026, 11, 2), date.Instance.Date);   // 입력 중인 문자열을 사용자 로캘로 해석
+        // 달력은 quro-grid.js가 그린다 (A-67). 서버는 시작 날짜·문화권·주 시작 요일만 넘긴다
+        var calendar = picker.QuerySelector(".quro-calendar")!;
+        Assert.Equal("2026-11-02", calendar.GetAttribute("data-iso"));   // 입력 중인 문자열을 사용자 로캘로 해석
+        Assert.Equal("en-US", calendar.GetAttribute("data-culture"));
+        Assert.Equal("0", calendar.GetAttribute("data-firstday"));
 
-        await cut.InvokeAsync(() => date.Instance.DateChanged.InvokeAsync(new DateTime(2026, 11, 20)));
+        await cut.InvokeAsync(() => cut.Instance.PickDate("2026-11-20"));
 
         Assert.Equal(new DateOnly(2026, 11, 20), ds.GetValue(row, "DueDate"));
         Assert.Empty(cut.FindAll(".quro-picker"));
@@ -247,9 +250,12 @@
         await cut.InvokeAsync(() => cut.Instance.BeginEdit(row, "Unit"));
         await cut.InvokeAsync(() => cut.Instance.OpenPicker(row, "Unit", "Each"));
 
-        var items = cut.FindAll(".quro-picker .mud-list-item");
+        var items = cut.FindAll(".quro-picker [role=option]");
         Assert.Equal(["Each", "Box", "Kilogram"], items.Select(i => i.TextContent.Trim()));
-        await cut.InvokeAsync(() => items[2].Click());
+        Assert.Equal(["0", "1", "2"], items.Select(i => i.GetAttribute("data-index")));
+        Assert.Equal("true", items[0].GetAttribute("aria-selected"));   // 현재 값 표시
+        Assert.Null(items[1].GetAttribute("aria-selected"));
+        await cut.InvokeAsync(() => cut.Instance.PickOption(2));   // 항목 클릭은 quro-grid.js가 받아 1회 보낸다 (R5)
 
         Assert.Equal("KG", ds.GetValue(row, "Unit"));
         Assert.Empty(cut.FindAll(".quro-picker"));
@@ -266,7 +272,7 @@
         await cut.InvokeAsync(() => cut.Instance.BeginEdit(row, "Unit"));
         await cut.InvokeAsync(() => cut.Instance.OpenPicker(row, "Unit", "Each"));
 
-        await cut.InvokeAsync(() => cut.FindAll(".quro-picker .mud-list-item")[0].Click());
+        await cut.InvokeAsync(() => cut.Instance.PickOption(0));
 
         Assert.Empty(cut.FindAll(".quro-picker"));
         Assert.Empty(cut.FindAll(".quro-editor"));

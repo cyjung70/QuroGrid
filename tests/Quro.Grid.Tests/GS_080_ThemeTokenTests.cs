@@ -4,7 +4,7 @@ namespace Quro.Grid.Tests;
 
 /// <summary>
 /// GS-080 테마 토큰 (P1 5-8): 그리드 색은 CSS 변수로만 정의한다. 앱은 <c>--quro-*</c>를 그리드나 그 바깥 요소에 두어 바꾸고,
-/// 두지 않으면 MudBlazor 팔레트(<c>--mud-palette-*</c>), 그것도 없으면 기본값을 쓴다.
+/// 두지 않으면 기본값을 쓴다 (A-67).
 /// 그리드 안에서는 이를 풀어 둔 <c>--qg-*</c>만 쓴다.
 /// </summary>
 public class GS_080_ThemeTokenTests

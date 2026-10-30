@@ -20,5 +20,5 @@ paths:
 
 ## 금지
 - 공개 API에 QuroERP 타입·업무 용어(Invoice, SalesOrder 등) 노출
-- 공개 API에 MudBlazor 타입 노출 (소비자가 MudBlazor 버전에 묶임). 필요하면 자체 타입으로 감싼다
+- 패키지에 UI 라이브러리(MudBlazor 등) 의존 추가 (A-67, 소비자가 그 버전에 묶임)
 - 같은 버전 번호로 재배포

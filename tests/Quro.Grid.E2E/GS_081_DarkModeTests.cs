@@ -1,8 +1,8 @@
 namespace Quro.Grid.E2E;
 
 /// <summary>
-/// GS-081 MudBlazor 다크 모드 (P1 5-8). 샘플 ?dark=1이면 MudThemeProvider가 다크 팔레트를 쓴다.
-/// 그리드 색은 Mud 팔레트 토큰을 따르고, 글자와 배경(일반·헤더·선택·오류·경고)의 명암비는 4.5:1 이상.
+/// GS-081 다크 모드 (P1 5-8, A-67). 샘플 ?dark=1이면 화면이 다크 값의 --quro-* 토큰을 둔다.
+/// 그리드 색은 앱 토큰을 따르고(없으면 기본값), 글자와 배경(일반·헤더·선택·오류·경고)의 명암비는 4.5:1 이상.
 /// </summary>
 public class GS_081_DarkModeTests(SampleServer server) : GridPageTest(server)
 {
@@ -29,7 +29,7 @@ public class GS_081_DarkModeTests(SampleServer server) : GridPageTest(server)
             const out = {};
             for (const n of ['bg', 'head-bg', 'selected', 'error', 'warning']) out[n] = rgb(read(`--qg-${n}`), bg);
             out.text = rgb(read('--qg-text'), bg);
-            out.mudSurface = rgb(read('--mud-palette-surface'), '#808080');
+            out.appBg = rgb(getComputedStyle(grid).getPropertyValue('--quro-bg').trim() || 'transparent', '#808080');
             out.gridBg = rgb(getComputedStyle(grid).backgroundColor, bg);
             out.cellText = rgb(getComputedStyle(grid.querySelector('.quro-body [role=gridcell]')).color, bg);
             probe.remove();
@@ -66,26 +66,27 @@ public class GS_081_DarkModeTests(SampleServer server) : GridPageTest(server)
     }
 
     [Fact]
-    public async Task GS_081_DarkMode_FollowsMudPalette_Readable()
+    public async Task GS_081_DarkMode_FollowsAppTokens_Readable()
     {
         await OpenAsync("?dark=1");
 
         var c = await ColorsAsync();
 
-        Assert.Equal(c["mudSurface"], c["bg"]);              // 배경 = Mud 다크 surface
+        Assert.Equal(c["appBg"], c["bg"]);                   // 배경 = 앱이 둔 다크 --quro-bg
         Assert.True(Luminance(c["bg"]) < 0.1, "다크 배경");
         Assert.True(Luminance(c["text"]) > 0.4, "밝은 글자");
         AssertReadable(c);
     }
 
     [Fact]
-    public async Task GS_081_LightMode_FollowsMudPalette_Readable()
+    public async Task GS_081_LightMode_Defaults_Readable()
     {
         await OpenAsync();
 
         var c = await ColorsAsync();
 
-        Assert.Equal(c["mudSurface"], c["bg"]);
+        Assert.Equal([128, 128, 128], c["appBg"]);           // 앱 토큰 없음
+        Assert.Equal([255, 255, 255], c["bg"]);              // 기본값
         Assert.True(Luminance(c["bg"]) > 0.8, "밝은 배경");
         AssertReadable(c);
     }

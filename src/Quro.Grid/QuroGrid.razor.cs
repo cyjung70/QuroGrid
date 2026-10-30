@@ -428,7 +428,7 @@ public partial class QuroGrid<TItem> where TItem : class
     }
 
     /// <summary>
-    /// 편집 중 선택 목록 열기 (Alt+↓, Addendum A-17): Date는 달력(MudDatePicker), Combo는 목록(MudList).
+    /// 편집 중 선택 목록 열기 (Alt+↓, Addendum A-17·A-67): Date는 달력(quro-grid.js가 그림), Combo는 목록.
     /// 직접 입력은 브라우저 에디터에서 하고(R2), 목록에서 고르면 바로 확정한다.
     /// </summary>
     [JSInvokable]
@@ -458,19 +458,23 @@ public partial class QuroGrid<TItem> where TItem : class
         return true;
     }
 
-    internal DateTime? PickerDate => _pickerDate;
+    /// <summary>열린 달력의 시작 날짜 (yyyy-MM-dd). 값이 없으면 null (달력은 오늘의 달)</summary>
+    internal string? PickerIso => _pickerDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
-    internal Task PickDate(DateTime? date)
+    /// <summary>열린 달력에서 날짜를 골랐을 때 (quro-grid.js, 1회). <paramref name="iso"/>는 yyyy-MM-dd. 고르면 바로 확정한다.</summary>
+    [JSInvokable]
+    public Task PickDate(string? iso)
     {
-        if (_picker is not { } p)
+        if (_picker is not { } p || Column(p.Field).Type != CellType.Date)
             return Task.CompletedTask;
-        object? value = null;
-        if (date is { } d)
-            DataSet.TryParseText(p.Field, d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), CultureInfo.InvariantCulture, out value);
+        if (!DataSet.TryParseText(p.Field, iso, CultureInfo.InvariantCulture, out var value))
+            return Task.CompletedTask;
         return PickValue(value);
     }
 
-    internal Task PickOption(int index) =>
+    /// <summary>열린 Combo 목록에서 항목을 골랐을 때 (quro-grid.js, 1회). <paramref name="index"/>는 <see cref="QuroColumn.Options"/> 순번.</summary>
+    [JSInvokable]
+    public Task PickOption(int index) =>
         _picker is { } p && Column(p.Field).Options is { } options && index >= 0 && index < options.Count
             ? PickValue(options[index].Value)
             : Task.CompletedTask;

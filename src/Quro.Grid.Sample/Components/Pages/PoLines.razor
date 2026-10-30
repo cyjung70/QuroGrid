@@ -6,14 +6,12 @@
 
 <PageTitle>@L["sample.po_lines.title"]</PageTitle>
 
+@* ?dark=1: 다크 값의 --quro-* 토큰을 화면에 둔다 (GS-081, A-67) *@
+<div class="@(Dark == 1 ? "sample-page sample-dark" : "sample-page")">
+
 <h1>@L["sample.po_lines.title"]</h1>
 
-@* MudBlazor 테마와 다이얼로그(코드도움 팝업)를 이 대화형 화면에서 쓴다 *@
-<MudThemeProvider IsDarkMode="@(Dark == 1)" />
-<MudPopoverProvider />
-<MudDialogProvider />
-
-@* 툴바는 그리드 바깥 (Spec 4.2: MudBlazor 영역). 선택 범위는 그리드(JS)가 소유하므로 그리드 메서드로 처리한다. *@
+@* 툴바는 그리드 바깥 (Spec 4.2: 앱 영역). 선택 범위는 그리드(JS)가 소유하므로 그리드 메서드로 처리한다. *@
 <div class="sample-toolbar">
     <a href="/" data-testid="home-link">@L["sample.home"]</a>
     <button type="button" data-testid="copy-rows" @onclick="() => _grid.CopySelectedRows()">@L["sample.copy_rows"]</button>
@@ -107,6 +105,13 @@
     }
 </dl>
 
+@if (_helpCodes is { } helpCodes)
+{
+    <ItemHelpDialog Codes="helpCodes" OnClose="CloseItemHelp" />
+}
+
+</div>
+
 @code {
     private static readonly SampleLocalizer L = new();
     private readonly QuroDataSet<PoLine> _lines = new(line => line.LineNo);   // 행 ID (서버측 페이징에 필요)
@@ -135,7 +140,8 @@
         new("KG", L["sample.unit.kg"]),
     ];
 
-    [Inject] private IDialogService Dialogs { get; set; } = default!;
+    private IReadOnlyList<string>? _helpCodes;
+    private TaskCompletionSource<string?>? _help;
     private int? _selectedRow;
     private CultureInfo _culture = new("en-US");
     private int _pastes;
@@ -163,7 +169,7 @@
     /// <summary>1이면 텍스트 열 6개와 납기일 추가 (500행 × 10열 붙여넣기 성능, GS-057).</summary>
     [SupplyParameterFromQuery] public int? Wide { get; set; }
 
-    /// <summary>?dark=1: MudBlazor 다크 모드 (GS-081)</summary>
+    /// <summary>?dark=1: 다크 값의 --quro-* 토큰 (GS-081)</summary>
     [SupplyParameterFromQuery] public int? Dark { get; set; }
 
     /// <summary>?groups=1: 수량·단가를 그룹 헤더로 묶는다 (GS-070)</summary>
@@ -254,10 +260,16 @@
     {
         _popupText = e.Text;
         var codes = e.Matches.Count > 0 ? e.Matches : Items;
-        var dialog = await Dialogs.ShowAsync<ItemHelpDialog>(L["sample.item_help"],
-            new DialogParameters<ItemHelpDialog> { { d => d.Codes, codes } });
-        if (await dialog.Result is { Canceled: false, Data: string code })
-            e.Value = code;
+        _helpCodes = codes;
+        _help = new TaskCompletionSource<string?>();
+        StateHasChanged();
+        e.Value = await _help.Task;
+    }
+
+    private void CloseItemHelp(string? code)
+    {
+        _helpCodes = null;
+        _help?.TrySetResult(code);
     }
 
     private void ShowPasteResult(PastedArgs e)

@@ -5,7 +5,7 @@ namespace Quro.Grid.E2E;
 /// <summary>
 /// GS-006 · GS-046 (코드도움), GS-060 ~ GS-063 (Date·Combo·Check·Button 셀) — Addendum A-16 ~ A-19.
 /// 샘플 쿼리 types=1: ItemCode는 Popup(품목 A1001~A1003, B2001·B2002, C3001), Unit(Combo: Each/Box/Kilogram),
-/// Urgent(Check: Y/N), DueDate(Date, 1행 2026-11-02), Detail(Button). 코드도움 팝업은 앱(MudDialog)이 띄운다.
+/// Urgent(Check: Y/N), DueDate(Date, 1행 2026-11-02), Detail(Button). 코드도움 팝업은 앱(샘플 다이얼로그)이 띄운다.
 /// </summary>
 public class GS_006_046_060_063_CellTypeTests(SampleServer server) : GridPageTest(server)
 {
@@ -121,6 +121,30 @@ public class GS_006_046_060_063_CellTypeTests(SampleServer server) : GridPageTes
         await ExpectActiveAsync(1, "Urgent");
     }
 
+    /// <summary>GS-060 (A-67): 달력은 브라우저가 그린다. 달을 넘겨도 서버 호출이 없고, 날짜를 고를 때만 1회</summary>
+    [Fact]
+    public async Task GS_060_DatePicker_MonthNav_NoServerCall()
+    {
+        await OpenAsync("?types=1");
+        await Cell(1, "DueDate").ClickAsync();
+        await Page.Keyboard.PressAsync("Alt+ArrowDown");
+        var picker = Cell(1, "DueDate").Locator(".quro-picker");
+        await Expect(picker.Locator(".quro-cal-title")).ToHaveTextAsync("November 2026");
+        await Expect(picker.Locator("[aria-selected=true]")).ToHaveTextAsync("2");
+        var baseline = await FramesAfterSettleAsync(0);
+
+        await picker.Locator("[data-nav='1']").ClickAsync();
+        await Expect(picker.Locator(".quro-cal-title")).ToHaveTextAsync("December 2026");
+        await picker.Locator("[data-nav='1']").ClickAsync();
+        await Expect(picker.Locator(".quro-cal-title")).ToHaveTextAsync("January 2027");
+        await Expect(Editor).ToBeFocusedAsync();                       // 달력을 눌러도 편집은 그대로
+        Assert.Equal(0, await FramesAfterSettleAsync(baseline));
+
+        await picker.Locator(".quro-cal-day:not([data-outside])", new() { HasText = "15" }).ClickAsync();
+        await Expect(Cell(1, "DueDate")).ToHaveTextAsync("1/15/2027");
+        await Expect(Status("json")).ToContainTextAsync("2027-01-15");
+    }
+
     // ── GS-061 ──
 
     [Fact]
@@ -136,7 +160,7 @@ public class GS_006_046_060_063_CellTypeTests(SampleServer server) : GridPageTes
 
         await Cell(2, "Unit").ClickAsync();
         await Page.Keyboard.PressAsync("Alt+ArrowDown");
-        await Cell(2, "Unit").Locator(".quro-picker .mud-list-item", new() { HasText = "Kilogram" }).ClickAsync();
+        await Cell(2, "Unit").Locator(".quro-picker [role=option]", new() { HasText = "Kilogram" }).ClickAsync();
 
         await Expect(Cell(2, "Unit")).ToHaveTextAsync("Kilogram");
         await Expect(Status("json")).ToContainTextAsync("\"KG\"");
