@@ -10,7 +10,7 @@
 | `Quro.Grid.Data` | QuroDataSet, RowState, ChangeSet, SaveResult | `QuroErp.Web` (전이 참조로 충분) |
 | `Quro.Grid.Definition` | TOON 화면 정의 파서·검증기·불변 모델 | `QuroErp.Web` (전이 참조로 충분) |
 | `Quro.Grid` | Blazor 컴포넌트(RCL), quro-grid.js | `QuroErp.Web` |
-| `Quro.UI` | QuroUI 컨트롤(RCL): `QuroTextBox`, `QuroComboBox`, quro-ui.js (A-53·A-63·A-64) | `QuroErp.Web` |
+| `Quro.UI` | QuroUI 컨트롤(RCL): `QuroTextBox`, `QuroComboBox`, `QuroDatePicker`, quro-ui.js (A-53·A-63·A-64·A-65) | `QuroErp.Web` |
 | `Quro.Grid.DefLint` | .NET 도구 `quro-deflint` (화면 정의 린트, CI용) | 저장소 도구 매니페스트 (`dotnet tool install --local`) |
 
 - 대상 프레임워크: `net10.0`. 렌더 모드: Interactive Server만 지원.
@@ -129,6 +129,25 @@ QuroGrid는 DI 등록 메서드(`AddQuroGrid`)와 서비스 인터페이스를 �
 - 목록 전체를 한 번 렌더한다. 입력으로 거르기(코드·글자 포함, 대소문자 무시)·↓↑·Enter·Esc·마우스는 브라우저(`quro-ui.js`), 서버 호출은 선택할 때 1회 (R2). 같은 값을 고르면 호출 없음
 - 자유 입력은 받지 않는다: 고르지 않고 포커스를 잃거나 Esc면 마지막 선택 글자로 돌아간다. 다중 선택 입력 칸은 읽기 전용(Space·클릭으로 체크, 거르기 없음)
 - CSS 클래스 `quro-ui-combo`·`quro-ui-combo-list`·`quro-ui-option`·`quro-ui-combo-empty`·`quro-ui-combo-head`·`quro-ui-check`, 상태 `quro-ui-required`·`quro-ui-readonly`, 변수는 4.4와 같고 `--quro-hover-bg` 추가
+
+### 4.6 QuroUI 날짜 선택기 (Addendum A-65, GS-U10~GS-U13)
+```razor
+<QuroDatePicker TItem="Order" DataSet="@header" Field="orderDate" />
+<QuroDatePicker TItem="Filter" DataSet="@filter" Field="fromDate" ToField="toDate" />
+<QuroDatePicker TItem="Close" DataSet="@close" Field="closeMonth" Month="true" />
+```
+| 파라미터 | 설명 |
+|---|---|
+| `DataSet`·`Field` (필수) | DataSet 현재 행(A-51)의 `DateOnly`·`DateTime`(nullable 포함) 열. 월 모드는 문자열 열. 그 밖은 `ArgumentException` |
+| `ToField` | 기간의 끝 열(`Field`가 시작, 같은 종류 열). 입력 칸 2개. 끝이 시작보다 앞이 되는 변경은 거부하고 그 칸은 마지막 값으로 돌아간다 |
+| `Month` | 월 모드: `yyyy-MM` 문자열로 저장, 달력은 12달 |
+| `Culture` | 표시·입력·달력의 culture. null이면 현재 culture |
+| `PlaceholderKey`·`Localizer`·`ReadOnly` | 텍스트 박스와 같다 |
+
+- 표시: culture 짧은 날짜(`d`, ko `2026-10-30`, en-US `10/30/2026`). 월 모드는 거기서 일을 뺀 형식(ko `2026-10`, en-US `10/2026`). `DateTime` 열에는 자정 값을 넣는다
+- 입력 확정(포커스 이탈·Enter) 때 `SetValue` 1회: culture 짧은 날짜, `yyyy-MM-dd`, 숫자만(culture 순서: ko `20261030`, en-US `10302026`). 월 모드는 그 형식, `yyyy-MM`, 숫자 6자리. 읽을 수 없는 입력·nullable이 아닌 열의 빈 입력은 마지막 값으로 돌아간다. 같은 값이면 호출 없음
+- 달력은 브라우저(`quro-ui.js`, `Intl`)가 culture 언어의 월·요일 이름과 culture 주 시작 요일로 그린다. 달 이동은 서버 호출 없음(R2), 날짜를 누르면 1회. 칸 클릭·Alt+↓로 열고 Esc로 닫는다
+- CSS 클래스 `quro-ui-date`·`quro-ui-date-pop`·`quro-ui-cal-*`, 상태 `quro-ui-required`(시작·끝 중 하나라도 필수)·`quro-ui-readonly`, 변수는 4.4·4.5와 같다
 
 ## 5. 저장 계약
 - payload `{ inserted[], updated[], deleted[] }`, 수정·삭제 행은 `version` 포함

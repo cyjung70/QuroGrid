@@ -1,0 +1,20 @@
+@namespace Quro.UI
+@typeparam TItem where TItem : class
+@implements IAsyncDisposable
+
+@* Own inputs and calendar, not MudDatePicker: the calendar is drawn and moved in the browser (R2, GS-U13).
+   A picked day comes back as yyyy-MM-dd (month mode yyyy-MM) through the input's change event *@
+<div @ref="_root" class="@RootClass" data-field="@Field" data-quro-culture="@EffectiveCulture.Name"
+     data-quro-firstday="@((int)EffectiveCulture.DateTimeFormat.FirstDayOfWeek)" data-quro-month="@(Month ? "true" : null)"
+     data-quro-readonly="@(IsReadOnly ? "true" : null)">
+    <input class="quro-ui-input" type="text" data-part="from" autocomplete="off" value="@_from.Text" data-iso="@_from.Iso"
+           @onchange="OnFromChange" placeholder="@PlaceholderText" readonly="@IsReadOnly" disabled="@(_row is null)" />
+    @if (_toColumn is not null)
+    {
+        <span class="quro-ui-date-sep" aria-hidden="true">~</span>
+        <input class="quro-ui-input" type="text" data-part="to" autocomplete="off" value="@_to.Text" data-iso="@_to.Iso"
+               @onchange="OnToChange" readonly="@IsReadOnly" disabled="@(_row is null)" />
+    }
+    <span class="quro-ui-date-toggle" aria-hidden="true"></span>
+    <div class="quro-ui-date-pop"></div>
+</div>

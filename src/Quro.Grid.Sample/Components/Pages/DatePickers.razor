@@ -1,0 +1,53 @@
+@page "/date"
+@rendermode InteractiveServer
+@implements IDisposable
+@using System.Globalization
+@using Quro.Grid.Data
+@using Quro.Grid.Sample.Data
+@using Quro.UI
+
+<PageTitle>@L["sample.date.title"]</PageTitle>
+
+<h1>@L["sample.date.title"]</h1>
+
+<MudThemeProvider />
+
+@* QuroUI date pickers bound to one data set (GS-U13): single date, range, month. ?culture=en-US switches the format *@
+<div class="sample-form">
+    <QuroDatePicker TItem="SamplePeriod" DataSet="_period" Field="Due" Culture="_culture" />
+    <QuroDatePicker TItem="SamplePeriod" DataSet="_period" Field="From" ToField="To" Culture="_culture" />
+    <QuroDatePicker TItem="SamplePeriod" DataSet="_period" Field="CloseMonth" Month="true" Culture="_culture" />
+</div>
+
+<p>
+    <span data-testid="state">@_period.GetState(1)</span> ·
+    <span data-testid="due-value">@Iso(_period.GetValue(1, "Due"))</span> ·
+    <span data-testid="from-value">@Iso(_period.GetValue(1, "From"))</span> ·
+    <span data-testid="to-value">@Iso(_period.GetValue(1, "To"))</span> ·
+    <span data-testid="month-value">@_period.GetValue(1, "CloseMonth")</span>
+</p>
+
+@code {
+    private static readonly SampleLocalizer L = new();
+    private readonly QuroDataSet<SamplePeriod> _period = new();
+    private CultureInfo _culture = CultureInfo.CurrentCulture;
+
+    [SupplyParameterFromQuery(Name = "culture")] public string? CultureName { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _culture = new CultureInfo(CultureName ?? "ko-KR");
+        _period.Load([new SamplePeriod
+        {
+            Id = 1, Due = new DateOnly(2026, 10, 30), From = new DateOnly(2026, 10, 5), To = new DateOnly(2026, 10, 20),
+            CloseMonth = "2026-10",
+        }]);
+        _period.ValueChanged += OnValueChanged;
+    }
+
+    private static string? Iso(object? value) => (value as DateOnly?)?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    private void OnValueChanged(object? sender, DataSetValueChangedEventArgs e) => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => _period.ValueChanged -= OnValueChanged;
+}

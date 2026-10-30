@@ -5,7 +5,8 @@
  * text stays readable in light and dark mode (A-38).
  */
 .quro-ui-textbox,
-.quro-ui-combo {
+.quro-ui-combo,
+.quro-ui-date {
     --qu-bg: var(--quro-bg, var(--mud-palette-surface, #fff));
     --qu-text: var(--quro-text, var(--mud-palette-text-primary, #1d2330));
     --qu-border: var(--quro-border, var(--mud-palette-lines-inputs, #b0b7c3));
@@ -48,7 +49,8 @@
 }
 
 /* ── combo box (Control Spec 9). The list opens under the input; quro-ui.js sets data-quro-open ── */
-.quro-ui-combo {
+.quro-ui-combo,
+.quro-ui-date {
     position: relative;
 }
 
@@ -139,4 +141,118 @@
     border-color: var(--qu-active);
     background: var(--qu-active);
     box-shadow: inset 0 0 0 2px var(--qu-bg);
+}
+
+/* ── date picker (Control Spec 10). quro-ui.js draws the calendar into .quro-ui-date-pop and sets data-quro-open ── */
+.quro-ui-date {
+    position: relative;
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.quro-ui-date .quro-ui-input {
+    width: 9em;
+}
+
+.quro-ui-date .quro-ui-input:last-of-type {
+    padding-right: 26px;
+}
+
+.quro-ui-date-sep {
+    color: var(--qu-placeholder);
+}
+
+.quro-ui-date-toggle {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    box-sizing: border-box;
+    width: 12px;
+    height: 11px;
+    border: 1.5px solid var(--qu-text);
+    border-top-width: 3px;
+    border-radius: 2px;
+    transform: translateY(-50%);
+    cursor: pointer;
+}
+
+.quro-ui-date-pop {
+    display: none;
+    position: absolute;
+    z-index: 1300;
+    top: 100%;
+    left: 0;
+    margin-top: 2px;
+    padding: 8px;
+    border: 1px solid var(--qu-border);
+    border-radius: var(--mud-default-borderradius, 4px);
+    background: var(--qu-bg);
+    color: var(--qu-text);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.quro-ui-date[data-quro-open] .quro-ui-date-pop {
+    display: block;
+}
+
+.quro-ui-date[data-quro-part="to"] .quro-ui-date-pop {
+    left: auto;
+    right: 0;
+}
+
+.quro-ui-cal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+.quro-ui-cal-days {
+    display: grid;
+    grid-template-columns: repeat(7, 2.2em);
+    gap: 2px;
+}
+
+.quro-ui-cal-months {
+    display: grid;
+    grid-template-columns: repeat(3, 4.5em);
+    gap: 4px;
+}
+
+.quro-ui-cal-dow {
+    color: var(--qu-placeholder);
+    font-size: 0.8em;
+    text-align: center;
+}
+
+.quro-ui-date-pop button {
+    padding: 4px 0;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.quro-ui-cal-nav {
+    width: 2em;
+}
+
+.quro-ui-date-pop button:hover {
+    background: var(--qu-hover-bg);
+}
+
+.quro-ui-date-pop button[data-outside] {
+    color: var(--qu-placeholder);
+}
+
+.quro-ui-date-pop button[data-today] {
+    box-shadow: inset 0 0 0 1px var(--qu-active);
+}
+
+.quro-ui-date-pop button[aria-selected="true"] {
+    background: var(--qu-active);
+    color: var(--qu-bg);
 }

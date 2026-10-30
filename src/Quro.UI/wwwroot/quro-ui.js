@@ -33,6 +33,7 @@ export function attach(root) {
     root.addEventListener('focusout', () => { selectOnMouseUp = false; });
 
     if (root.classList.contains('quro-ui-combo')) attachCombo(root);
+    if (root.classList.contains('quro-ui-date')) attachDate(root);
 
     root.dataset.quroAttached = '';
 }
@@ -176,5 +177,145 @@ function attachCombo(root) {
 
     root.addEventListener('focusout', e => {
         if (!root.contains(e.relatedTarget)) close(true);
+    });
+}
+
+// ── date picker (GS-U13) ──
+// The calendar is drawn here with Intl in the culture of data-quro-culture; moving between months never calls the
+// server. A picked day is written to the box as yyyy-MM-dd (month mode yyyy-MM) and sent with one change event; the
+// server shows it again in the culture's format.
+function attachDate(root) {
+    const pop = () => root.querySelector('.quro-ui-date-pop');
+    const isOpen = () => root.hasAttribute('data-quro-open');
+    const monthMode = () => root.dataset.quroMonth === 'true';
+    const culture = () => root.dataset.quroCulture || undefined;
+    let target = null;
+    let view = null;   // { year, month } with month 0-11
+
+    const pad = (n, width) => String(n).padStart(width, '0');
+    const iso = (y, m, d) => d === undefined ? `${pad(y, 4)}-${pad(m + 1, 2)}` : `${pad(y, 4)}-${pad(m + 1, 2)}-${pad(d, 2)}`;
+    const utc = (y, m, d) => new Date(Date.UTC(y, m, d));
+    const format = (date, options) => new Intl.DateTimeFormat(culture(), { ...options, timeZone: 'UTC' }).format(date);
+
+    function startOf(input) {
+        const text = input.dataset.iso
+            || [...root.querySelectorAll('input.quro-ui-input')].map(i => i.dataset.iso).find(Boolean);
+        const m = /^(\d{4})-(\d{2})/.exec(text ?? '');
+        const today = new Date();
+        return m ? { year: +m[1], month: +m[2] - 1 } : { year: today.getFullYear(), month: today.getMonth() };
+    }
+
+    function button(cls, text, data) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.tabIndex = -1;
+        b.className = cls;
+        b.textContent = text;
+        Object.assign(b.dataset, data);
+        return b;
+    }
+
+    function draw() {
+        const selected = target.dataset.iso ?? '';
+        const now = new Date();
+        const head = document.createElement('div');
+        head.className = 'quro-ui-cal-head';
+        const title = document.createElement('span');
+        title.className = 'quro-ui-cal-title';
+        title.textContent = monthMode()
+            ? format(utc(view.year, 0, 1), { year: 'numeric' })
+            : format(utc(view.year, view.month, 1), { year: 'numeric', month: 'long' });
+        head.append(button('quro-ui-cal-nav', '‹', { nav: '-1' }), title, button('quro-ui-cal-nav', '›', { nav: '1' }));
+        const grid = document.createElement('div');
+        grid.className = monthMode() ? 'quro-ui-cal-months' : 'quro-ui-cal-days';
+
+        if (monthMode()) {
+            for (let m = 0; m < 12; m++) {
+                const value = iso(view.year, m);
+                const b = button('quro-ui-cal-month', format(utc(view.year, m, 1), { month: 'short' }), { value });
+                if (value === selected) b.setAttribute('aria-selected', 'true');
+                if (value === iso(now.getFullYear(), now.getMonth())) b.dataset.today = '';
+                grid.append(b);
+            }
+        } else {
+            const first = +(root.dataset.quroFirstday || 0);
+            for (let i = 0; i < 7; i++) {
+                const dow = document.createElement('span');
+                dow.className = 'quro-ui-cal-dow';
+                dow.textContent = format(utc(2023, 0, 1 + (first + i) % 7), { weekday: 'short' });   // 2023-01-01 is a Sunday
+                grid.append(dow);
+            }
+            const lead = (utc(view.year, view.month, 1).getUTCDay() - first + 7) % 7;
+            for (let i = 0; i < 42; i++) {
+                const date = utc(view.year, view.month, 1 - lead + i);
+                const value = iso(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+                const b = button('quro-ui-cal-day', String(date.getUTCDate()), { value });
+                if (date.getUTCMonth() !== view.month) b.dataset.outside = '';
+                if (value === selected) b.setAttribute('aria-selected', 'true');
+                if (value === iso(now.getFullYear(), now.getMonth(), now.getDate())) b.dataset.today = '';
+                grid.append(b);
+            }
+        }
+        pop().replaceChildren(head, grid);
+    }
+
+    function open(input) {
+        if (root.dataset.quroReadonly === 'true' || input.disabled) return;
+        target = input;
+        view = startOf(input);
+        root.dataset.quroPart = input.dataset.part;
+        root.setAttribute('data-quro-open', '');
+        draw();
+    }
+
+    function close() {
+        if (!isOpen()) return;
+        root.removeAttribute('data-quro-open');
+        pop().replaceChildren();
+        target = null;
+    }
+
+    function pick(value) {
+        const input = target;
+        close();
+        input.value = value;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    // keep focus in the box while the calendar or the icon is clicked
+    root.addEventListener('mousedown', e => {
+        if (e.target.closest('.quro-ui-date-pop, .quro-ui-date-toggle')) e.preventDefault();
+    });
+
+    root.addEventListener('click', e => {
+        const nav = e.target.closest('[data-nav]');
+        if (nav) {
+            const d = monthMode() ? utc(view.year + +nav.dataset.nav, 0, 1) : utc(view.year, view.month + +nav.dataset.nav, 1);
+            view = { year: d.getUTCFullYear(), month: d.getUTCMonth() };
+            draw();
+            return;
+        }
+        const choice = e.target.closest('.quro-ui-date-pop [data-value]');
+        if (choice) {
+            pick(choice.dataset.value);
+            return;
+        }
+        const input = e.target.closest('input.quro-ui-input')
+            ?? (e.target.closest('.quro-ui-date-toggle') ? root.querySelector('input.quro-ui-input:last-of-type') : null);
+        if (!input) return;
+        input.focus();
+        if (isOpen() && target === input) close(); else open(input);
+    });
+
+    root.addEventListener('keydown', e => {
+        if (!(e.target instanceof HTMLInputElement)) return;
+        if (e.key === 'Escape' && isOpen()) close();
+        else if (e.key === 'ArrowDown' && e.altKey) open(e.target);
+        else return;
+        e.preventDefault();
+    });
+
+    root.addEventListener('focusout', e => {
+        if (!root.contains(e.relatedTarget) || e.relatedTarget !== target && e.relatedTarget instanceof HTMLInputElement) close();
     });
 }

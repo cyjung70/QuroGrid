@@ -35,6 +35,40 @@ public sealed class Customer
     }
 }
 
+/// <summary>Date record used by the date picker tests.</summary>
+public sealed class Period
+{
+    [Key]
+    public int Id { get; set; }
+
+    [Required]
+    public DateOnly? From { get; set; }
+
+    public DateOnly? To { get; set; }
+
+    public DateTime Due { get; set; }
+
+    public DateOnly Fixed { get; set; }
+
+    public string? CloseMonth { get; set; }
+
+    public string? ToMonth { get; set; }
+
+    public int Count { get; set; }
+
+    /// <summary>One row: 2026-10-05 ~ 2026-10-20, due 2026-11-01, month 2026-10 ~ 2026-12.</summary>
+    public static QuroDataSet<Period> One()
+    {
+        var ds = new QuroDataSet<Period>();
+        ds.Load([new Period
+        {
+            Id = 1, From = new(2026, 10, 5), To = new(2026, 10, 20), Due = new(2026, 11, 1), Fixed = new(2026, 1, 2),
+            CloseMonth = "2026-10", ToMonth = "2026-12",
+        }]);
+        return ds;
+    }
+}
+
 /// <summary>Code row used as a combo list.</summary>
 public sealed class CityCode
 {

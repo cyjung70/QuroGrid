@@ -1,0 +1,219 @@
+@using System.Globalization
+@using Bunit
+@using Quro.Grid.Data
+@using Quro.UI
+@using Quro.UI.Tests
+@inherits UiTestContext
+
+@code {
+    // GS-U10 ~ GS-U12: QuroDatePicker bound to data set columns (Control Spec 10, A-65)
+
+    private static readonly CultureInfo Ko = new("ko-KR");
+    private static readonly CultureInfo En = new("en-US");
+
+    private IRenderedComponent<QuroDatePicker<Period>> RenderDate(QuroDataSet<Period> ds, string field = "From",
+        string? toField = null, bool month = false, CultureInfo? culture = null, bool readOnly = false) =>
+        Render<QuroDatePicker<Period>>(@<QuroDatePicker TItem="Period" DataSet="ds" Field="@field" ToField="@toField"
+                                                        Month="month" Culture="culture ?? Ko" ReadOnly="readOnly" />);
+
+    private static AngleSharp.Dom.IElement Input(IRenderedComponent<QuroDatePicker<Period>> cut, string part = "from") =>
+        cut.Find($"input.quro-ui-input[data-part='{part}']");
+
+    private static AngleSharp.Dom.IElement Root(IRenderedComponent<QuroDatePicker<Period>> cut) => cut.Find(".quro-ui-date");
+
+    private static void Commit(IRenderedComponent<QuroDatePicker<Period>> cut, string text, string part = "from") =>
+        Input(cut, part).Change(text);
+
+    private static void ShowsText(IRenderedComponent<QuroDatePicker<Period>> cut, string expected, string part = "from") =>
+        cut.WaitForAssertion(() => Assert.Equal(expected, Input(cut, part).GetAttribute("value") ?? ""));
+
+    // ── GS-U10 date ──
+
+    /// <summary>GS-U10: shows the current row's date in the culture's short date; follows MoveTo and changes elsewhere</summary>
+    [Fact]
+    public void GS_U10_ShowsCultureShortDate_FollowsDataSet()
+    {
+        var ds = Period.One();
+
+        Assert.Equal("2026-10-05", Input(RenderDate(ds)).GetAttribute("value"));
+        var en = RenderDate(ds, culture: En);
+        Assert.Equal("10/5/2026", Input(en).GetAttribute("value"));
+        Assert.Equal("2026-10-05", Input(en).GetAttribute("data-iso"));
+        Assert.Equal("en-US", Root(en).GetAttribute("data-quro-culture"));
+        Assert.Equal("0", Root(en).GetAttribute("data-quro-firstday"));
+        Assert.Equal("11/1/2026", Input(RenderDate(ds, field: "Due", culture: En)).GetAttribute("value"));
+
+        en.InvokeAsync(() => ds.SetValue(1, "From", new DateOnly(2027, 3, 4)));
+        ShowsText(en, "3/4/2027");
+        en.InvokeAsync(() => ds.Load([new Period { Id = 2 }]));
+        ShowsText(en, "");
+    }
+
+    /// <summary>GS-U10: culture short date, ISO and 8 digits in the culture's order; one SetValue</summary>
+    [Theory]
+    [InlineData("ko-KR", "2026-12-24")]
+    [InlineData("ko-KR", "20261224")]
+    [InlineData("en-US", "12/24/2026")]
+    [InlineData("en-US", "12242026")]
+    [InlineData("en-US", "2026-12-24")]
+    public void GS_U10_Commit_AcceptedFormats(string culture, string text)
+    {
+        var ds = Period.One();
+        var changes = new List<DataSetValueChangedEventArgs>();
+        ds.ValueChanged += (_, e) => changes.Add(e);
+        var c = new CultureInfo(culture);
+        var date = RenderDate(ds, culture: c);
+
+        Commit(date, text);
+
+        var change = Assert.Single(changes);
+        Assert.Equal(new DateOnly(2026, 12, 24), change.NewValue);
+        ShowsText(date, new DateOnly(2026, 12, 24).ToString("d", c));
+    }
+
+    /// <summary>GS-U10: unreadable text goes back to the last value; the same date makes no call</summary>
+    [Fact]
+    public void GS_U10_Unreadable_Reverts_SameValueNoCall()
+    {
+        var ds = Period.One();
+        var changes = 0;
+        ds.ValueChanged += (_, _) => changes++;
+        var date = RenderDate(ds);
+
+        Commit(date, "2026-13-45");
+        ShowsText(date, "2026-10-05");
+        Commit(date, "20261005");
+        ShowsText(date, "2026-10-05");
+
+        Assert.Equal(0, changes);
+        Assert.Equal(new DateOnly(2026, 10, 5), ds.GetValue(1, "From"));
+    }
+
+    /// <summary>GS-U10: empty sets null on a nullable column, reverts on a non-nullable one; DateTime columns get midnight</summary>
+    [Fact]
+    public void GS_U10_Empty_And_DateTime()
+    {
+        var ds = Period.One();
+
+        Commit(RenderDate(ds), "");
+        Assert.Null(ds.GetValue(1, "From"));
+
+        var fixedDate = RenderDate(ds, field: "Fixed");
+        Commit(fixedDate, "");
+        ShowsText(fixedDate, "2026-01-02");
+        Assert.Equal(new DateOnly(2026, 1, 2), ds.GetValue(1, "Fixed"));
+
+        Commit(RenderDate(ds, field: "Due"), "2026-11-30");
+        Assert.Equal(new DateTime(2026, 11, 30), ds.GetValue(1, "Due"));
+    }
+
+    /// <summary>GS-U10: other column types are rejected</summary>
+    [Fact]
+    public void GS_U10_WrongColumnType_Throws()
+    {
+        Assert.Throws<ArgumentException>(() => RenderDate(Period.One(), field: "Count"));
+        Assert.Throws<ArgumentException>(() => RenderDate(Period.One(), field: "CloseMonth"));
+        Assert.Throws<ArgumentException>(() => RenderDate(Period.One(), field: "Nope"));
+    }
+
+    /// <summary>GS-U10: required and read-only like the text box; no current row → disabled; attach once</summary>
+    [Fact]
+    public void GS_U10_RequiredReadOnly_Disabled_AttachOnce()
+    {
+        var module = JSInterop.SetupModule(ModulePath);
+        var ds = Period.One();
+
+        var from = RenderDate(ds);
+        from.Render();
+        Assert.Contains("quro-ui-required", Root(from).ClassList);
+        Assert.Single(module.Invocations, i => i.Identifier == "attach");
+
+        var locked = RenderDate(ds, readOnly: true);
+        Assert.Contains("quro-ui-readonly", Root(locked).ClassList);
+        Assert.Equal("true", Root(locked).GetAttribute("data-quro-readonly"));
+        Assert.True(Input(locked).HasAttribute("readonly"));
+        Commit(locked, "2026-01-01");
+        Assert.Equal(new DateOnly(2026, 10, 5), ds.GetValue(1, "From"));
+
+        Assert.True(Input(RenderDate(new QuroDataSet<Period>())).HasAttribute("disabled"));
+    }
+
+    // ── GS-U11 month ──
+
+    /// <summary>GS-U11: month mode stores yyyy-MM and shows the short date without the day</summary>
+    [Fact]
+    public void GS_U11_Month_ShowsAndStores()
+    {
+        var ds = Period.One();
+        var ko = RenderDate(ds, field: "CloseMonth", month: true);
+        var en = RenderDate(ds, field: "CloseMonth", month: true, culture: En);
+
+        Assert.Equal("2026-10", Input(ko).GetAttribute("value"));
+        Assert.Equal("10/2026", Input(en).GetAttribute("value"));
+        Assert.Equal("2026-10", Input(en).GetAttribute("data-iso"));
+        Assert.Equal("true", Root(en).GetAttribute("data-quro-month"));
+
+        Commit(en, "3/2027");
+        Assert.Equal("2027-03", ds.GetValue(1, "CloseMonth"));
+        Commit(ko, "202811");
+        Assert.Equal("2028-11", ds.GetValue(1, "CloseMonth"));
+        Commit(en, "112029");
+        Assert.Equal("2029-11", ds.GetValue(1, "CloseMonth"));
+        Commit(en, "2030-01");
+        Assert.Equal("2030-01", ds.GetValue(1, "CloseMonth"));
+        Commit(en, "13/2030");
+        Assert.Equal("2030-01", ds.GetValue(1, "CloseMonth"));
+        ShowsText(en, "1/2030");
+    }
+
+    /// <summary>GS-U11: month mode needs a string column</summary>
+    [Fact]
+    public void GS_U11_Month_NonString_Throws()
+    {
+        Assert.Throws<ArgumentException>(() => RenderDate(Period.One(), field: "From", month: true));
+    }
+
+    // ── GS-U12 range ──
+
+    /// <summary>GS-U12: two inputs bound to Field and ToField</summary>
+    [Fact]
+    public void GS_U12_Range_TwoInputs()
+    {
+        var ds = Period.One();
+        var range = RenderDate(ds, toField: "To");
+
+        Assert.Equal("2026-10-20", Input(range, "to").GetAttribute("value"));
+        Commit(range, "2026-10-31", "to");
+
+        Assert.Equal(new DateOnly(2026, 10, 31), ds.GetValue(1, "To"));
+        Assert.Equal(new DateOnly(2026, 10, 5), ds.GetValue(1, "From"));
+    }
+
+    /// <summary>GS-U12: a change that puts the end before the start is refused and the box goes back</summary>
+    [Fact]
+    public void GS_U12_EndBeforeStart_Refused()
+    {
+        var ds = Period.One();
+        var range = RenderDate(ds, toField: "To");
+
+        Commit(range, "2026-10-21");
+        ShowsText(range, "2026-10-05");
+        Commit(range, "2026-10-04", "to");
+        ShowsText(range, "2026-10-20", "to");
+        Assert.False(ds.HasChanges);
+
+        Commit(range, "2026-10-20");   // same day is fine
+        Assert.Equal(new DateOnly(2026, 10, 20), ds.GetValue(1, "From"));
+
+        var months = RenderDate(ds, field: "CloseMonth", toField: "ToMonth", month: true);
+        Commit(months, "2027-01");
+        Assert.Equal("2026-10", ds.GetValue(1, "CloseMonth"));
+    }
+
+    /// <summary>GS-U12: ToField must be the same kind of column</summary>
+    [Fact]
+    public void GS_U12_ToFieldWrongType_Throws()
+    {
+        Assert.Throws<ArgumentException>(() => RenderDate(Period.One(), toField: "CloseMonth"));
+    }
+}
