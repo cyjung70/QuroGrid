@@ -4,6 +4,9 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 소비자(QuroERP)는 버전을 올리기 전에 이 파일을 읽는다.
 
 ## Unreleased
+
+## 0.5.0-alpha.2 — 2026-10-31
+QuroUI 마스크 박스 (A-69), 셀 선택 목록 키보드 (A-68). BREAKING 없음. 소비자 조치: 없음 (쓰려면 `QuroGridVersion`을 0.5.0-alpha.2로)
 - Added: `Quro.UI` `QuroMaskBox<TItem>` — 마스크 입력(`0` 숫자·`A` 글자·`*` 글자나 숫자·`\` 고정), 고정 문자를 뺀 입력 문자만 저장, 덜 채우면 마지막 값으로, 브라우저에서 고정 문자 넣기·맞지 않는 문자 버리기 (Control Spec 11, A-69, GS-U17~GS-U19). `QuroStaticText.Mask` (GS-U20). 소비자 조치: 없음
 - Added: 열린 셀 달력·Combo 목록의 키보드 — 화살표로 강조 이동(달력 ←→ 하루·↑↓ 한 주, 목록 ↑↓), Enter로 고르기. 강조 이동은 서버 호출 없음 (A-68, GS-091). 소비자 조치: 없음
 
