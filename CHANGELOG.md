@@ -4,6 +4,7 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 소비자(QuroERP)는 버전을 올리기 전에 이 파일을 읽는다.
 
 ## Unreleased
+- Added: `QuroDataSet.Columns`·`GetColumn`·`SetColumn`, `DataSetColumn` — 열 메타를 `T`의 특성에서 만들고 화면 정의로 보완 (A-52, GS-086~GS-088). Changed: 템플릿 없는 `AddRow`·`AddBlankRow`가 `[DefaultValue]`(또는 `SetColumn`의 `Default`) 값을 채운다. 소비자 조치: DTO에 `[DefaultValue]`가 있으면 새 행 초기값이 그 값이 되는지 확인
 
 ## 0.3.0-alpha.2 — 2026-10-30
 DataSet 현재 행·변경 알림 (A-51), 소비자 계약 2·3장 확정 (A-49, 문서만). BREAKING 없음. 소비자 조치: 코드 변경 없음 (A-49 항목의 파라미터 모양·lookup 파일 이름 확인)
