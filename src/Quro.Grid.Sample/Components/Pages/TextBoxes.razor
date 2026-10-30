@@ -1,0 +1,41 @@
+@page "/textbox"
+@rendermode InteractiveServer
+@implements IDisposable
+@using Quro.Grid.Data
+@using Quro.Grid.Sample.Data
+@using Quro.UI
+
+<PageTitle>@L["sample.textbox.title"]</PageTitle>
+
+<h1>@L["sample.textbox.title"]</h1>
+
+<MudThemeProvider />
+
+@* QuroUI text boxes bound to one data set (GS-U04). Box order matters for the Tab test: Zip, Name, Code, Pin *@
+<div class="sample-form">
+    <QuroTextBox TItem="SampleCustomer" DataSet="_customer" Field="Zip" CharType="QuroCharType.Digits" AutoSelect="true"
+                 PlaceholderKey="sample.textbox.zip" Localizer="L" />
+    <QuroTextBox TItem="SampleCustomer" DataSet="_customer" Field="Name" CharType="QuroCharType.Alpha" />
+    <QuroTextBox TItem="SampleCustomer" DataSet="_customer" Field="Code" CharType="QuroCharType.AlphaNumeric" />
+    <QuroTextBox TItem="SampleCustomer" DataSet="_customer" Field="Pin" Password="true" />
+</div>
+
+<p>
+    <span data-testid="state">@_customer.GetState(1)</span> ·
+    <span data-testid="zip-value">@_customer.GetValue(1, "Zip")</span>
+</p>
+
+@code {
+    private static readonly SampleLocalizer L = new();
+    private readonly QuroDataSet<SampleCustomer> _customer = new();
+
+    protected override void OnInitialized()
+    {
+        _customer.Load([new SampleCustomer { Id = 1, Zip = "04524", Name = "Kim", Code = "C01" }]);
+        _customer.ValueChanged += OnValueChanged;
+    }
+
+    private void OnValueChanged(object? sender, DataSetValueChangedEventArgs e) => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => _customer.ValueChanged -= OnValueChanged;
+}

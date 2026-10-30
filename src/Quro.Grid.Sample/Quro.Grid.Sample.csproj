@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Quro.Grid\Quro.Grid.csproj" />
+    <ProjectReference Include="..\Quro.UI\Quro.UI.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

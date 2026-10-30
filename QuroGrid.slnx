@@ -10,11 +10,13 @@
     <Project Path="src/Quro.Grid.Definition/Quro.Grid.Definition.csproj" />
     <Project Path="src/Quro.Grid.Sample/Quro.Grid.Sample.csproj" />
     <Project Path="src/Quro.Grid/Quro.Grid.csproj" />
+    <Project Path="src/Quro.UI/Quro.UI.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Quro.Grid.Data.Tests/Quro.Grid.Data.Tests.csproj" />
     <Project Path="tests/Quro.Grid.Definition.Tests/Quro.Grid.Definition.Tests.csproj" />
     <Project Path="tests/Quro.Grid.E2E/Quro.Grid.E2E.csproj" />
     <Project Path="tests/Quro.Grid.Tests/Quro.Grid.Tests.csproj" />
+    <Project Path="tests/Quro.UI.Tests/Quro.UI.Tests.csproj" />
   </Folder>
 </Solution>

@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Net;
 using System.Reflection;
@@ -20,6 +22,11 @@ public sealed class QuroDataSet<T> where T : class
             .Where(g => g.Count() == 1)   // ambiguous names (Qty and QTY) only match exactly
             .ToDictionary(g => g.Key, g => g.Single(), StringComparer.OrdinalIgnoreCase);
 
+    // Column metadata from T (A-52), in declaration order
+    private static readonly DataSetColumn[] ColumnsOfT =
+        Fields.Values.OrderBy(p => p.MetadataToken).Select(ColumnOf).ToArray();
+
+    private readonly DataSetColumn[] _columns = (DataSetColumn[])ColumnsOfT.Clone();
     private readonly List<Row> _rows = [];
     private readonly Dictionary<int, Row> _byKey = [];
     private readonly Dictionary<string, FieldRule> _rules = [];
@@ -182,6 +189,64 @@ public sealed class QuroDataSet<T> where T : class
     /// <summary>행의 값·상태·셀 표시가 바뀔 때마다 증가한다. 그리드가 바뀐 행만 다시 그리는 데 쓴다 (R4).</summary>
     public int GetRevision(int rowKey) => Find(rowKey).Revision;
 
+    // ── 열 메타 (A-52) ──
+
+    /// <summary>Column metadata in <c>T</c>'s declaration order. Built from <c>T</c>, changed by <see cref="SetColumn"/>.</summary>
+    public IReadOnlyList<DataSetColumn> Columns => _columns;
+
+    /// <summary>Metadata of one column. The field is matched like <see cref="SetValue"/> (exact name, then ignoring case).</summary>
+    public DataSetColumn GetColumn(string field) => _columns[ColumnIndex(Field(field))];
+
+    /// <summary>
+    /// 화면 정의로 열 메타를 보완한다 (이 DataSet에만). 이름은 속성 이름으로 바꿔 둔다.
+    /// 형식이 속성과 다르거나 기본값을 속성 형식으로 바꿀 수 없으면 <see cref="ArgumentException"/>.
+    /// </summary>
+    public void SetColumn(DataSetColumn column)
+    {
+        var prop = Field(column.Name);
+        if (column.Type != prop.PropertyType)
+            throw new ArgumentException($"열 '{prop.Name}'의 형식은 {prop.PropertyType.Name}입니다 ({column.Type.Name} 아님).", nameof(column));
+
+        _columns[ColumnIndex(prop)] = column with { Name = prop.Name, Default = ConvertDefault(column.Default, prop) };
+    }
+
+    private int ColumnIndex(PropertyInfo prop) => Array.FindIndex(_columns, c => c.Name == prop.Name);
+
+    private static DataSetColumn ColumnOf(PropertyInfo prop) => new(
+        prop.Name,
+        prop.PropertyType,
+        Key: prop.IsDefined(typeof(KeyAttribute)),
+        Required: prop.IsDefined(typeof(RequiredAttribute)),
+        Default: ConvertDefault(prop.GetCustomAttribute<DefaultValueAttribute>()?.Value, prop),
+        MaxLength: prop.GetCustomAttribute<MaxLengthAttribute>()?.Length ?? prop.GetCustomAttribute<StringLengthAttribute>()?.MaximumLength);
+
+    /// <summary>Default value as the property type (<c>[DefaultValue(1)]</c> on a decimal gives <c>1m</c>).</summary>
+    private static object? ConvertDefault(object? value, PropertyInfo prop)
+    {
+        var target = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
+        if (value is null || target.IsInstanceOfType(value))
+            return value;
+        try
+        {
+            return Convert.ChangeType(value, target, CultureInfo.InvariantCulture);
+        }
+        catch (Exception e) when (e is InvalidCastException or FormatException or OverflowException)
+        {
+            throw new ArgumentException($"열 '{prop.Name}'의 기본값 '{value}'을(를) {target.Name}(으)로 바꿀 수 없습니다.", nameof(value), e);
+        }
+    }
+
+    /// <summary>New row object for AddRow·AddBlankRow: a copy of the template, or T with the column defaults.</summary>
+    private T NewItem(T? template)
+    {
+        if (template is not null)
+            return Clone(template);
+        var item = Activator.CreateInstance<T>();
+        foreach (var column in _columns.Where(c => c.Default is not null))
+            Fields[column.Name].SetValue(item, column.Default);
+        return item;
+    }
+
     /// <summary>필드 검증 규칙 등록. 같은 필드에 다시 등록하면 교체한다.</summary>
     public void SetRule(string field, FieldRule rule) => _rules[Field(field).Name] = rule;
 
@@ -281,10 +346,13 @@ public sealed class QuroDataSet<T> where T : class
             ValueChanged?.Invoke(this, new DataSetValueChangedEventArgs(rowKey, prop.Name, old, value));
     }
 
-    /// <summary>행 추가. 상태는 Inserted. <paramref name="afterRowKey"/>가 있으면 그 행 바로 아래, 없으면 끝.</summary>
+    /// <summary>
+    /// 행 추가. 상태는 Inserted. <paramref name="afterRowKey"/>가 있으면 그 행 바로 아래, 없으면 끝.
+    /// 템플릿이 없으면 열 기본값(<see cref="DataSetColumn.Default"/>)을 채운다 (A-52).
+    /// </summary>
     public int AddRow(T? template = null, int? afterRowKey = null)
     {
-        var item = template is null ? Activator.CreateInstance<T>() : Clone(template);
+        var item = NewItem(template);
         var row = new Row(_nextInsertedKey--, item, RowState.Inserted, original: null);
         using var _ = Record();
         Touch(row);   // 목록에 넣기 전: 되돌리면 빠진다
@@ -303,13 +371,13 @@ public sealed class QuroDataSet<T> where T : class
 
     /// <summary>
     /// Adds a blank row at the end to type into (screen definition <c>initRows</c>). While its values are still the
-    /// ones it was added with (from <paramref name="template"/>), it is not a change: <see cref="Validate"/>,
+    /// ones it was added with (from <paramref name="template"/>, or the column defaults without one), it is not a change: <see cref="Validate"/>,
     /// <see cref="GetChanges"/> and <see cref="HasChanges"/> skip it and <see cref="AcceptChanges"/> keeps it as an
     /// added row. Not an undo step.
     /// </summary>
     public int AddBlankRow(T? template = null)
     {
-        var item = template is null ? Activator.CreateInstance<T>() : Clone(template);
+        var item = NewItem(template);
         var row = new Row(_nextInsertedKey--, item, RowState.Inserted, original: null) { Blank = Snapshot(item) };
         Append(row);
         RowAdded?.Invoke(this, new DataSetRowEventArgs(row.Key));
@@ -344,17 +412,22 @@ public sealed class QuroDataSet<T> where T : class
         Revert(row);
     }
 
-    /// <summary>필수·범위 검증. 저장 대상인 Inserted·Updated 행만 검사한다 (손대지 않은 빈 행 제외).</summary>
+    /// <summary>
+    /// 필수·범위 검증. 저장 대상인 Inserted·Updated 행만 검사한다 (손대지 않은 빈 행 제외).
+    /// 필수는 <see cref="SetRule"/> 규칙 또는 열 메타 <see cref="DataSetColumn.Required"/> (A-63).
+    /// </summary>
     public ValidationResult Validate()
     {
         var errors = new List<ValidationError>();
+        var required = _columns.Where(c => c.Required).Select(c => c.Name).ToHashSet();
+        var checks = _rules.Concat(required.Where(f => !_rules.ContainsKey(f)).Select(f => KeyValuePair.Create(f, new FieldRule()))).ToList();
 
         foreach (var row in _rows.Where(r => r.State is RowState.Inserted or RowState.Updated && !Untouched(r)))
-        foreach (var (field, rule) in _rules)
+        foreach (var (field, rule) in checks)
         {
             var value = Fields[field].GetValue(row.Item);
 
-            if (rule.Required && (value is null || value is string s && string.IsNullOrWhiteSpace(s)))
+            if ((rule.Required || required.Contains(field)) && (value is null || value is string s && string.IsNullOrWhiteSpace(s)))
                 errors.Add(new ValidationError(row.Key, field, ValidationKeys.Required));
 
             if (ToDecimal(value) is { } number)

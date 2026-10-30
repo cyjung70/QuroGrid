@@ -4,8 +4,15 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 소비자(QuroERP)는 버전을 올리기 전에 이 파일을 읽는다.
 
 ## Unreleased
+- Added: 새 패키지 `Quro.UI` — `QuroTextBox<TItem>`, `QuroCharType`, `quro-ui.js`·`quro-ui.css` (A-53·A-63, GS-U01~GS-U04). 소비자 조치: 쓰려면 `Quro.UI` 참조와 `<link href="_content/Quro.UI/quro-ui.css">` 추가
+- BREAKING (동작): `Validate`가 열 메타 `Required`도 검사한다 (A-63, GS-089). `T`의 `[Required]`, `SetColumn`, 정의 `req`로 필수가 된 필드가 비어 있는 추가·수정 행은 `quro.validation.required` 오류. `MaxLength`는 검사하지 않음. 소비자 조치: DTO의 `[Required]`가 화면 필수와 맞는지 확인 (저장 차단이 새로 생길 수 있음)
+- Changed: `<QuroGrid Definition>`이 `req: true` 열의 DataSet 열 메타 `Required`를 채운다 (A-52, GS-D22). `Validate` 결과는 그대로(규칙은 이미 `SetRule`로 들어감). 소비자 조치: 없음
+- Added: `QuroDataSet.Columns`·`GetColumn`·`SetColumn`, `DataSetColumn` — 열 메타를 `T`의 특성에서 만들고 화면 정의로 보완 (A-52, GS-086~GS-088). Changed: 템플릿 없는 `AddRow`·`AddBlankRow`가 `[DefaultValue]`(또는 `SetColumn`의 `Default`) 값을 채운다. 소비자 조치: DTO에 `[DefaultValue]`가 있으면 새 행 초기값이 그 값이 되는지 확인
 - Added: 그리드 활성 행 ↔ `QuroDataSet.CurrentRowKey` 양방향 연동 (A-62, GS-085). 앱이 `MoveTo`하면 그리드 활성 셀이 그 행으로 옮겨진다 (포커스는 그대로). 소비자 조치: 없음
 - Changed: 활성 행 알림을 `OnSelectionChanged` 구독과 관계없이 보낸다 (행이 멈춘 뒤 100ms에 1회, A-62). 같은 행 안의 이동·입력은 그대로 서버 호출 없음. 소비자 조치: 없음
+
+## 0.3.0-alpha.2 — 2026-10-30
+DataSet 현재 행·변경 알림 (A-51), 소비자 계약 2·3장 확정 (A-49, 문서만). BREAKING 없음. 소비자 조치: 코드 변경 없음 (A-49 항목의 파라미터 모양·lookup 파일 이름 확인)
 - Added: `QuroDataSet.CurrentRowKey`·`MoveTo`, 이벤트 `CurrentRowChanged`·`ValueChanged`·`RowAdded`·`RowDeleted`·`Loaded`·`Saved`, 인수 `CurrentRowChangedEventArgs`·`DataSetValueChangedEventArgs`·`DataSetRowEventArgs`·`DataSetSavedEventArgs` — 여러 컨트롤이 한 DataSet의 현재 행을 함께 쓰고 변경을 받는다 (A-51, GS-082~GS-084). 기존 동작은 그대로. 소비자 조치: 없음
 - Changed (문서만): 소비자 계약 2·3장 확정 (A-49). `AddQuroGrid`·`IQuroCodeListSource`·`IQuroQueryResolver`는 만들지 않는다 — 앱은 `OptionsFor`·`LookupFor`·`ItemsProvider`·`Localizer` 파라미터로 넘긴다. 코드도움 정의 파일 이름은 `{id}.lookup.toon` 필수. 코드 변경 없음. 소비자 조치: 공통코드·코드도움 서비스를 파라미터 모양에 맞추고, lookup 파일을 `<id>.lookup.toon`으로
 

@@ -1,0 +1,53 @@
+@inherits GridTestContext
+@using Quro.Grid.Definition
+
+@code {
+    // GS-D22: <QuroGrid Definition> supplements the data set column metadata (A-52)
+
+    private IRenderedComponent<QuroGrid<SoLine>> RenderGrid(QuroDataSet<SoLine> ds, GridDef def) =>
+        Render<QuroGrid<SoLine>>(@<QuroGrid DataSet="ds" Definition="def" Localizer="new FakeLocalizer()" />);
+
+    /// <summary>GS-D22: req columns become Required; req false keeps what T or the app set</summary>
+    [Fact]
+    public void GS_D22_ReqSetsColumnRequired()
+    {
+        var ds = GoldenScreen.OneLine();
+        ds.SetColumn(ds.GetColumn(nameof(SoLine.ItemName)) with { Required = true });
+
+        RenderGrid(ds, GoldenScreen.Lines());
+
+        Assert.True(ds.GetColumn(nameof(SoLine.ItemCd)).Required);
+        Assert.True(ds.GetColumn(nameof(SoLine.Qty)).Required);
+        Assert.True(ds.GetColumn(nameof(SoLine.UnitPrice)).Required);
+        Assert.True(ds.GetColumn(nameof(SoLine.ItemName)).Required);   // req false does not clear it
+        Assert.False(ds.GetColumn(nameof(SoLine.Amount)).Required);
+        Assert.Null(ds.GetColumn(nameof(SoLine.Qty)).Scale);             // fmt is display only (T-13)
+    }
+
+    /// <summary>GS-D22: hidden columns are included</summary>
+    [Fact]
+    public void GS_D22_HiddenColumnIncluded()
+    {
+        var ds = GoldenScreen.OneLine();
+        var def = GoldenScreen.Lines("invNo,sd.so.line.invNo,text,110,false,false,\"\",\"\",false,false",
+                                     "invNo,sd.so.line.invNo,text,110,true,true,\"\",\"\",false,true");
+
+        RenderGrid(ds, def);
+
+        Assert.True(ds.GetColumn(nameof(SoLine.InvNo)).Required);
+    }
+
+    /// <summary>GS-D22: applied once per definition; a later app change is kept on re-render</summary>
+    [Fact]
+    public void GS_D22_AppliedOncePerDefinition()
+    {
+        var ds = GoldenScreen.OneLine();
+        var def = GoldenScreen.Lines();
+        var cut = RenderGrid(ds, def);
+
+        ds.SetColumn(ds.GetColumn(nameof(SoLine.Qty)) with { Required = false });
+        cut.Render();
+
+        Assert.False(ds.GetColumn(nameof(SoLine.Qty)).Required);
+    }
+}

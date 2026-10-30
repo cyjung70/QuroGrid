@@ -1,0 +1,170 @@
+@inherits UiTestContext
+
+@code {
+    // GS-U01 ~ GS-U03: QuroTextBox bound to a data set column (Control Spec 8, A-53·A-63)
+
+    private IRenderedComponent<QuroTextBox<Customer>> RenderBox(QuroDataSet<Customer> ds, string field = "Zip",
+        QuroCharType chars = QuroCharType.Any, int? maxLength = null, bool password = false, bool autoSelect = false,
+        bool readOnly = false, string? placeholderKey = null, IStringLocalizer? localizer = null) =>
+        Render<QuroTextBox<Customer>>(@<QuroTextBox TItem="Customer" DataSet="ds" Field="@field" CharType="chars"
+                                                    MaxLength="maxLength" Password="password" AutoSelect="autoSelect"
+                                                    ReadOnly="readOnly" PlaceholderKey="@placeholderKey" Localizer="localizer" />);
+
+    private static AngleSharp.Dom.IElement Input(IRenderedComponent<QuroTextBox<Customer>> cut) => cut.Find("input");
+
+    private static AngleSharp.Dom.IElement Root(IRenderedComponent<QuroTextBox<Customer>> cut) => cut.Find(".quro-ui-textbox");
+
+    // ── GS-U01 binding ──
+
+    /// <summary>GS-U01: shows the current row's value and follows MoveTo, Load and changes made elsewhere</summary>
+    [Fact]
+    public void GS_U01_ShowsCurrentRow_FollowsDataSet()
+    {
+        var ds = Customer.Two();
+        var cut = RenderBox(ds);
+        Assert.Equal("04524", Input(cut).GetAttribute("value"));
+
+        cut.InvokeAsync(() => ds.MoveTo(2));
+        cut.WaitForAssertion(() => Assert.True(string.IsNullOrEmpty(Input(cut).GetAttribute("value"))));
+
+        cut.InvokeAsync(() => ds.SetValue(2, "Zip", "10001"));
+        cut.WaitForAssertion(() => Assert.Equal("10001", Input(cut).GetAttribute("value")));
+
+        cut.InvokeAsync(() => ds.RevertRow(2));
+        cut.WaitForAssertion(() => Assert.True(string.IsNullOrEmpty(Input(cut).GetAttribute("value"))));
+
+        cut.InvokeAsync(() => ds.Load([new Customer { Id = 9, Name = "Park", Zip = "90210" }]));
+        cut.WaitForAssertion(() => Assert.Equal("90210", Input(cut).GetAttribute("value")));
+    }
+
+    /// <summary>GS-U01: a committed input sets the value once and marks the row Updated</summary>
+    [Fact]
+    public void GS_U01_Commit_SetsValueOnce()
+    {
+        var ds = Customer.Two();
+        var changes = new List<DataSetValueChangedEventArgs>();
+        ds.ValueChanged += (_, e) => changes.Add(e);
+        var cut = RenderBox(ds);
+
+        Input(cut).Change("06236");
+
+        var change = Assert.Single(changes);
+        Assert.Equal((1, "Zip", "04524", "06236"), (change.RowKey, change.Field, (string?)change.OldValue, (string?)change.NewValue));
+        Assert.Equal(RowState.Updated, ds.GetState(1));
+        Assert.Equal("06236", Input(cut).GetAttribute("value"));
+    }
+
+    /// <summary>GS-U01: no current row → empty and disabled</summary>
+    [Fact]
+    public void GS_U01_NoCurrentRow_Disabled()
+    {
+        var cut = RenderBox(new QuroDataSet<Customer>());
+
+        Assert.True(Input(cut).HasAttribute("disabled"));
+        Assert.True(string.IsNullOrEmpty(Input(cut).GetAttribute("value")));
+    }
+
+    /// <summary>GS-U01: unknown field and non-string column are rejected</summary>
+    [Fact]
+    public void GS_U01_UnknownOrNonStringField_Throws()
+    {
+        Assert.Throws<ArgumentException>(() => RenderBox(Customer.Two(), field: "Nope"));
+        Assert.Throws<ArgumentException>(() => RenderBox(Customer.Two(), field: "Credit"));
+    }
+
+    /// <summary>GS-U01: disposing the box unsubscribes from the data set</summary>
+    [Fact]
+    public async Task GS_U01_Dispose_Unsubscribes()
+    {
+        var ds = Customer.Two();
+        var cut = RenderBox(ds);
+        var renders = 0;
+        cut.OnAfterRender += (_, _) => renders++;
+
+        await DisposeComponentsAsync();
+        ds.SetValue(1, "Zip", "11111");
+        ds.MoveTo(2);
+
+        Assert.Equal(0, renders);
+    }
+
+    // ── GS-U02 required / read-only ──
+
+    /// <summary>GS-U02: column Required → required background; ReadOnly → readonly, grey, no required mark</summary>
+    [Fact]
+    public void GS_U02_RequiredAndReadOnly()
+    {
+        var ds = Customer.Two();
+
+        var name = RenderBox(ds, field: "Name");
+        Assert.Contains("quro-ui-required", Root(name).ClassList);
+        Assert.False(Input(name).HasAttribute("readonly"));
+
+        var zip = RenderBox(ds);
+        Assert.DoesNotContain("quro-ui-required", Root(zip).ClassList);
+
+        var locked = RenderBox(ds, field: "Name", readOnly: true);
+        Assert.Contains("quro-ui-readonly", Root(locked).ClassList);
+        Assert.DoesNotContain("quro-ui-required", Root(locked).ClassList);
+        Assert.True(Input(locked).HasAttribute("readonly"));
+    }
+
+    /// <summary>GS-U02: SetColumn Required shows on a box rendered afterwards; a Deleted current row is read-only</summary>
+    [Fact]
+    public void GS_U02_SetColumnRequired_DeletedRowReadOnly()
+    {
+        var ds = Customer.Two();
+        ds.SetColumn(ds.GetColumn("Zip") with { Required = true });
+        var cut = RenderBox(ds);
+        Assert.Contains("quro-ui-required", Root(cut).ClassList);
+
+        cut.InvokeAsync(() => ds.DeleteRow(1));
+
+        cut.WaitForAssertion(() => Assert.True(Input(cut).HasAttribute("readonly")));
+        Assert.Contains("quro-ui-readonly", Root(cut).ClassList);
+        Input(cut).Change("99999");
+        Assert.Equal("04524", ds.GetValue(1, "Zip"));
+    }
+
+    // ── GS-U03 input attributes ──
+
+    /// <summary>GS-U03: maxlength from the parameter, else the column metadata</summary>
+    [Fact]
+    public void GS_U03_MaxLength()
+    {
+        var ds = Customer.Two();
+
+        Assert.Equal("40", Input(RenderBox(ds, field: "Name")).GetAttribute("maxlength"));
+        Assert.Equal("10", Input(RenderBox(ds, field: "Name", maxLength: 10)).GetAttribute("maxlength"));
+    }
+
+    /// <summary>GS-U03: password type, localized placeholder (key without a localizer)</summary>
+    [Fact]
+    public void GS_U03_PasswordAndPlaceholder()
+    {
+        var ds = Customer.Two();
+
+        Assert.Equal("password", Input(RenderBox(ds, password: true)).GetAttribute("type"));
+        Assert.Equal("Postal code", Input(RenderBox(ds, placeholderKey: "cust.zip.hint", localizer: new FakeLocalizer())).GetAttribute("placeholder"));
+        Assert.Equal("cust.zip.hint", Input(RenderBox(ds, placeholderKey: "cust.zip.hint")).GetAttribute("placeholder"));
+    }
+
+    /// <summary>GS-U03: CharType and AutoSelect go to the browser as attributes; quro-ui.js attach once</summary>
+    [Fact]
+    public void GS_U03_BrowserOptions_AttachOnce()
+    {
+        var module = JSInterop.SetupModule(ModulePath);
+        var ds = Customer.Two();
+
+        var cut = RenderBox(ds, chars: QuroCharType.Digits, autoSelect: true);
+        cut.Render();
+
+        Assert.Equal("digits", Root(cut).GetAttribute("data-quro-chars"));
+        Assert.Equal("true", Root(cut).GetAttribute("data-quro-autoselect"));
+        Assert.Single(module.Invocations, i => i.Identifier == "attach");
+
+        var plain = RenderBox(ds);
+        Assert.False(Root(plain).HasAttribute("data-quro-chars"));
+        Assert.False(Root(plain).HasAttribute("data-quro-autoselect"));
+    }
+}

@@ -397,3 +397,14 @@ D-1 → D-2 → D-3 → D-4 → D-5 → D-6. 시나리오는 `GS-D.md`, 설계�
 | GS-085 | 그리드 활성 행 ↔ DataSet 현재 행 | 그리드에서 다른 행으로 옮기면 `CurrentRowKey`가 그 행 (구독과 관계없이). 앱이 `MoveTo`하면 그리드 활성 셀이 그 행(같은 열)으로, 포커스·`OnSelectionChanged` 없음. 화면에 없는 행이면 그대로 | bUnit + E2E | A-51, A-62 |
 
 착수: GS-082~GS-084 (DataSet) — **완료** → GS-085 (그리드) — **완료** (A-62: 활성 행 알림은 항상 보냄). 샘플 툴바 [마지막 행으로]·상태 "현재 행 (DataSet)"
+
+### 6-2 DataSet 열 메타 (A-52)
+
+| ID | 시나리오 | 기대 결과 | 계층 | 근거 |
+|---|---|---|---|---|
+| GS-086 | `T`에서 열 메타 만들기 | `Columns`는 `T`의 읽기·쓰기 공개 속성을 선언 순서로. `Name`·`Type`(속성 형식 그대로, nullable 포함), `[Key]` → `Key`, `[Required]` → `Required`, `[MaxLength]`·`[StringLength]` → `MaxLength`, `[DefaultValue]` → `Default`(속성 형식으로 변환). 특성이 없으면 `false`·null. `Scale`은 `T`에서 정하지 않음(null) | xUnit | A-52 |
+| GS-087 | 화면 정의로 보완 | `GetColumn(field)`·`SetColumn(column)`. 필드 이름은 `SetValue`와 같은 규칙(정확히 → 대소문자 무시, A-46)으로 찾고 저장 이름은 속성 이름. 없는 필드·형식이 다름·기본값을 속성 형식으로 바꿀 수 없음 → `ArgumentException`. 한 DataSet에만 적용(같은 `T`의 다른 DataSet은 그대로). `Load`해도 유지 | xUnit | A-52 |
+| GS-088 | `AddRow` 때 기본값 | 템플릿 없이 `AddRow`·`AddBlankRow`하면 `Default`가 있는 열을 채운다. 템플릿이 있으면 템플릿 값 그대로. 기본값만 채운 빈 행은 손대지 않은 행(`HasChanges` false). `Undo`하면 행이 빠진다 | xUnit | A-52 |
+| GS-089 | 열 `Required` 검증 | 열 메타 `Required`인 필드가 빈 행(Inserted·Updated, 손대지 않은 빈 행 제외)에 `Validate` → `quro.validation.required` 오류. 같은 필드에 `SetRule`(Required 포함)이 있어도 오류는 1건. `Required` 아닌 열·`Normal` 행은 검사 안 함. `MaxLength`는 검사하지 않음(입력 제한은 컨트롤이 브라우저에서) | xUnit | A-52, A-63 |
+
+GS-086~GS-088 — **완료**. GS-089 (A-63, 2026-10-30 스테이블영 결정 2(a)): `Validate`는 `SetRule` 규칙과 열 `Required`를 함께 본다.
