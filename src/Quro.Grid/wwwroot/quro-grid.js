@@ -122,6 +122,8 @@ function onKeyDown(s, e) {
         }
         return;
     }
+    // 열린 선택 목록 (GS-091, A-68): 화살표는 강조 이동(브라우저만, R2), Enter는 강조 항목을 고른다(서버 1회)
+    if (s.editing && pickerKey(s, e)) return;
     // Undo / Redo (GS-076, A-33): 편집 중이 아니면 서버 1회. 편집 중에는 입력란의 기본 Undo
     if (!s.editing && isUndoKey(e)) {
         e.preventDefault();
@@ -785,12 +787,62 @@ async function openPicker(s) {
     await waitFor(() => s.root.querySelector('.quro-picker'));
     const calendar = s.root.querySelector('.quro-picker .quro-calendar');
     if (calendar) {
-        const m = /^(\d{4})-(\d{2})/.exec(calendar.dataset.iso ?? '');
-        const today = new Date();
-        s.calendar = m ? { year: +m[1], month: +m[2] - 1 } : { year: today.getFullYear(), month: today.getMonth() };
+        // 강조는 현재 값(없으면 오늘)에서 시작한다
+        const now = new Date();
+        const start = /^\d{4}-\d{2}-\d{2}$/.test(calendar.dataset.iso ?? '')
+            ? calendar.dataset.iso
+            : isoDate(new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())));
+        s.calendar = { year: +start.slice(0, 4), month: +start.slice(5, 7) - 1, active: start };
         drawCalendar(s, calendar);
     }
+    const options = s.root.querySelectorAll('.quro-picker .quro-options [data-index]');
+    if (options.length) {
+        const selected = [...options].findIndex(o => o.getAttribute('aria-selected') === 'true');
+        s.option = Math.max(0, selected);
+        markOption(s);
+    }
     placePicker(s);
+}
+
+const isoDate = d => `${String(d.getUTCFullYear()).padStart(4, '0')}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+
+/** 열린 선택 목록의 키 (GS-091). 처리했으면 true. Alt·Ctrl·Shift 조합과 그 밖의 키(글자 등)는 에디터가 받는다 */
+function pickerKey(s, e) {
+    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return false;
+    const calendar = s.root.querySelector('.quro-picker .quro-calendar');
+    const options = s.root.querySelectorAll('.quro-picker .quro-options [data-index]');
+    if (calendar && s.calendar) {
+        const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[e.key];
+        if (step) {
+            const [y, m, d] = s.calendar.active.split('-').map(Number);
+            const next = new Date(Date.UTC(y, m - 1, d + step));
+            s.calendar = { year: next.getUTCFullYear(), month: next.getUTCMonth(), active: isoDate(next) };
+            drawCalendar(s, calendar);
+        } else if (e.key === 'Enter') {
+            const value = s.calendar.active;
+            enqueue(s, () => s.dotnet.invokeMethodAsync('PickDate', value));
+        } else return false;
+    } else if (options.length && s.option !== undefined) {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            s.option = Math.min(options.length - 1, Math.max(0, s.option + (e.key === 'ArrowDown' ? 1 : -1)));
+            markOption(s);
+        } else if (e.key === 'Enter') {
+            const index = s.option;
+            enqueue(s, () => s.dotnet.invokeMethodAsync('PickOption', index));
+        } else return false;
+    } else return false;
+    e.preventDefault();
+    return true;
+}
+
+/** Combo 목록의 강조 항목 표시 (data-active) */
+function markOption(s) {
+    s.root.querySelectorAll('.quro-picker .quro-options [data-index]').forEach(o => {
+        if (+o.dataset.index === s.option) {
+            o.setAttribute('data-active', '');
+            o.scrollIntoView({ block: 'nearest' });
+        } else o.removeAttribute('data-active');
+    });
 }
 
 /**
@@ -801,7 +853,7 @@ function pickerAction(s, target) {
     const nav = target.closest('.quro-calendar [data-nav]');
     if (nav) {
         const d = new Date(Date.UTC(s.calendar.year, s.calendar.month + +nav.dataset.nav, 1));
-        s.calendar = { year: d.getUTCFullYear(), month: d.getUTCMonth() };
+        s.calendar = { ...s.calendar, year: d.getUTCFullYear(), month: d.getUTCMonth() };
         drawCalendar(s, nav.closest('.quro-calendar'));
         placePicker(s);
         return;
@@ -855,6 +907,7 @@ function drawCalendar(s, calendar) {
         if (date.getUTCMonth() !== month) b.dataset.outside = '';
         if (value === calendar.dataset.iso) b.setAttribute('aria-selected', 'true');
         if (value === today) b.dataset.today = '';
+        if (value === s.calendar.active) b.dataset.active = '';
         days.append(b);
     }
     calendar.replaceChildren(head, days);

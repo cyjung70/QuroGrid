@@ -4,6 +4,7 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 소비자(QuroERP)는 버전을 올리기 전에 이 파일을 읽는다.
 
 ## Unreleased
+- Added: 열린 셀 달력·Combo 목록의 키보드 — 화살표로 강조 이동(달력 ←→ 하루·↑↓ 한 주, 목록 ↑↓), Enter로 고르기. 강조 이동은 서버 호출 없음 (A-68, GS-091). 소비자 조치: 없음
 
 ## 0.5.0-alpha.1 — 2026-10-31
 MudBlazor 제거 (A-67). **BREAKING (의존성)**. 소비자 조치: MudBlazor를 쓰면 앱에 `MudBlazor` 패키지 참조 추가, 다크 모드는 `--quro-*` 토큰으로
