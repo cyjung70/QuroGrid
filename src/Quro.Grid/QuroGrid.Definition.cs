@@ -62,6 +62,7 @@ public partial class QuroGrid<TItem>
         _definitionRules = RulesOf(def);
         foreach (var (field, rule) in _definitionRules)
             DataSet.SetRule(field, rule);   // hidden columns included
+        SupplementColumns(def);
         if (first && def.InitRows > 0 && DataSet.RowKeys.Count == 0)
             _pendingInitRows = def.InitRows;
     }
@@ -105,6 +106,16 @@ public partial class QuroGrid<TItem>
     private Func<string, Task<IReadOnlyList<string>>>? DefinitionLookup(ColumnDef c) => _definitionLookups.GetValueOrDefault(c.Id);
 
     private IReadOnlyList<ComboOption>? DefinitionOptions(ColumnDef c) => _definitionOptions.GetValueOrDefault(c.Id);
+
+    /// <summary>
+    /// Data set column metadata from the definition (A-52): <c>req</c> → Required, hidden columns included. <c>req</c>
+    /// false keeps what T or the app set. TOON v0.2 has no max length, default or scale (<c>fmt</c> is display only, T-13).
+    /// </summary>
+    private void SupplementColumns(GridDef def)
+    {
+        foreach (var col in def.Columns.Where(c => c.Type != ColumnType.Button && c.Req))
+            DataSet.SetColumn(DataSet.GetColumn(col.Id) with { Required = true });
+    }
 
     /// <summary>Column type (design 7.1): text with lookup → Popup, money with currency → Currency, select → Combo.</summary>
     private static CellType DefinitionType(ColumnDef c) => c.Type switch

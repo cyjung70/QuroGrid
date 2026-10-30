@@ -4,6 +4,7 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 소비자(QuroERP)는 버전을 올리기 전에 이 파일을 읽는다.
 
 ## Unreleased
+- Changed: `<QuroGrid Definition>`이 `req: true` 열의 DataSet 열 메타 `Required`를 채운다 (A-52, GS-D22). `Validate` 결과는 그대로(규칙은 이미 `SetRule`로 들어감). 소비자 조치: 없음
 - Added: `QuroDataSet.Columns`·`GetColumn`·`SetColumn`, `DataSetColumn` — 열 메타를 `T`의 특성에서 만들고 화면 정의로 보완 (A-52, GS-086~GS-088). Changed: 템플릿 없는 `AddRow`·`AddBlankRow`가 `[DefaultValue]`(또는 `SetColumn`의 `Default`) 값을 채운다. 소비자 조치: DTO에 `[DefaultValue]`가 있으면 새 행 초기값이 그 값이 되는지 확인
 - Added: `QuroDataSet.CurrentRowKey`·`MoveTo`, 이벤트 `CurrentRowChanged`·`ValueChanged`·`RowAdded`·`RowDeleted`·`Loaded`·`Saved`, 인수 `CurrentRowChangedEventArgs`·`DataSetValueChangedEventArgs`·`DataSetRowEventArgs`·`DataSetSavedEventArgs` — 여러 컨트롤이 한 DataSet의 현재 행을 함께 쓰고 변경을 받는다 (A-51, GS-082~GS-084). 기존 동작은 그대로. 소비자 조치: 없음
 - Changed (문서만): 소비자 계약 2·3장 확정 (A-49). `AddQuroGrid`·`IQuroCodeListSource`·`IQuroQueryResolver`는 만들지 않는다 — 앱은 `OptionsFor`·`LookupFor`·`ItemsProvider`·`Localizer` 파라미터로 넘긴다. 코드도움 정의 파일 이름은 `{id}.lookup.toon` 필수. 코드 변경 없음. 소비자 조치: 공통코드·코드도움 서비스를 파라미터 모양에 맞추고, lookup 파일을 `<id>.lookup.toon`으로
