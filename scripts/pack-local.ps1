@@ -35,4 +35,4 @@ foreach ($p in $projects) {
 }
 
 Write-Host "Packed to $Feed :"
-Get-ChildItem $Feed -Filter "Quro.Grid*.$Version.nupkg" | ForEach-Object { Write-Host "  $($_.Name)" }
+Get-ChildItem $Feed -Filter "Quro.*.$Version.nupkg" | ForEach-Object { Write-Host "  $($_.Name)" }
