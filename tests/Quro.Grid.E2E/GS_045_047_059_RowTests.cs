@@ -95,15 +95,15 @@ public class GS_045_047_059_RowTests(SampleServer server) : GridPageTest(server)
         await Cell(1, "ItemCode").ClickAsync();
         await Expect(Status("selected-row")).ToHaveTextAsync("1");
         await Page.WaitForTimeoutAsync(300);
-        var baseline = InvokeFrames;
+        var baseline = RowNotifyFrames;
 
         await Page.Keyboard.PressAsync("ArrowRight");
         await Page.WaitForTimeoutAsync(300);
-        Assert.Equal(0, InvokeFrames - baseline);
+        Assert.Equal(0, RowNotifyFrames - baseline);
 
         await Page.Keyboard.PressAsync("ArrowDown");
         await Expect(Status("selected-row")).ToHaveTextAsync("2");
-        Assert.Equal(1, InvokeFrames - baseline);
+        Assert.Equal(1, RowNotifyFrames - baseline);
     }
 
     /// <summary>GS-059: 빠르게 여러 행을 지나가면 멈춘 행만 보낸다</summary>
@@ -114,14 +114,14 @@ public class GS_045_047_059_RowTests(SampleServer server) : GridPageTest(server)
         await Cell(1, "ItemCode").ClickAsync();
         await Expect(Status("selected-row")).ToHaveTextAsync("1");
         await Page.WaitForTimeoutAsync(300);
-        var baseline = InvokeFrames;
+        var baseline = RowNotifyFrames;
 
         await Page.Keyboard.PressAsync("ArrowDown");
         await Page.Keyboard.PressAsync("ArrowDown");
 
         await Expect(Status("selected-row")).ToHaveTextAsync("3");
         await Page.WaitForTimeoutAsync(300);
-        Assert.Equal(1, InvokeFrames - baseline);
+        Assert.Equal(1, RowNotifyFrames - baseline);
     }
 
     /// <summary>행 수가 기대값이 될 때까지 기다린 뒤 행 키 목록</summary>

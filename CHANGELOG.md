@@ -4,6 +4,8 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 소비자(QuroERP)는 버전을 올리기 전에 이 파일을 읽는다.
 
 ## Unreleased
+- Added: 그리드 활성 행 ↔ `QuroDataSet.CurrentRowKey` 양방향 연동 (A-62, GS-085). 앱이 `MoveTo`하면 그리드 활성 셀이 그 행으로 옮겨진다 (포커스는 그대로). 소비자 조치: 없음
+- Changed: 활성 행 알림을 `OnSelectionChanged` 구독과 관계없이 보낸다 (행이 멈춘 뒤 100ms에 1회, A-62). 같은 행 안의 이동·입력은 그대로 서버 호출 없음. 소비자 조치: 없음
 - Added: `QuroDataSet.CurrentRowKey`·`MoveTo`, 이벤트 `CurrentRowChanged`·`ValueChanged`·`RowAdded`·`RowDeleted`·`Loaded`·`Saved`, 인수 `CurrentRowChangedEventArgs`·`DataSetValueChangedEventArgs`·`DataSetRowEventArgs`·`DataSetSavedEventArgs` — 여러 컨트롤이 한 DataSet의 현재 행을 함께 쓰고 변경을 받는다 (A-51, GS-082~GS-084). 기존 동작은 그대로. 소비자 조치: 없음
 - Changed (문서만): 소비자 계약 2·3장 확정 (A-49). `AddQuroGrid`·`IQuroCodeListSource`·`IQuroQueryResolver`는 만들지 않는다 — 앱은 `OptionsFor`·`LookupFor`·`ItemsProvider`·`Localizer` 파라미터로 넘긴다. 코드도움 정의 파일 이름은 `{id}.lookup.toon` 필수. 코드 변경 없음. 소비자 조치: 공통코드·코드도움 서비스를 파라미터 모양에 맞추고, lookup 파일을 `<id>.lookup.toon`으로
 

@@ -1,0 +1,123 @@
+@inherits GridTestContext
+
+@code {
+    // GS-085: 그리드 활성 행 ↔ DataSet 현재 행 (Addendum A-51)
+
+    private static BunitJSModuleInterop Module(BunitJSInterop js)
+    {
+        var module = js.SetupModule(ModulePath);
+        module.SetupVoid("init", _ => true);
+        module.SetupVoid("activateRow", _ => true);
+        return module;
+    }
+
+    /// <summary>GS-085: 그리드에서 다른 행으로 옮기면 DataSet 현재 행이 그 행 (구독 없어도)</summary>
+    [Fact]
+    public async Task GS_085_GridRowChange_MovesDataSetCurrentRow()
+    {
+        var ds = TestData.ThreeLines();
+        var moves = new List<int?>();
+        ds.CurrentRowChanged += (_, e) => moves.Add(e.NewRowKey);
+        var cut = Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds"><QuroColumn Field="ItemCode" HeaderKey="mm.item.code" /></QuroGrid>);
+
+        await cut.InvokeAsync(() => cut.Instance.SelectionChanged(ds.RowKeys[2]));
+
+        Assert.Equal(ds.RowKeys[2], ds.CurrentRowKey);
+        Assert.Equal([ds.RowKeys[2]], moves);
+    }
+
+    /// <summary>GS-085: 현재 행 동기화 때문에 JS는 구독과 관계없이 활성 행 변경을 보낸다 (A-13의 100ms 묶음은 그대로)</summary>
+    [Fact]
+    public void GS_085_NotifySelection_AlwaysOn()
+    {
+        var module = Module(JSInterop);
+        var ds = TestData.ThreeLines();
+
+        Render(@<QuroGrid DataSet="ds"><QuroColumn Field="Qty" HeaderKey="mm.qty" /></QuroGrid>);
+
+        var options = Assert.IsType<GridJsOptions>(Assert.Single(module.Invocations["init"]).Arguments[2]);
+        Assert.True(options.NotifySelection);
+    }
+
+    /// <summary>GS-085: 앱이 MoveTo하면 그리드가 활성 셀을 그 행으로 (화면 순번 포함). 앱의 OnSelectionChanged는 내지 않는다</summary>
+    [Fact]
+    public async Task GS_085_AppMoveTo_ActivatesRowInGrid()
+    {
+        var module = Module(JSInterop);
+        var ds = TestData.ThreeLines();
+        var selections = 0;
+        var cut = Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" OnSelectionChanged="(SelectionChangedArgs<PoLine> _) => selections++">
+                                               <QuroColumn Field="ItemCode" HeaderKey="mm.item.code" />
+                                           </QuroGrid>);
+
+        await cut.InvokeAsync(() => ds.MoveTo(ds.RowKeys[2]));
+
+        cut.WaitForAssertion(() =>
+        {
+            var call = Assert.Single(module.Invocations["activateRow"]);
+            Assert.Equal(ds.RowKeys[2], call.Arguments[1]);
+            Assert.Equal(2, call.Arguments[2]);   // 화면 순번 (가상 스크롤 위치)
+        });
+        Assert.Equal(0, selections);
+    }
+
+    /// <summary>GS-085: 정렬 중이면 화면 순번은 정렬한 순서 기준</summary>
+    [Fact]
+    public async Task GS_085_AppMoveTo_UsesDisplayIndex()
+    {
+        var module = Module(JSInterop);
+        var ds = TestData.ThreeLines();
+        var cut = Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds"><QuroColumn Field="ItemCode" HeaderKey="mm.item.code" /></QuroGrid>);
+        await cut.InvokeAsync(() => cut.Instance.SetSort([new SortColumn("ItemCode", SortDirection.Descending)]));
+
+        await cut.InvokeAsync(() => ds.MoveTo(ds.RowKeys[2]));   // A1003: first when descending
+
+        cut.WaitForAssertion(() => Assert.Equal(0, Assert.Single(module.Invocations["activateRow"]).Arguments[2]));
+    }
+
+    /// <summary>GS-085: 그리드가 옮긴 현재 행은 JS로 되돌려 보내지 않는다 (왕복 없음)</summary>
+    [Fact]
+    public async Task GS_085_GridRowChange_DoesNotEchoToJs()
+    {
+        var module = Module(JSInterop);
+        var ds = TestData.ThreeLines();
+        var cut = Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds"><QuroColumn Field="ItemCode" HeaderKey="mm.item.code" /></QuroGrid>);
+
+        await cut.InvokeAsync(() => cut.Instance.SelectionChanged(ds.RowKeys[1]));
+        cut.Render();
+
+        Assert.Empty(module.Invocations["activateRow"]);
+    }
+
+    /// <summary>GS-085: 화면에 없는 행(필터로 걸러짐)이면 그리드 활성 셀은 그대로</summary>
+    [Fact]
+    public async Task GS_085_AppMoveToHiddenRow_LeavesGrid()
+    {
+        var module = Module(JSInterop);
+        var ds = TestData.ThreeLines();
+        var cut = Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds"><QuroColumn Field="ItemCode" HeaderKey="mm.item.code" /></QuroGrid>);
+        await cut.InvokeAsync(() => cut.Instance.SetFilters([new ColumnFilter("ItemCode") { Contains = "A1001" }]));
+
+        await cut.InvokeAsync(() => ds.MoveTo(ds.RowKeys[2]));
+        cut.Render();
+
+        Assert.Empty(module.Invocations["activateRow"]);
+        Assert.Equal(ds.RowKeys[2], ds.CurrentRowKey);
+    }
+
+    /// <summary>GS-085: 다른 DataSet으로 바꾸면 이전 DataSet의 현재 행 변경은 받지 않는다</summary>
+    [Fact]
+    public async Task GS_085_DataSetReplaced_StopsListeningToOld()
+    {
+        var module = Module(JSInterop);
+        var oldDs = TestData.ThreeLines();
+        var newDs = TestData.ThreeLines();
+        var cut = Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="oldDs"><QuroColumn Field="ItemCode" HeaderKey="mm.item.code" /></QuroGrid>);
+        cut.Render(p => p.Add(x => x.DataSet, newDs));
+
+        await cut.InvokeAsync(() => oldDs.MoveTo(oldDs.RowKeys[2]));
+        cut.Render();
+
+        Assert.Empty(module.Invocations["activateRow"]);
+    }
+}
