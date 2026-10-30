@@ -380,3 +380,20 @@ D-1 → D-2 → D-3 → D-4 → D-5 → D-6. 시나리오는 `GS-D.md`, 설계�
 - L-1 (`LookupDefLoader`·`LookupDef`, V-33, A-48): GS-D18·GS-D19 — **완료**
 - L-2 (`Validate(LookupDef)` V-34, `ScreenDefValidator(catalog, lookups)` V-35~V-37, A-48): GS-D20·GS-D21 — **완료**
 - L-3 (`quro-deflint`가 `*.lookup.toon`도 검사, A-48): GS-D16 확장 — **완료**. 병합 후 `0.3.0-alpha.1` 배포
+
+---
+
+## 6. 확정 시나리오 — Control Spec v0.1 (A-51~)
+
+근거: `docs/QuroGrid_Control_Spec_v0.1_Review.md`, Addendum A-51~A-61 (2026-10-30 결정).
+
+### 6-1 DataSet 현재 행·변경 알림 (A-51)
+
+| ID | 시나리오 | 기대 결과 | 계층 | 근거 |
+|---|---|---|---|---|
+| GS-082 | DataSet 현재 행 | `Load` 뒤 첫 행(빈 목록이면 null). `MoveTo(rowKey)`로 옮기면 `CurrentRowChanged`(이전·새 행 키) 1회, 같은 행이면 없음, 없는 키는 `KeyNotFoundException`. 현재 행이 목록에서 빠지면(추가 행 삭제·취소, 저장 후 삭제 행 제거) 같은 위치의 다음 행, 없으면 앞 행, 없으면 null. 페이징으로 놓인(`Release`) 행이면 행 키 유지 | xUnit | A-51 |
+| GS-083 | DataSet 변경 이벤트 | `SetValue` → `ValueChanged`(행 키·필드·이전 값·새 값, 값이 같으면 없음). `AddRow`·`AddBlankRow` → `RowAdded`. `DeleteRow` → `RowDeleted` (Deleted 표시·추가 행 제거 모두). `Load` → `Loaded`. `SaveAsync` 성공 → `Saved`(결과) — 실패·충돌·변경 없음은 없음 | xUnit | A-51 |
+| GS-084 | 되돌리기의 변경 이벤트 | `RevertRow`·`RejectChanges`·`Undo`·`Redo`는 값이 실제로 바뀐 필드마다 `ValueChanged`, 목록에서 빠진 행은 `RowDeleted`, 다시 들어온 행은 `RowAdded`. 바인딩한 컨트롤이 갱신할 수 있게 (그리드 `EventCallback`은 A-39대로 내지 않음) | xUnit | A-51 |
+| GS-085 | 그리드 활성 행 ↔ DataSet 현재 행 | 그리드에서 다른 행으로 옮기면 `CurrentRowKey`가 그 행. 앱이 `MoveTo`하면 그리드 활성 셀이 그 행(같은 열)으로 | bUnit + E2E | A-51 |
+
+착수: GS-082~GS-084 (DataSet) — **완료** → GS-085 (그리드).
