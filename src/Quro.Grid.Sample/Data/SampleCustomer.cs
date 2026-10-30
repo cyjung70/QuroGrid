@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Quro.Grid.Sample.Data;
 
-/// <summary>Customer header for the QuroUI sample page (/textbox).</summary>
+/// <summary>Customer header for the QuroUI sample pages (/textbox, /combo).</summary>
 public sealed class SampleCustomer
 {
     [Key]
@@ -17,4 +17,10 @@ public sealed class SampleCustomer
     public string? Code { get; set; }
 
     public string? Pin { get; set; }
+
+    public string? Country { get; set; }
+
+    public string? City { get; set; }
+
+    public string? Tags { get; set; }
 }

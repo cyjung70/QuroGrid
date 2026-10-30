@@ -1,0 +1,302 @@
+@using Bunit
+@using Microsoft.Extensions.Localization
+@using Quro.Grid.Data
+@using Quro.UI
+@using Quro.UI.Tests
+@inherits UiTestContext
+
+@code {
+    // GS-U05 ~ GS-U08: QuroComboBox bound to a data set column, list from a code data set (Control Spec 9, A-57·A-64)
+
+    private IRenderedComponent<QuroComboBox<Customer, CityCode>> RenderCombo(QuroDataSet<Customer> ds,
+        QuroDataSet<CityCode>? codes = null, string field = "City", string valueField = "Code",
+        string? filterField = null, string? parentField = null, string? emptyKey = null, bool showCode = false,
+        IReadOnlyList<QuroListColumn>? listColumns = null, bool multiple = false, string separator = "|",
+        bool readOnly = false, IStringLocalizer? localizer = null)
+    {
+        codes ??= CityCode.Four();
+        return Render<QuroComboBox<Customer, CityCode>>(
+            @<QuroComboBox TItem="Customer" TCode="CityCode" DataSet="ds" Field="@field" OptionsSource="codes"
+                          ValueField="@valueField" TextField="Name" FilterField="@filterField" ParentField="@parentField"
+                          EmptyKey="@emptyKey" ShowCode="showCode" ListColumns="listColumns" Multiple="multiple"
+                          Separator="@separator" ReadOnly="readOnly" Localizer="localizer" />);
+    }
+
+    private static QuroDataSet<Customer> WithCity(string? city, string? country = null, string? tags = null)
+    {
+        var ds = new QuroDataSet<Customer>();
+        ds.Load([new Customer { Id = 1, Name = "Kim", City = city, Country = country, Tags = tags },
+                 new Customer { Id = 2, Name = "Lee", City = "03", Country = "JP" }]);
+        return ds;
+    }
+
+    private static AngleSharp.Dom.IElement Input(IRenderedComponent<QuroComboBox<Customer, CityCode>> cut) =>
+        cut.Find("input.quro-ui-input");
+
+    private static AngleSharp.Dom.IElement Root(IRenderedComponent<QuroComboBox<Customer, CityCode>> cut) =>
+        cut.Find(".quro-ui-combo");
+
+    private static void Choose(IRenderedComponent<QuroComboBox<Customer, CityCode>> cut, string payload) =>
+        cut.Find("input.quro-ui-combo-choice").Change(payload);
+
+    private static List<string?> Options(IRenderedComponent<QuroComboBox<Customer, CityCode>> cut) =>
+        cut.FindAll("li.quro-ui-option").Select(li => li.GetAttribute("data-display")).ToList();
+
+    // ── GS-U05 list and binding ──
+
+    /// <summary>GS-U05: the list is the code data set's rows in order, Deleted rows left out</summary>
+    [Fact]
+    public void GS_U05_List_FromOptionsSource_SkipsDeleted()
+    {
+        var codes = CityCode.Four();
+        codes.DeleteRow(codes.RowKeys[1]);
+
+        var cut = RenderCombo(WithCity("01"), codes);
+
+        Assert.Equal(["Seoul", "Tokyo", "Osaka"], Options(cut));
+        Assert.Equal(["0", "1", "2"], cut.FindAll("li.quro-ui-option").Select(li => li.GetAttribute("data-index")));
+        Assert.Equal("01 seoul", cut.Find("li.quro-ui-option").GetAttribute("data-search"));
+    }
+
+    /// <summary>GS-U05: the input shows the text of the current value; a value not in the list is shown as is</summary>
+    [Fact]
+    public void GS_U05_ShowsTextOfCurrentValue_UnknownValueAsIs()
+    {
+        var cut = RenderCombo(WithCity("02"));
+        Assert.Equal("Busan", Input(cut).GetAttribute("value"));
+        Assert.Equal("Busan", Root(cut).GetAttribute("data-quro-display"));
+        Assert.Equal("true", cut.FindAll("li.quro-ui-option")[1].GetAttribute("aria-selected"));
+
+        var unknown = RenderCombo(WithCity("99"));
+        Assert.Equal("99", Input(unknown).GetAttribute("value"));
+    }
+
+    /// <summary>GS-U05: a choice sets the value once; choosing the same value does not call SetValue</summary>
+    [Fact]
+    public void GS_U05_Choose_SetsValueOnce_SameValueNoCall()
+    {
+        var ds = WithCity("01");
+        var changes = new List<DataSetValueChangedEventArgs>();
+        ds.ValueChanged += (_, e) => changes.Add(e);
+        var cut = RenderCombo(ds);
+
+        Choose(cut, "2");
+        Choose(cut, "2");
+
+        var change = Assert.Single(changes);
+        Assert.Equal((1, "City", "01", "03"), (change.RowKey, change.Field, (string?)change.OldValue, (string?)change.NewValue));
+        Assert.Equal(RowState.Updated, ds.GetState(1));
+        Assert.Equal("Tokyo", Input(cut).GetAttribute("value"));
+    }
+
+    /// <summary>GS-U05: follows MoveTo and a new code list</summary>
+    [Fact]
+    public void GS_U05_FollowsMoveTo_AndCodeLoad()
+    {
+        var ds = WithCity("01");
+        var codes = CityCode.Four();
+        var cut = RenderCombo(ds, codes);
+
+        cut.InvokeAsync(() => ds.MoveTo(2));
+        cut.WaitForAssertion(() => Assert.Equal("Tokyo", Input(cut).GetAttribute("value")));
+
+        cut.InvokeAsync(() => codes.Load([new CityCode { Code = "03", Name = "Tokyo-to" }]));
+        cut.WaitForAssertion(() => Assert.Equal(["Tokyo-to"], Options(cut)));
+        Assert.Equal("Tokyo-to", Input(cut).GetAttribute("value"));
+    }
+
+    /// <summary>GS-U05: required and read-only like the text box; a choice on a read-only combo is ignored</summary>
+    [Fact]
+    public void GS_U05_RequiredAndReadOnly()
+    {
+        var ds = WithCity("01");
+
+        Assert.Contains("quro-ui-required", Root(RenderCombo(ds)).ClassList);
+
+        var locked = RenderCombo(ds, readOnly: true);
+        Assert.Contains("quro-ui-readonly", Root(locked).ClassList);
+        Assert.DoesNotContain("quro-ui-required", Root(locked).ClassList);
+        Assert.Equal("true", Root(locked).GetAttribute("data-quro-readonly"));
+        Assert.True(Input(locked).HasAttribute("readonly"));
+        Choose(locked, "1");
+        Assert.Equal("01", ds.GetValue(1, "City"));
+
+        var none = RenderCombo(new QuroDataSet<Customer>());
+        Assert.True(Input(none).HasAttribute("disabled"));
+    }
+
+    /// <summary>GS-U05: unknown fields and a Field type other than the ValueField type are rejected</summary>
+    [Fact]
+    public void GS_U05_InvalidFields_Throw()
+    {
+        Assert.Throws<ArgumentException>(() => RenderCombo(WithCity("01"), field: "Nope"));
+        Assert.Throws<ArgumentException>(() => RenderCombo(WithCity("01"), valueField: "Nope"));
+        Assert.Throws<ArgumentException>(() => RenderCombo(WithCity("01"), field: "Credit"));
+        Assert.Throws<ArgumentException>(() => RenderCombo(WithCity("01"), filterField: "Country"));   // without ParentField
+    }
+
+    /// <summary>GS-U05: a non-string value column works when the types match</summary>
+    [Fact]
+    public void GS_U05_IntValueColumn()
+    {
+        var ds = WithCity("01");
+        var cut = RenderCombo(ds, field: "Level", valueField: "Population");
+
+        Choose(cut, "3");
+
+        Assert.Equal(270, ds.GetValue(1, "Level"));
+    }
+
+    /// <summary>GS-U05: quro-ui.js attach once</summary>
+    [Fact]
+    public void GS_U05_AttachOnce()
+    {
+        var module = JSInterop.SetupModule(ModulePath);
+
+        var cut = RenderCombo(WithCity("01"));
+        cut.Render();
+
+        Assert.Single(module.Invocations, i => i.Identifier == "attach");
+    }
+
+    // ── GS-U06 empty choice, code display, extra columns ──
+
+    /// <summary>GS-U06: EmptyKey adds a localized first item that sets null</summary>
+    [Fact]
+    public void GS_U06_EmptyChoice_SetsNull()
+    {
+        var ds = WithCity("01");
+        var cut = RenderCombo(ds, emptyKey: "common.select", localizer: new FakeLocalizer());
+
+        var empty = cut.Find("li.quro-ui-combo-empty");
+        Assert.Equal("(Select)", empty.TextContent.Trim());
+        Assert.Equal("", empty.GetAttribute("data-index"));
+        Choose(cut, "");
+
+        Assert.Null(ds.GetValue(1, "City"));
+        Assert.Equal("", Input(cut).GetAttribute("value") ?? "");
+
+        Assert.Empty(RenderCombo(ds).FindAll("li.quro-ui-combo-empty"));
+    }
+
+    /// <summary>GS-U06: ShowCode shows code and name</summary>
+    [Fact]
+    public void GS_U06_ShowCode()
+    {
+        var cut = RenderCombo(WithCity("02"), showCode: true);
+
+        Assert.Equal("02 Busan", Input(cut).GetAttribute("value"));
+        Assert.Equal("01 Seoul", Options(cut)[0]);
+    }
+
+    /// <summary>GS-U06: ListColumns adds a header and one cell per column</summary>
+    [Fact]
+    public void GS_U06_ListColumns()
+    {
+        var cut = RenderCombo(WithCity("01"), listColumns: [new QuroListColumn("Name", "code.name"), new QuroListColumn("Population", "code.pop")],
+            localizer: new FakeLocalizer());
+
+        Assert.Equal(["Name", "Population"], cut.FindAll("li.quro-ui-combo-head span").Select(s => s.TextContent));
+        Assert.Equal(["Tokyo", "1400"], cut.FindAll("li.quro-ui-option")[2].QuerySelectorAll("span").Select(s => s.TextContent));
+        Assert.Equal("Tokyo", Options(cut)[2]);
+    }
+
+    // ── GS-U07 linked combos ──
+
+    /// <summary>GS-U07: only codes whose FilterField equals the row's ParentField; null parent → empty list</summary>
+    [Fact]
+    public void GS_U07_FiltersByParent_NullParentEmpty()
+    {
+        var cut = RenderCombo(WithCity("03", "JP"), filterField: "Country", parentField: "Country");
+        Assert.Equal(["Tokyo", "Osaka"], Options(cut));
+
+        var none = RenderCombo(WithCity(null), filterField: "Country", parentField: "Country");
+        Assert.Empty(Options(none));
+    }
+
+    /// <summary>GS-U07: a parent change clears a child value that left the list (one undoable SetValue)</summary>
+    [Fact]
+    public void GS_U07_ParentChange_ClearsInvalidChild_Undoable()
+    {
+        var ds = WithCity("01", "KR");
+        var cut = RenderCombo(ds, filterField: "Country", parentField: "Country");
+
+        cut.InvokeAsync(() => ds.SetValue(1, "Country", "JP"));
+
+        cut.WaitForAssertion(() => Assert.Equal(["Tokyo", "Osaka"], Options(cut)));
+        Assert.Null(ds.GetValue(1, "City"));
+        cut.InvokeAsync(() => ds.Undo());
+        Assert.Equal("01", ds.GetValue(1, "City"));
+    }
+
+    /// <summary>GS-U07: a child value still in the new list stays; moving rows and loading never clear</summary>
+    [Fact]
+    public void GS_U07_ValidChild_AndMoveOrLoad_NotCleared()
+    {
+        var ds = WithCity("02", "KR");
+        var cut = RenderCombo(ds, filterField: "Country", parentField: "Country");
+
+        cut.InvokeAsync(() => ds.MoveTo(2));
+        cut.WaitForAssertion(() => Assert.Equal("Tokyo", Input(cut).GetAttribute("value")));
+        cut.InvokeAsync(() => ds.Load([new Customer { Id = 5, City = "01", Country = "JP" }]));
+
+        cut.WaitForAssertion(() => Assert.Equal(["Tokyo", "Osaka"], Options(cut)));
+        Assert.Equal("01", ds.GetValue(ds.RowKeys[0], "City"));
+        Assert.False(ds.HasChanges);
+    }
+
+    // ── GS-U08 multi-select ──
+
+    /// <summary>GS-U08: chosen codes joined with Separator in list order; none → null</summary>
+    [Fact]
+    public void GS_U08_Multiple_JoinsInListOrder_NoneIsNull()
+    {
+        var ds = WithCity("01");
+        var cut = RenderCombo(ds, field: "Tags", multiple: true);
+
+        Choose(cut, "3,0");
+        Assert.Equal("01|04", ds.GetValue(1, "Tags"));
+        Assert.Equal("Seoul, Osaka", Input(cut).GetAttribute("value"));
+
+        Choose(cut, "");
+        Assert.Null(ds.GetValue(1, "Tags"));
+
+        var comma = RenderCombo(ds, field: "Tags", multiple: true, separator: ",");
+        Choose(comma, "1,2");
+        Assert.Equal("02,03", ds.GetValue(1, "Tags"));
+    }
+
+    /// <summary>GS-U08: checked items follow the value; the input is read-only text</summary>
+    [Fact]
+    public void GS_U08_Multiple_ChecksAndReadOnlyInput()
+    {
+        var cut = RenderCombo(WithCity("01", tags: "02|03"), field: "Tags", multiple: true);
+
+        Assert.Equal(["false", "true", "true", "false"], cut.FindAll("li.quro-ui-option").Select(li => li.GetAttribute("aria-checked")));
+        Assert.Equal("Busan, Tokyo", Input(cut).GetAttribute("value"));
+        Assert.True(Input(cut).HasAttribute("readonly"));
+        Assert.Equal("true", Root(cut).GetAttribute("data-quro-multiple"));
+    }
+
+    /// <summary>GS-U08: a parent change keeps only the codes still in the list</summary>
+    [Fact]
+    public void GS_U08_Multiple_ParentChange_KeepsValidCodes()
+    {
+        var codes = CityCode.Four();
+        codes.SetValue(codes.RowKeys[0], "Country", "ALL");
+        codes.AcceptChanges();
+        var ds = WithCity("01", "KR", tags: "01|02");
+        var cut = RenderCombo(ds, codes, field: "Tags", filterField: "Country", parentField: "Country", multiple: true);
+
+        cut.InvokeAsync(() => ds.SetValue(1, "Country", "ALL"));
+
+        cut.WaitForAssertion(() => Assert.Equal("01", ds.GetValue(1, "Tags")));
+    }
+
+    /// <summary>GS-U08: multi-select needs string columns</summary>
+    [Fact]
+    public void GS_U08_Multiple_NonString_Throws()
+    {
+        Assert.Throws<ArgumentException>(() => RenderCombo(WithCity("01"), field: "Level", valueField: "Population", multiple: true));
+    }
+}
