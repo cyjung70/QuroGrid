@@ -19,6 +19,8 @@ public partial class QuroStaticText<TItem> where TItem : class
     private int? _row;
     private string? _text;
     private DataSetColumn _column = null!;
+    private QuroMask? _mask;
+    private string? _maskText;
 
     /// <summary>Data set whose current row is shown.</summary>
     [Parameter, EditorRequired] public QuroDataSet<TItem> DataSet { get; set; } = null!;
@@ -35,6 +37,12 @@ public partial class QuroStaticText<TItem> where TItem : class
     /// <summary>Culture of the shown value. Null uses the current culture.</summary>
     [Parameter] public CultureInfo? Culture { get; set; }
 
+    /// <summary>
+    /// Mask for a string value stored without its fixed characters (like <see cref="QuroMaskBox{TItem}.Mask"/>,
+    /// A-69). A value that doesn't fit is shown as it is.
+    /// </summary>
+    [Parameter] public string? Mask { get; set; }
+
     private CultureInfo EffectiveCulture => Culture ?? CultureInfo.CurrentCulture;
 
     private bool IsNumber => Integers.Contains(Under(_column.Type)) || Reals.Contains(Under(_column.Type));
@@ -45,6 +53,11 @@ public partial class QuroStaticText<TItem> where TItem : class
     protected override void OnParametersSet()
     {
         _column = DataSet.GetColumn(Field);
+        if (Mask != _maskText)
+        {
+            _mask = Mask is null ? null : QuroMask.Parse(Mask, nameof(Mask));
+            _maskText = Mask;
+        }
         Bind(DataSet);
         Read();
     }
@@ -60,6 +73,8 @@ public partial class QuroStaticText<TItem> where TItem : class
         var culture = EffectiveCulture;
         if (value is null)
             return null;
+        if (_mask is not null && value is string s)
+            return _mask.Format(s);
         if (Format is not null)
             return value is IFormattable f ? f.ToString(Format, culture) : Convert.ToString(value, culture);
         return value switch

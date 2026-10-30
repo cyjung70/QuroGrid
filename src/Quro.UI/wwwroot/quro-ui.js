@@ -15,9 +15,14 @@ export function attach(root) {
     attached.add(root);
 
     root.addEventListener('input', e => {
-        if (!e.isComposing) filter(root, e.target);   // IME: filter when composition ends
+        if (e.isComposing) return;   // IME: filter when composition ends
+        filter(root, e.target);
+        applyMask(root, e.target);
     });
-    root.addEventListener('compositionend', e => filter(root, e.target));
+    root.addEventListener('compositionend', e => {
+        filter(root, e.target);
+        applyMask(root, e.target);
+    });
 
     let selectOnMouseUp = false;
     root.addEventListener('focusin', e => {
@@ -49,6 +54,60 @@ function filter(root, input) {
     const kept = text.slice(0, caret).replace(pattern, '').length;
     input.value = clean;
     input.setSelectionRange(kept, kept);
+}
+
+// ── mask box (GS-U19, A-69) ──
+// Same rules as QuroMask on the server: 0 digit, A letter of any language, * letter or digit, \ makes the next
+// character fixed. While typing, characters that don't fit their position are dropped and the fixed characters
+// between typed ones are added; the caret stays after the same typed character. The server reads the text on commit.
+const maskCache = new Map();
+
+function parseMask(mask) {
+    if (maskCache.has(mask)) return maskCache.get(mask);
+    const slots = [];
+    for (let i = 0; i < mask.length; i++) {
+        const c = mask[i];
+        if (c === '\\' && i + 1 < mask.length) slots.push({ fixed: mask[++i] });
+        else if (c === '0') slots.push({ test: ch => /[0-9]/.test(ch) });
+        else if (c === 'A') slots.push({ test: ch => /\p{L}/u.test(ch) });
+        else if (c === '*') slots.push({ test: ch => /[0-9]|\p{L}/u.test(ch) });
+        else slots.push({ fixed: c });
+    }
+    maskCache.set(mask, slots);
+    return slots;
+}
+
+/** Characters of text that fit the mask's input positions in order (fixed characters and misfits are dropped). */
+function typedChars(slots, text) {
+    const inputs = slots.filter(s => s.test);
+    const typed = [];
+    for (const ch of text) {
+        if (typed.length === inputs.length) break;
+        if (inputs[typed.length].test(ch)) typed.push(ch);
+    }
+    return typed;
+}
+
+function applyMask(root, input) {
+    const mask = root.dataset.quroMask;
+    if (!mask || !(input instanceof HTMLInputElement)) return;
+    const slots = parseMask(mask);
+    const text = input.value;
+    const caret = input.selectionStart ?? text.length;
+    const typed = typedChars(slots, text);
+    const before = typedChars(slots, text.slice(0, caret)).length;
+
+    let shown = '';
+    let next = 0;
+    let newCaret = 0;
+    for (const slot of slots) {
+        if (next === typed.length) break;
+        shown += slot.fixed ?? typed[next++];
+        if (slot.test && next === before) newCaret = shown.length;
+    }
+    if (shown === text) return;
+    input.value = shown;
+    input.setSelectionRange(newCaret, newCaret);
 }
 
 // ── combo box (GS-U09) ──

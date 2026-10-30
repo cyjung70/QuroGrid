@@ -79,7 +79,7 @@ src/
   Quro.Grid.Definition/  TOON 화면 정의 파서·검증기·불변 모델·규칙 식 (UI 무관)  → NuGet  [I-02 결정: A-44]
   Quro.Grid/             QuroGrid.razor, QuroColumn, 셀 타입, 이벤트      → NuGet (RCL)
     wwwroot/quro-grid.js   소비자에서는 _content/Quro.Grid/quro-grid.js
-  Quro.UI/               QuroUI 컨트롤 (DataSet 열 바인딩, 텍스트·콤보·날짜는 자체 input, 라벨·정적 텍스트)  → NuGet (RCL)  [A-53·A-63~A-66]
+  Quro.UI/               QuroUI 컨트롤 (DataSet 열 바인딩, 텍스트·마스크·콤보·날짜는 자체 input, 라벨·정적 텍스트)  → NuGet (RCL)  [A-53·A-63~A-66·A-69]
   Quro.Grid.Sample/      Blazor Server 샘플 (패키지로 배포하지 않음)
 tests/
   Quro.Grid.Data.Tests/  Quro.Grid.Definition.Tests/  Quro.Grid.Tests/  Quro.Grid.E2E/

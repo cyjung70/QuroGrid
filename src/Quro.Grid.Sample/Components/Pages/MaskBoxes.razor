@@ -1,0 +1,44 @@
+@page "/mask"
+@rendermode InteractiveServer
+@implements IDisposable
+@using Quro.Grid.Data
+@using Quro.Grid.Sample.Data
+@using Quro.UI
+
+<PageTitle>@L["sample.mask.title"]</PageTitle>
+
+<h1>@L["sample.mask.title"]</h1>
+
+@* QuroUI mask boxes bound to one data set (GS-U19): the column stores only the typed characters *@
+<div class="sample-form">
+    <QuroMaskBox TItem="SampleCustomer" DataSet="_customer" Field="BizNo" Mask="000-00-00000" AutoSelect="true"
+                 PlaceholderKey="sample.mask.bizno" Localizer="L" />
+    <QuroMaskBox TItem="SampleCustomer" DataSet="_customer" Field="Phone" Mask="000-0000-0000" />
+</div>
+
+@* stored value shown read-only with the mask (GS-U20) *@
+<p>
+    <QuroLabel TextKey="sample.mask.bizno" Localizer="L" />
+    <QuroStaticText TItem="SampleCustomer" DataSet="_customer" Field="BizNo" Mask="000-00-00000" />
+</p>
+
+<p>
+    <span data-testid="state">@_customer.GetState(1)</span> ·
+    <span data-testid="biz-value">@_customer.GetValue(1, "BizNo")</span> ·
+    <span data-testid="phone-value">@_customer.GetValue(1, "Phone")</span>
+</p>
+
+@code {
+    private static readonly SampleLocalizer L = new();
+    private readonly QuroDataSet<SampleCustomer> _customer = new();
+
+    protected override void OnInitialized()
+    {
+        _customer.Load([new SampleCustomer { Id = 1, Name = "Kim", BizNo = "1234567890" }]);
+        _customer.ValueChanged += OnValueChanged;
+    }
+
+    private void OnValueChanged(object? sender, DataSetValueChangedEventArgs e) => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => _customer.ValueChanged -= OnValueChanged;
+}
