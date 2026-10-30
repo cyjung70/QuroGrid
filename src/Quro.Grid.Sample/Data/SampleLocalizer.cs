@@ -46,6 +46,8 @@ public sealed class SampleLocalizer : IStringLocalizer
         ["sample.popup_text"] = ("코드도움 입력", "Lookup text"),
         ["sample.button_row"] = ("상세 요청 행", "Detail row"),
         ["sample.home"] = ("처음 화면", "Home"),
+        ["sample.textbox.title"] = ("QuroUI 텍스트 박스", "QuroUI text boxes"),
+        ["sample.textbox.zip"] = ("우편번호", "Postal code"),
         ["quro.connection.offline"] = ("서버 연결이 끊겼습니다. 다시 연결하는 동안 입력할 수 없습니다.", "Connection lost. Input is locked while reconnecting."),
         ["quro.connection.unsaved"] = ("연결이 복구되지 않으면 저장하지 않은 변경이 사라집니다.", "Unsaved changes will be lost if the connection is not restored."),
         ["quro.connection.changes_lost"] = ("연결이 끊겨 저장하지 않은 변경이 사라졌습니다. (눌러서 닫기)", "The connection was lost and unsaved changes were discarded. (Click to close)"),

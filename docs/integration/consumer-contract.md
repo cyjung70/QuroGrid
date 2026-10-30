@@ -10,10 +10,11 @@
 | `Quro.Grid.Data` | QuroDataSet, RowState, ChangeSet, SaveResult | `QuroErp.Web` (전이 참조로 충분) |
 | `Quro.Grid.Definition` | TOON 화면 정의 파서·검증기·불변 모델 | `QuroErp.Web` (전이 참조로 충분) |
 | `Quro.Grid` | Blazor 컴포넌트(RCL), quro-grid.js | `QuroErp.Web` |
+| `Quro.UI` | QuroUI 컨트롤(RCL): `QuroTextBox`, quro-ui.js (A-53·A-63) | `QuroErp.Web` |
 | `Quro.Grid.DefLint` | .NET 도구 `quro-deflint` (화면 정의 린트, CI용) | 저장소 도구 매니페스트 (`dotnet tool install --local`) |
 
 - 대상 프레임워크: `net10.0`. 렌더 모드: Interactive Server만 지원.
-- 정적 자산: `_content/Quro.Grid/quro-grid.js`, `_content/Quro.Grid/quro-grid.css`
+- 정적 자산: `_content/Quro.Grid/quro-grid.js`, `_content/Quro.Grid/quro-grid.css`, `_content/Quro.UI/quro-ui.css` (앱이 `<link>`로 넣는다), `_content/Quro.UI/quro-ui.js` (컨트롤이 가져온다)
 - 배포 피드: 로컬 폴더 피드 `/WRK/_nuget` (I-06). nuget.org 공개는 1.0 이후 별도 결정.
 
 ## 2. 등록 (A-49)
@@ -90,6 +91,23 @@ QuroGrid는 DI 등록 메서드(`AddQuroGrid`)와 서비스 인터페이스를 �
 | `ExportFormat` | `Xlsx`, `Csv` |
 
 - 파일은 저장 API가 저장된 데이터로 만든다 (화면의 저장 전 변경분은 넣지 않음, A-29). CSV의 구분자·인코딩·따옴표 처리도 저장 API가 정한다.
+
+### 4.4 QuroUI 텍스트 박스 (Addendum A-53·A-63, GS-U01~GS-U04)
+```razor
+<QuroTextBox TItem="Customer" DataSet="@header" Field="zip" CharType="QuroCharType.Digits" AutoSelect="true"
+             PlaceholderKey="sd.so.shipZip.hint" Localizer="@L" />
+```
+| 파라미터 | 설명 |
+|---|---|
+| `DataSet`·`Field` (필수) | DataSet 현재 행(A-51)의 문자열 열. 없는 필드·문자열이 아닌 열은 `ArgumentException` |
+| `PlaceholderKey`·`Localizer` | 빈 칸 안내 문구의 리소스 키와 해석기. 해석기가 없으면 키를 그대로 |
+| `CharType` | `Any`(기본)·`Digits`(0-9)·`Alpha`(모든 언어 글자)·`AlphaNumeric`. 브라우저가 입력·붙여넣기 때 거른다(IME 조합이 끝날 때) |
+| `MaxLength` | null이면 열 메타 `MaxLength` |
+| `Password`·`AutoSelect`·`ReadOnly` | 가림 입력 / 포커스 때 전체 선택 / 읽기 전용(회색). 현재 행이 `Deleted`여도 읽기 전용 |
+
+- 값은 입력 확정(포커스 이탈·Enter) 때 `SetValue` 1회. 입력하는 동안 서버 호출 없음 (R2). 현재 행이 없으면 비활성
+- 열 메타 `Required`면 연노랑 배경(빨간 별 없음), 저장 막기는 `Validate`(GS-089)
+- CSS 클래스 `quro-ui-textbox`·`quro-ui-input`·`quro-ui-required`·`quro-ui-readonly`, 변수 `--quro-required-bg`·`--quro-readonly-bg`(그 밖 `--quro-bg`·`--quro-text`·`--quro-border`·`--quro-active`·`--quro-placeholder`). 없으면 MudBlazor 팔레트
 
 ## 5. 저장 계약
 - payload `{ inserted[], updated[], deleted[] }`, 수정·삭제 행은 `version` 포함

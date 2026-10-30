@@ -11,6 +11,7 @@ $projects = @(
     "src/Quro.Grid.Data/Quro.Grid.Data.csproj",
     "src/Quro.Grid.Definition/Quro.Grid.Definition.csproj",
     "src/Quro.Grid/Quro.Grid.csproj",
+    "src/Quro.UI/Quro.UI.csproj",
     "src/Quro.Grid.DefLint/Quro.Grid.DefLint.csproj"
 )
 # Quro.Grid.Definition is planned (I-02); pack only the projects that exist.

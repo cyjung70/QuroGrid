@@ -1,0 +1,46 @@
+/*
+ * QuroUI controls (Control Spec 8, Q-22). The app changes colors with --quro-* variables on the control or an
+ * ancestor. Without them the MudBlazor palette (including dark mode) is used, then the defaults below.
+ * Required = light yellow background (no red star), read-only = grey. The yellow is mixed into the surface color so
+ * text stays readable in light and dark mode (A-38).
+ */
+.quro-ui-textbox {
+    --qu-bg: var(--quro-bg, var(--mud-palette-surface, #fff));
+    --qu-text: var(--quro-text, var(--mud-palette-text-primary, #1d2330));
+    --qu-border: var(--quro-border, var(--mud-palette-lines-inputs, #b0b7c3));
+    --qu-active: var(--quro-active, var(--mud-palette-primary, #2e6be6));
+    --qu-placeholder: var(--quro-placeholder, var(--mud-palette-text-disabled, #98a2b3));
+    --qu-required-bg: var(--quro-required-bg, color-mix(in srgb, #ffd43b 22%, var(--qu-bg)));
+    --qu-readonly-bg: var(--quro-readonly-bg, var(--mud-palette-background-gray, #f2f4f7));
+
+    display: inline-block;
+}
+
+.quro-ui-input {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid var(--qu-border);
+    border-radius: var(--mud-default-borderradius, 4px);
+    background: var(--qu-bg);
+    color: var(--qu-text);
+    font: inherit;
+}
+
+.quro-ui-input::placeholder {
+    color: var(--qu-placeholder);
+}
+
+.quro-ui-input:focus {
+    outline: 2px solid var(--qu-active);
+    outline-offset: -1px;
+}
+
+.quro-ui-required .quro-ui-input {
+    background: var(--qu-required-bg);
+}
+
+.quro-ui-readonly .quro-ui-input,
+.quro-ui-input:disabled {
+    background: var(--qu-readonly-bg);
+}
