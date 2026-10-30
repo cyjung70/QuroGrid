@@ -4,6 +4,9 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 소비자(QuroERP)는 버전을 올리기 전에 이 파일을 읽는다.
 
 ## Unreleased
+
+## 0.4.0-alpha.4 — 2026-10-30
+QuroUI 라벨·정적 텍스트 (A-66). BREAKING 없음. 소비자 조치: 없음 (쓰려면 `QuroGridVersion`을 0.4.0-alpha.4로)
 - Added: `Quro.UI` `QuroLabel`(다국어 라벨), `QuroStaticText<TItem>`(DataSet 열 값 읽기 전용 표시, `Format`·`Culture`, 기본 형식은 열 형식·`Scale`에서) (Control Spec 11, A-66, GS-U14~GS-U16). 소비자 조치: 없음
 
 ## 0.4.0-alpha.3 — 2026-10-30
