@@ -2,7 +2,7 @@
 @typeparam TItem where TItem : class
 @implements IAsyncDisposable
 
-@* Own input, not MudTextField: Mud's input sends key events to the server on every keystroke (R2, GS-U04) *@
+@* Own input: key events stay in the browser; the value is sent once on commit (R2, GS-U04) *@
 <div @ref="_root" class="@RootClass" data-field="@Field" data-quro-chars="@CharsAttribute"
      data-quro-autoselect="@(AutoSelect ? "true" : null)">
     <input class="quro-ui-input" type="@(Password ? "password" : "text")" value="@_text" @onchange="OnChange"

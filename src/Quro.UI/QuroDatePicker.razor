@@ -2,7 +2,7 @@
 @typeparam TItem where TItem : class
 @implements IAsyncDisposable
 
-@* Own inputs and calendar, not MudDatePicker: the calendar is drawn and moved in the browser (R2, GS-U13).
+@* Own inputs and calendar: the calendar is drawn and moved in the browser (R2, GS-U13).
    A picked day comes back as yyyy-MM-dd (month mode yyyy-MM) through the input's change event *@
 <div @ref="_root" class="@RootClass" data-field="@Field" data-quro-culture="@EffectiveCulture.Name"
      data-quro-firstday="@((int)EffectiveCulture.DateTimeFormat.FirstDayOfWeek)" data-quro-month="@(Month ? "true" : null)"

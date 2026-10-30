@@ -51,7 +51,7 @@ public sealed class RowAddingArgs<TItem>(TItem item, int? sourceRowKey = null) w
 }
 
 /// <summary>
-/// 코드도움 요청 (OnPopupRequested, Spec 4.10 · Addendum A-16). 앱은 팝업(MudDialog 등)을 띄우고
+/// 코드도움 요청 (OnPopupRequested, Spec 4.10 · Addendum A-16). 앱은 팝업(다이얼로그 등)을 띄우고
 /// 고른 코드를 <see cref="Value"/>에 넣는다. null이면 확정하지 않고 편집을 유지한다.
 /// </summary>
 public sealed class PopupRequestedArgs<TItem>(int rowKey, string field, TItem item, string text,
@@ -228,7 +228,7 @@ public static class GridKeys
 
 /// <summary>
 /// 미저장 변경이 있는 채로 앱 안 화면 이동 (OnLeaving, Addendum A-20). 취소 가능.
-/// 구독하면 그리드 기본 확인창 대신 앱이 묻는다 (예: MudDialog).
+/// 구독하면 그리드 기본 확인창 대신 앱이 묻는다 (예: 앱의 다이얼로그).
 /// </summary>
 public sealed class LeavingArgs(string targetLocation)
 {

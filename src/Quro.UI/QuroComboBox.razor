@@ -3,7 +3,7 @@
 @typeparam TCode where TCode : class
 @implements IAsyncDisposable
 
-@* Own input and list, not MudSelect/MudAutocomplete: filtering and arrow keys stay in the browser (R2, GS-U09).
+@* Own input and list: filtering and arrow keys stay in the browser (R2, GS-U09).
    quro-ui.js reports a choice through the hidden input's change event: indexes into the rendered list *@
 <div @ref="_root" class="@RootClass" data-field="@Field" data-quro-display="@_text"
      data-quro-multiple="@(Multiple ? "true" : null)" data-quro-readonly="@(IsReadOnly ? "true" : null)">

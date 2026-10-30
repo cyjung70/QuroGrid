@@ -1,23 +1,23 @@
 /*
  * QuroGrid 기본 스타일.
  * 테마 (GS-080·GS-081): 앱은 --quro-* 변수를 그리드나 그 바깥 요소(body 등)에 두어 색을 바꾼다.
- * 두지 않으면 MudBlazor 팔레트(--mud-palette-*, 다크 모드 포함)를, 그것도 없으면 기본값을 쓴다.
+ * 두지 않으면 아래 기본값을 쓴다 (다크 모드는 앱이 다크 값의 토큰을 둔다, A-67).
  * 그리드 안에서는 풀어 둔 --qg-*만 쓴다. 색 기본값은 아래 정의에만 둔다.
  * 선택·오류·경고 배경은 강조색을 배경에 섞어 만들어 밝은·다크 모드 모두 글자가 읽힌다.
  */
 .quro-grid {
-    --qg-bg: var(--quro-bg, var(--mud-palette-surface, #fff));
-    --qg-text: var(--quro-text, var(--mud-palette-text-primary, #1d2330));
-    --qg-border: var(--quro-border, var(--mud-palette-lines-default, #d0d5dd));
-    --qg-head-bg: var(--quro-head-bg, var(--mud-palette-background-gray, #f2f4f7));
-    --qg-active: var(--quro-active, var(--mud-palette-primary, #2e6be6));
+    --qg-bg: var(--quro-bg, #fff);
+    --qg-text: var(--quro-text, #1d2330);
+    --qg-border: var(--quro-border, #d0d5dd);
+    --qg-head-bg: var(--quro-head-bg, #f2f4f7);
+    --qg-active: var(--quro-active, #2e6be6);
     --qg-selected: var(--quro-selected, color-mix(in srgb, var(--qg-active) 16%, var(--qg-bg)));
-    --qg-error-line: var(--quro-error-line, var(--mud-palette-error, #d92d20));
+    --qg-error-line: var(--quro-error-line, #d92d20);
     --qg-error: var(--quro-error, color-mix(in srgb, var(--qg-error-line) 12%, var(--qg-bg)));
-    --qg-warning-line: var(--quro-warning-line, var(--mud-palette-warning, #f79009));
+    --qg-warning-line: var(--quro-warning-line, #f79009);
     --qg-warning: var(--quro-warning, color-mix(in srgb, var(--qg-warning-line) 14%, var(--qg-bg)));
-    --qg-check-line: var(--quro-check-line, var(--mud-palette-action-default, #667085));
-    --qg-check-mark: var(--quro-check-mark, var(--mud-palette-primary-text, #fff));
+    --qg-check-line: var(--quro-check-line, #667085);
+    --qg-check-mark: var(--quro-check-mark, #fff);
     --qg-shadow: var(--quro-shadow, rgb(0 0 0 / 16%));
 
     display: inline-block;
@@ -186,6 +186,86 @@
     border: 1px solid var(--qg-border);
     box-shadow: 0 4px 12px var(--qg-shadow);
     white-space: normal;
+}
+
+/* 달력 (A-67): quro-grid.js가 .quro-calendar 안에 그린다 */
+.quro-calendar {
+    padding: 6px;
+    user-select: none;
+}
+
+.quro-cal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+
+.quro-cal-title {
+    font-weight: 600;
+}
+
+.quro-cal-days {
+    display: grid;
+    grid-template-columns: repeat(7, 32px);
+    gap: 2px;
+}
+
+.quro-cal-dow {
+    text-align: center;
+    font-size: 0.85em;
+    color: var(--qg-check-line);
+}
+
+.quro-cal-nav,
+.quro-cal-day {
+    height: 28px;
+    min-width: 28px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.quro-cal-nav:hover,
+.quro-cal-day:hover,
+.quro-option:hover {
+    background: var(--qg-selected);
+}
+
+.quro-cal-day[data-outside] {
+    opacity: 0.5;
+}
+
+.quro-cal-day[data-today] {
+    border-color: var(--qg-active);
+}
+
+.quro-cal-day[aria-selected=true] {
+    background: var(--qg-active);
+    color: var(--qg-check-mark);
+}
+
+/* Combo 목록 */
+.quro-options {
+    margin: 0;
+    padding: 4px 0;
+    list-style: none;
+    max-height: 240px;
+    overflow-y: auto;
+}
+
+.quro-option {
+    padding: 4px 10px;
+    cursor: pointer;
+}
+
+.quro-option[aria-selected=true] {
+    background: var(--qg-selected);
+    font-weight: 600;
 }
 
 /* Check 셀: 셀 안 체크 표시 (클릭·Space로 토글) */

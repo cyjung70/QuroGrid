@@ -22,7 +22,7 @@ QuroERP Community용 공통 그리드 컴포넌트 **QuroGrid**와 공통 입력
 | D-02 | 렌더 모드 | **Blazor Server** (SignalR 회로) |
 | D-03 | 라이선스 | **MIT** (Addendum A-41, `LICENSE.md`) |
 
-기술 스택: .NET 10 / Blazor Server, UI 보조로 MudBlazor. 저장 API(ASP.NET Core + Dapper + PostgreSQL)는 **이 저장소 밖**(QuroERP)이다.
+기술 스택: .NET 10 / Blazor Server. UI 라이브러리(MudBlazor 등)에 의존하지 않는다 (A-67). 저장 API(ASP.NET Core + Dapper + PostgreSQL)는 **이 저장소 밖**(QuroERP)이다.
 
 ---
 
@@ -58,7 +58,7 @@ QuroERP Community용 공통 그리드 컴포넌트 **QuroGrid**와 공통 입력
 ## 4. 아키텍처 — 4개 층
 
 ```
-MudBlazor        그리드 바깥: 툴바, 다이얼로그, 코드도움 팝업, DatePicker/Select 에디터, 테마
+앱 (소비자)      그리드 바깥: 툴바, 다이얼로그, 코드도움 팝업, 테마 토큰 (--quro-*). 앱이 고른 UI 라이브러리 사용 가능
    ▼
 QuroGrid         Blazor 컴포넌트: 컬럼 정의, 헤더/본문/합계 렌더링, Virtualize, 이벤트
    ▲▼ JS Interop (편집 커밋 · 붙여넣기 · 포커스 동기화만)
@@ -67,8 +67,8 @@ quro-grid.js     얇은 JS 층: 키보드 이동, 포커스/선택 표시, 클�
 QuroDataSet      순수 C# (UI 의존 금지): 행 상태, 원본값, 검증, 변경분 → REST(저장 API)
 ```
 
-- **QuroDataSet은 Blazor·MudBlazor·JS를 참조하지 않는다.**
-- **MudBlazor는 그리드 본체 렌더링에 쓰지 않는다** (MudDataGrid 금지).
+- **QuroDataSet은 Blazor·JS를 참조하지 않는다.**
+- **QuroGrid·QuroUI 패키지는 MudBlazor 등 UI 라이브러리를 참조하지 않는다** (A-67, GS-090). 셀 달력·Combo 목록도 자체 구현
 - **QuroGrid는 QuroERP를 모른다.** 업무 용어·엔드포인트 URL·테이블명·코드 Major를 코드에 넣지 않는다. 앱이 주입한다.
 
 ### 폴더 구조

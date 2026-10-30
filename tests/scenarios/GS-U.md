@@ -1,7 +1,7 @@
 # QuroUI 시나리오 (GS-Uxx)
 
 - 근거: `docs/QuroGrid_Control_Spec_Draft_v0.1.md` 8~11장, Addendum A-53·A-63
-- 패키지: `Quro.UI` (RCL, `Quro.UI` → `Quro.Grid.Data`). 자체 input + MudBlazor CSS 변수 (A-63, Q-21 잠정안과 다름)
+- 패키지: `Quro.UI` (RCL, `Quro.UI` → `Quro.Grid.Data`). 자체 input + `--quro-*` CSS 변수 (A-63, Q-21 잠정안과 다름. MudBlazor 대체값은 A-67로 제거)
 - 테스트 이름은 시나리오 ID로 시작한다: `GS_U01_...`
 
 ## 1. 텍스트 박스 `QuroTextBox<TItem>` (Control Spec 8장, A-63)

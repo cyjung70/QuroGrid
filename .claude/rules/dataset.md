@@ -6,7 +6,7 @@ paths:
 
 # QuroDataSet 규칙
 
-`Quro.Grid.Data`는 Blazor·MudBlazor·JS를 참조하지 않는다. UI 없이 단위 테스트가 가능해야 한다.
+`Quro.Grid.Data`는 Blazor·JS를 참조하지 않는다. UI 없이 단위 테스트가 가능해야 한다.
 
 | 상태 | 규칙 |
 |---|---|

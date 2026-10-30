@@ -14,6 +14,8 @@
 | `Quro.Grid.DefLint` | .NET 도구 `quro-deflint` (화면 정의 린트, CI용) | 저장소 도구 매니페스트 (`dotnet tool install --local`) |
 
 - 대상 프레임워크: `net10.0`. 렌더 모드: Interactive Server만 지원.
+- UI 라이브러리 의존 없음 (A-67, 0.5.0-alpha.1부터): 패키지는 MudBlazor를 참조하지 않는다. 셀 달력·Combo 목록은 그리드가 그린다. 앱이 MudBlazor를 쓰면 자체 패키지 참조와 `AddMudServices()`를 둔다
+- 테마: 색은 `--quro-*` 토큰을 그리드·컨트롤이나 바깥 요소에 두어 바꾼다. 없으면 기본값(밝은 색). 다크 모드는 앱이 다크 값의 토큰을 둔다 (A-38·A-67)
 - 정적 자산: `_content/Quro.Grid/quro-grid.js`, `_content/Quro.Grid/quro-grid.css`, `_content/Quro.UI/quro-ui.css` (앱이 `<link>`로 넣는다), `_content/Quro.UI/quro-ui.js` (컨트롤이 가져온다)
 - 배포 피드: 로컬 폴더 피드 `/WRK/_nuget` (I-06). nuget.org 공개는 1.0 이후 별도 결정.
 
@@ -107,7 +109,7 @@ QuroGrid는 DI 등록 메서드(`AddQuroGrid`)와 서비스 인터페이스를 �
 
 - 값은 입력 확정(포커스 이탈·Enter) 때 `SetValue` 1회. 입력하는 동안 서버 호출 없음 (R2). 현재 행이 없으면 비활성
 - 열 메타 `Required`면 연노랑 배경(빨간 별 없음), 저장 막기는 `Validate`(GS-089)
-- CSS 클래스 `quro-ui-textbox`·`quro-ui-input`·`quro-ui-required`·`quro-ui-readonly`, 변수 `--quro-required-bg`·`--quro-readonly-bg`(그 밖 `--quro-bg`·`--quro-text`·`--quro-border`·`--quro-active`·`--quro-placeholder`). 없으면 MudBlazor 팔레트
+- CSS 클래스 `quro-ui-textbox`·`quro-ui-input`·`quro-ui-required`·`quro-ui-readonly`, 변수 `--quro-required-bg`·`--quro-readonly-bg`(그 밖 `--quro-bg`·`--quro-text`·`--quro-border`·`--quro-active`·`--quro-placeholder`). 없으면 기본값 (A-67)
 
 ### 4.5 QuroUI 콤보 박스 (Addendum A-57·A-64, GS-U05~GS-U09)
 ```razor

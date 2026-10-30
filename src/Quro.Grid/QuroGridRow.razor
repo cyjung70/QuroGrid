@@ -24,19 +24,20 @@
                     <div class="quro-picker">
                         @if (col.Type == CellType.Date)
                         {
-                            <MudDatePicker PickerVariant="PickerVariant.Static" ShowToolbar="false" Culture="Grid.EffectiveCulture"
-                                           Date="Grid.PickerDate" DateChanged="Grid.PickDate" />
+                            @* 달력은 quro-grid.js가 그린다 (A-67). 달을 넘기는 동안 서버 호출이 없고, 고른 날짜만 PickDate로 1회 *@
+                            <div class="quro-calendar" data-iso="@Grid.PickerIso" data-culture="@Grid.EffectiveCulture.Name"
+                                 data-firstday="@((int)Grid.EffectiveCulture.DateTimeFormat.FirstDayOfWeek)"></div>
                         }
                         else
                         {
-                            @* 현재 값은 선택 표시만. 같은 항목을 다시 골라도 확정되도록 항목 클릭으로 받는다. *@
-                            <MudList T="int" Dense="true" SelectionMode="SelectionMode.SingleSelection" SelectedValue="Grid.PickerIndex(col)">
+                            @* 현재 값은 선택 표시만. 같은 항목을 다시 골라도 확정된다. 항목 클릭은 quro-grid.js가 받아 PickOption으로 1회 (R5) *@
+                            var selected = Grid.PickerIndex(col);
+                            <ul class="quro-options" role="listbox">
                                 @for (var o = 0; o < col.Options?.Count; o++)
                                 {
-                                    var index = o;
-                                    <MudListItem T="int" Value="index" Text="@col.Options[index].Text" OnClick="() => Grid.PickOption(index)" />
+                                    <li class="quro-option" role="option" data-index="@o" aria-selected="@(o == selected ? "true" : null)">@col.Options[o].Text</li>
                                 }
-                            </MudList>
+                            </ul>
                         }
                     </div>
                 }

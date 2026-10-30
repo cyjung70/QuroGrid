@@ -1,20 +1,20 @@
 /*
  * QuroUI controls (Control Spec 8, Q-22). The app changes colors with --quro-* variables on the control or an
- * ancestor. Without them the MudBlazor palette (including dark mode) is used, then the defaults below.
+ * ancestor. Without them the defaults below are used; for dark mode the app sets dark token values (A-67).
  * Required = light yellow background (no red star), read-only = grey. The yellow is mixed into the surface color so
  * text stays readable in light and dark mode (A-38).
  */
 .quro-ui-textbox,
 .quro-ui-combo,
 .quro-ui-date {
-    --qu-bg: var(--quro-bg, var(--mud-palette-surface, #fff));
-    --qu-text: var(--quro-text, var(--mud-palette-text-primary, #1d2330));
-    --qu-border: var(--quro-border, var(--mud-palette-lines-inputs, #b0b7c3));
-    --qu-active: var(--quro-active, var(--mud-palette-primary, #2e6be6));
-    --qu-placeholder: var(--quro-placeholder, var(--mud-palette-text-disabled, #98a2b3));
+    --qu-bg: var(--quro-bg, #fff);
+    --qu-text: var(--quro-text, #1d2330);
+    --qu-border: var(--quro-border, #b0b7c3);
+    --qu-active: var(--quro-active, #2e6be6);
+    --qu-placeholder: var(--quro-placeholder, #98a2b3);
     --qu-required-bg: var(--quro-required-bg, color-mix(in srgb, #ffd43b 22%, var(--qu-bg)));
-    --qu-readonly-bg: var(--quro-readonly-bg, var(--mud-palette-background-gray, #f2f4f7));
-    --qu-hover-bg: var(--quro-hover-bg, var(--mud-palette-action-default-hover, rgba(0, 0, 0, 0.06)));
+    --qu-readonly-bg: var(--quro-readonly-bg, #f2f4f7);
+    --qu-hover-bg: var(--quro-hover-bg, rgba(0, 0, 0, 0.06));
 
     display: inline-block;
 }
@@ -24,7 +24,7 @@
     width: 100%;
     padding: 6px 8px;
     border: 1px solid var(--qu-border);
-    border-radius: var(--mud-default-borderradius, 4px);
+    border-radius: 4px;
     background: var(--qu-bg);
     color: var(--qu-text);
     font: inherit;
@@ -83,7 +83,7 @@
     box-sizing: border-box;
     list-style: none;
     border: 1px solid var(--qu-border);
-    border-radius: var(--mud-default-borderradius, 4px);
+    border-radius: 4px;
     background: var(--qu-bg);
     color: var(--qu-text);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
@@ -186,7 +186,7 @@
     margin-top: 2px;
     padding: 8px;
     border: 1px solid var(--qu-border);
-    border-radius: var(--mud-default-borderradius, 4px);
+    border-radius: 4px;
     background: var(--qu-bg);
     color: var(--qu-text);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
@@ -259,11 +259,11 @@
 
 /* ── label and static text (Control Spec 11) ── */
 .quro-ui-label {
-    color: var(--quro-label, var(--mud-palette-text-secondary, #5b6475));
+    color: var(--quro-label, #5b6475);
 }
 
 .quro-ui-static {
-    color: var(--quro-text, var(--mud-palette-text-primary, #1d2330));
+    color: var(--quro-text, #1d2330);
 }
 
 .quro-ui-static-number {

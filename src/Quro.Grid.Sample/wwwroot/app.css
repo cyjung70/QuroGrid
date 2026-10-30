@@ -36,3 +36,52 @@ h1:focus {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
 }
+/* ?dark=1 (GS-081): the app sets dark values of the --quro-* tokens; the grid and controls follow them */
+.sample-dark {
+    --quro-bg: #1e1f26;
+    --quro-text: #e6e8ee;
+    --quro-border: #3a3d48;
+    --quro-head-bg: #2a2c35;
+    --quro-active: #6f9bff;
+    --quro-check-line: #a0a6b4;
+    --quro-check-mark: #10131a;
+    --quro-placeholder: #7d8494;
+    --quro-readonly-bg: #2a2c35;
+    --quro-hover-bg: rgba(255, 255, 255, 0.08);
+    --quro-label: #b3b8c4;
+    min-height: 100vh;
+    background: var(--quro-bg);
+    color: var(--quro-text);
+}
+
+/* item lookup dialog (code help) */
+.sample-dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.35);
+}
+
+.sample-dialog {
+    min-width: 240px;
+    padding: 12px;
+    border-radius: 6px;
+    background: var(--quro-bg, #fff);
+    color: var(--quro-text, #1d2330);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.sample-dialog-items {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.sample-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 12px;
+}
