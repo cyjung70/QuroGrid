@@ -256,3 +256,19 @@
     background: var(--qu-active);
     color: var(--qu-bg);
 }
+
+/* ── label and static text (Control Spec 11) ── */
+.quro-ui-label {
+    color: var(--quro-label, var(--mud-palette-text-secondary, #5b6475));
+}
+
+.quro-ui-static {
+    color: var(--quro-text, var(--mud-palette-text-primary, #1d2330));
+}
+
+.quro-ui-static-number {
+    display: inline-block;
+    min-width: 6em;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}

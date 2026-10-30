@@ -26,6 +26,8 @@ public sealed class Customer
 
     public int Level { get; set; }
 
+    public double Rate { get; set; }
+
     /// <summary>Two loaded customers: keys 1 (Kim, 04524) and 2 (Lee, no zip).</summary>
     public static QuroDataSet<Customer> Two()
     {

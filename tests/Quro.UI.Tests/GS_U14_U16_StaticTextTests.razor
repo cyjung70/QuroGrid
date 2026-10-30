@@ -1,0 +1,127 @@
+@using System.Globalization
+@using Bunit
+@using Microsoft.Extensions.Localization
+@using Quro.Grid.Data
+@using Quro.UI
+@using Quro.UI.Tests
+@inherits UiTestContext
+
+@code {
+    // GS-U14 ~ GS-U16: QuroLabel and QuroStaticText (Control Spec 11, A-66)
+
+    private static readonly CultureInfo Ko = new("ko-KR");
+    private static readonly CultureInfo De = new("de-DE");
+
+    private IRenderedComponent<QuroStaticText<Customer>> RenderText(QuroDataSet<Customer> ds, string field,
+        string? format = null, CultureInfo? culture = null) =>
+        Render<QuroStaticText<Customer>>(@<QuroStaticText TItem="Customer" DataSet="ds" Field="@field" Format="@format"
+                                                          Culture="culture ?? Ko" />);
+
+    private IRenderedComponent<QuroStaticText<Period>> RenderDate(string field, CultureInfo culture) =>
+        Render<QuroStaticText<Period>>(@<QuroStaticText TItem="Period" DataSet="Period.One()" Field="@field" Culture="culture" />);
+
+    private static string Shown<T>(IRenderedComponent<T> cut) where T : Microsoft.AspNetCore.Components.IComponent =>
+        cut.Find(".quro-ui-static").TextContent;
+
+    private static QuroDataSet<Customer> One(Action<Customer> set)
+    {
+        var customer = new Customer { Id = 1, Name = "Kim" };
+        set(customer);
+        var ds = new QuroDataSet<Customer>();
+        ds.Load([customer]);
+        return ds;
+    }
+
+    // ── GS-U14 label ──
+
+    /// <summary>GS-U14: localized label; the key itself without a localizer or a translation</summary>
+    [Fact]
+    public void GS_U14_Label_LocalizedOrKey()
+    {
+        IStringLocalizer localizer = new FakeLocalizer();
+
+        var label = Render<QuroLabel>(@<QuroLabel TextKey="cust.zip.hint" Localizer="localizer" />);
+        Assert.Equal("Postal code", label.Find("label.quro-ui-label").TextContent);
+
+        Assert.Equal("cust.zip.hint", Render<QuroLabel>(@<QuroLabel TextKey="cust.zip.hint" />).Find("label").TextContent);
+        Assert.Equal("no.such.key", Render<QuroLabel>(@<QuroLabel TextKey="no.such.key" Localizer="localizer" />).Find("label").TextContent);
+    }
+
+    // ── GS-U15 bound value ──
+
+    /// <summary>GS-U15: shows the current row's value and follows MoveTo, SetValue and Load; null → empty</summary>
+    [Fact]
+    public void GS_U15_ShowsCurrentRow_FollowsDataSet()
+    {
+        var ds = Customer.Two();
+        var cut = RenderText(ds, "Zip");
+        Assert.Equal("04524", Shown(cut));
+        Assert.Equal("Zip", cut.Find(".quro-ui-static").GetAttribute("data-field"));
+
+        cut.InvokeAsync(() => ds.MoveTo(2));
+        cut.WaitForAssertion(() => Assert.Equal("", Shown(cut)));
+
+        cut.InvokeAsync(() => ds.SetValue(2, "Zip", "10001"));
+        cut.WaitForAssertion(() => Assert.Equal("10001", Shown(cut)));
+
+        cut.InvokeAsync(() => ds.Load([]));
+        cut.WaitForAssertion(() => Assert.Equal("", Shown(cut)));
+    }
+
+    /// <summary>GS-U15: Format is applied with Culture</summary>
+    [Fact]
+    public void GS_U15_Format_WithCulture()
+    {
+        var ds = One(c => c.Credit = 1234.5m);
+
+        Assert.Equal("1,234.50", Shown(RenderText(ds, "Credit", "N2")));
+        Assert.Equal("1.234,50", Shown(RenderText(ds, "Credit", "N2", De)));
+        Assert.Equal("01234", Shown(RenderText(One(c => c.Level = 1234), "Level", "D5")));
+    }
+
+    /// <summary>GS-U15: numeric columns are marked for right alignment, others are not; unknown field throws</summary>
+    [Fact]
+    public void GS_U15_NumberClass_UnknownFieldThrows()
+    {
+        var ds = Customer.Two();
+
+        Assert.Contains("quro-ui-static-number", RenderText(ds, "Credit").Find(".quro-ui-static").ClassList);
+        Assert.Contains("quro-ui-static-number", RenderText(ds, "Level").Find(".quro-ui-static").ClassList);
+        Assert.DoesNotContain("quro-ui-static-number", RenderText(ds, "Name").Find(".quro-ui-static").ClassList);
+        Assert.Throws<ArgumentException>(() => RenderText(ds, "Nope"));
+    }
+
+    // ── GS-U16 default format ──
+
+    /// <summary>GS-U16: integers and decimals with group separators; decimals keep their own digits</summary>
+    [Fact]
+    public void GS_U16_Numbers_GroupSeparators_OwnDigits()
+    {
+        Assert.Equal("1,234,567", Shown(RenderText(One(c => c.Level = 1234567), "Level")));
+        Assert.Equal("-1,234.5", Shown(RenderText(One(c => c.Credit = -1234.5m), "Credit")));
+        Assert.Equal("1,234.567", Shown(RenderText(One(c => c.Rate = 1234.567), "Rate")));
+        Assert.Equal("1.234,5", Shown(RenderText(One(c => c.Credit = 1234.5m), "Credit", culture: De)));
+    }
+
+    /// <summary>GS-U16: column Scale sets the decimal places</summary>
+    [Fact]
+    public void GS_U16_Numbers_ColumnScale()
+    {
+        var ds = One(c => c.Credit = 1234.5m);
+        ds.SetColumn(ds.GetColumn("Credit") with { Scale = 2 });
+        var rate = One(c => c.Rate = 0.125);
+        rate.SetColumn(rate.GetColumn("Rate") with { Scale = 1 });
+
+        Assert.Equal("1,234.50", Shown(RenderText(ds, "Credit")));
+        Assert.Equal("0.1", Shown(RenderText(rate, "Rate")));
+    }
+
+    /// <summary>GS-U16: dates in the culture's short date</summary>
+    [Fact]
+    public void GS_U16_Dates_ShortDate()
+    {
+        Assert.Equal("2026-10-05", Shown(RenderDate("From", Ko)));
+        Assert.Equal("10/5/2026", Shown(RenderDate("From", new CultureInfo("en-US"))));
+        Assert.Equal("01.11.2026", Shown(RenderDate("Due", De)));
+    }
+}
