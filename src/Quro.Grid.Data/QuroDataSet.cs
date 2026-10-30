@@ -412,17 +412,22 @@ public sealed class QuroDataSet<T> where T : class
         Revert(row);
     }
 
-    /// <summary>필수·범위 검증. 저장 대상인 Inserted·Updated 행만 검사한다 (손대지 않은 빈 행 제외).</summary>
+    /// <summary>
+    /// 필수·범위 검증. 저장 대상인 Inserted·Updated 행만 검사한다 (손대지 않은 빈 행 제외).
+    /// 필수는 <see cref="SetRule"/> 규칙 또는 열 메타 <see cref="DataSetColumn.Required"/> (A-63).
+    /// </summary>
     public ValidationResult Validate()
     {
         var errors = new List<ValidationError>();
+        var required = _columns.Where(c => c.Required).Select(c => c.Name).ToHashSet();
+        var checks = _rules.Concat(required.Where(f => !_rules.ContainsKey(f)).Select(f => KeyValuePair.Create(f, new FieldRule()))).ToList();
 
         foreach (var row in _rows.Where(r => r.State is RowState.Inserted or RowState.Updated && !Untouched(r)))
-        foreach (var (field, rule) in _rules)
+        foreach (var (field, rule) in checks)
         {
             var value = Fields[field].GetValue(row.Item);
 
-            if (rule.Required && (value is null || value is string s && string.IsNullOrWhiteSpace(s)))
+            if ((rule.Required || required.Contains(field)) && (value is null || value is string s && string.IsNullOrWhiteSpace(s)))
                 errors.Add(new ValidationError(row.Key, field, ValidationKeys.Required));
 
             if (ToDecimal(value) is { } number)
