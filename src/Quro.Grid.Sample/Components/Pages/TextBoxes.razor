@@ -20,6 +20,12 @@
     <QuroTextBox TItem="SampleCustomer" DataSet="_customer" Field="Pin" Password="true" />
 </div>
 
+@* QuroUI label and static text (GS-U14, GS-U15): the committed zip shown read-only *@
+<p>
+    <QuroLabel TextKey="sample.textbox.zip" Localizer="L" />
+    <QuroStaticText TItem="SampleCustomer" DataSet="_customer" Field="Zip" />
+</p>
+
 <p>
     <span data-testid="state">@_customer.GetState(1)</span> ·
     <span data-testid="zip-value">@_customer.GetValue(1, "Zip")</span>

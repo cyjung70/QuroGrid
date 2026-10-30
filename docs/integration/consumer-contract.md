@@ -10,7 +10,7 @@
 | `Quro.Grid.Data` | QuroDataSet, RowState, ChangeSet, SaveResult | `QuroErp.Web` (전이 참조로 충분) |
 | `Quro.Grid.Definition` | TOON 화면 정의 파서·검증기·불변 모델 | `QuroErp.Web` (전이 참조로 충분) |
 | `Quro.Grid` | Blazor 컴포넌트(RCL), quro-grid.js | `QuroErp.Web` |
-| `Quro.UI` | QuroUI 컨트롤(RCL): `QuroTextBox`, `QuroComboBox`, `QuroDatePicker`, quro-ui.js (A-53·A-63·A-64·A-65) | `QuroErp.Web` |
+| `Quro.UI` | QuroUI 컨트롤(RCL): `QuroTextBox`, `QuroComboBox`, `QuroDatePicker`, `QuroLabel`, `QuroStaticText`, quro-ui.js (A-53·A-63~A-66) | `QuroErp.Web` |
 | `Quro.Grid.DefLint` | .NET 도구 `quro-deflint` (화면 정의 린트, CI용) | 저장소 도구 매니페스트 (`dotnet tool install --local`) |
 
 - 대상 프레임워크: `net10.0`. 렌더 모드: Interactive Server만 지원.
@@ -148,6 +148,19 @@ QuroGrid는 DI 등록 메서드(`AddQuroGrid`)와 서비스 인터페이스를 �
 - 입력 확정(포커스 이탈·Enter) 때 `SetValue` 1회: culture 짧은 날짜, `yyyy-MM-dd`, 숫자만(culture 순서: ko `20261030`, en-US `10302026`). 월 모드는 그 형식, `yyyy-MM`, 숫자 6자리. 읽을 수 없는 입력·nullable이 아닌 열의 빈 입력은 마지막 값으로 돌아간다. 같은 값이면 호출 없음
 - 달력은 브라우저(`quro-ui.js`, `Intl`)가 culture 언어의 월·요일 이름과 culture 주 시작 요일로 그린다. 달 이동은 서버 호출 없음(R2), 날짜를 누르면 1회. 칸 클릭·Alt+↓로 열고 Esc로 닫는다
 - CSS 클래스 `quro-ui-date`·`quro-ui-date-pop`·`quro-ui-cal-*`, 상태 `quro-ui-required`(시작·끝 중 하나라도 필수)·`quro-ui-readonly`, 변수는 4.4·4.5와 같다
+
+### 4.7 QuroUI 라벨·정적 텍스트 (Addendum A-66, GS-U14~GS-U16)
+```razor
+<QuroLabel TextKey="sd.so.custName" Localizer="@L" />
+<QuroStaticText TItem="Customer" DataSet="@header" Field="credit" Format="N0" Culture="@ci" />
+```
+| 컴포넌트 · 파라미터 | 설명 |
+|---|---|
+| `QuroLabel` `TextKey` (필수)·`Localizer` | `<label class="quro-ui-label">`에 `Localizer[TextKey]`. 해석기·번역이 없으면 키 그대로 |
+| `QuroStaticText<TItem>` `DataSet`·`Field` (필수) | DataSet 현재 행(A-51)의 값을 `<span class="quro-ui-static">`에 읽기 전용으로. 행 이동·`Load`·값 변경을 따른다. null·현재 행 없음은 빈 칸. 없는 필드는 `ArgumentException` |
+| `Format`·`Culture` | .NET 형식 문자열과 culture(기본 현재 culture). `Format`이 없으면 정수 천 단위 구분, 실수 천 단위 구분 + 열 메타 `Scale` 자릿수(없으면 값의 자릿수), 날짜는 culture 짧은 날짜, 그 밖은 `ToString()` |
+
+- 숫자 열은 `quro-ui-static-number`(오른쪽 정렬). 변수 `--quro-label`(라벨 색), `--quro-text`. 브라우저 스크립트 없음
 
 ## 5. 저장 계약
 - payload `{ inserted[], updated[], deleted[] }`, 수정·삭제 행은 `version` 포함

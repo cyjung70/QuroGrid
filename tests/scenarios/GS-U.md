@@ -39,3 +39,11 @@
 | GS-U13 | 브라우저 달력 | 칸을 누르면 달력(culture 언어의 월·요일 이름, culture 주 시작 요일). 이전·다음 달 이동은 서버 호출 없음(R2). 날짜를 누르면 값 1회 설정·닫힘. 월 모드는 12달 표. Esc로 닫힘 | E2E | 10장, R2 |
 
 - 달력은 `quro-ui.js`가 `Intl.DateTimeFormat`으로 그린다. 고른 날짜는 `yyyy-MM-dd`(월 모드 `yyyy-MM`)로 서버에 보내고 서버가 culture 형식으로 다시 보인다.
+
+## 4. 라벨·정적 텍스트 `QuroLabel`·`QuroStaticText<TItem>` (Control Spec 11장, A-66)
+
+| ID | 시나리오 | 기대 결과 | 계층 | 근거 |
+|---|---|---|---|---|
+| GS-U14 | 다국어 라벨 | `QuroLabel`은 `<label class="quro-ui-label">`에 `Localizer[TextKey]`. 해석기가 없거나 번역이 없으면 키 그대로 | bUnit | 11장, A-66 ① |
+| GS-U15 | 열 값 표시 | `QuroStaticText`는 DataSet 현재 행의 `Field` 값을 `<span class="quro-ui-static">`에 보인다. `MoveTo`·`Load`·`SetValue` 뒤 새 값. 값 null·현재 행 없음 → 빈 칸. `Format`이 있으면 `Culture`(기본 현재 culture)로 적용. 없는 필드는 `ArgumentException`. 숫자 열이면 `quro-ui-static-number`(오른쪽 정렬). JS 없음 | bUnit | 11장, A-66 ①③ |
+| GS-U16 | 기본 형식 | `Format`이 없으면: 정수는 천 단위 구분, 실수는 천 단위 구분 + 열 메타 `Scale` 자릿수(없으면 값의 자릿수), `DateOnly`·`DateTime`은 culture 짧은 날짜, 그 밖은 culture `ToString()` | bUnit | 11장, A-66 ② |
