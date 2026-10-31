@@ -4,6 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <Description>QuroGrid Blazor Server data-entry grid: editing, keyboard, Excel paste, filter, sort, grouping and footer sums.</Description>
   </PropertyGroup>
 
 

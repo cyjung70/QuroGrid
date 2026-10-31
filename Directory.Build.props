@@ -3,10 +3,12 @@
        Version is overridden by scripts/pack-local.ps1 (-p:Version=...). -->
   <PropertyGroup>
     <VersionPrefix>0.5.0</VersionPrefix>
-    <VersionSuffix>alpha.3</VersionSuffix>
+    <VersionSuffix>alpha.4</VersionSuffix>
     <Authors>QuroERP Community</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <!-- TODO: PackageProjectUrl / RepositoryUrl when the public repository exists -->
+    <PackageProjectUrl>https://github.com/cyjung70/QuroGrid</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/cyjung70/QuroGrid.git</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryType>git</RepositoryType>
     <PackageTags>blazor;grid;erp;quroerp</PackageTags>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
@@ -15,6 +17,11 @@
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
+
+  <!-- nuget.org package page -->
+  <ItemGroup Condition="'$(IsPackable)' != 'false'">
+    <None Include="$(MSBuildThisFileDirectory)docs/nuget/README.md" Pack="true" PackagePath="/" Visible="false" />
+  </ItemGroup>
 
   <!-- Only library projects are packable; samples and tests are not. -->
   <PropertyGroup Condition="$(MSBuildProjectName.EndsWith('.Tests')) Or $(MSBuildProjectName.EndsWith('.E2E')) Or $(MSBuildProjectName.EndsWith('.Sample'))">
