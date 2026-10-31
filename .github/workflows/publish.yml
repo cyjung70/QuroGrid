@@ -22,6 +22,7 @@ concurrency:
 jobs:
   publish:
     runs-on: windows-latest
+    environment: production   # must match the nuget.org Trusted Publishing policy
     defaults:
       run:
         shell: pwsh
