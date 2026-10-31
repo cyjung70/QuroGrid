@@ -1,0 +1,153 @@
+@inherits GridTestContext
+
+@code {
+    // GS-092: QuroColumn.Compute — display-only value from the row (A-59)
+    // GS-093: QuroColumn.CellStyle — text color, background and bold by row and value (A-59)
+
+    private static readonly CultureInfo En = new("en-US");
+    private PastedArgs? _pasted;
+
+    private static object? LineAmount(object row) => ((PoLine)row).Qty * ((PoLine)row).UnitPrice;
+
+    private static CellTone SmallQty(object row, object? value) => value is < 5m ? CellTone.Danger : CellTone.None;
+
+    private IRenderedComponent<QuroGrid<PoLine>> RenderGrid(QuroDataSet<PoLine> ds) =>
+        Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" Culture="En" ShowFooter="true" OnPasted="(PastedArgs e) => _pasted = e">
+                                     <QuroColumn Field="Qty" HeaderKey="mm.qty" Type="CellType.Number" CellStyle="SmallQty" />
+                                     <QuroColumn Field="LineAmount" HeaderKey="mm.amount" Type="CellType.Number" Format="N1"
+                                                 Compute="LineAmount" Aggregate="Aggregate.Sum" />
+                                     <QuroColumn Field="UnitPrice" HeaderKey="mm.unit_price" Type="CellType.Number" />
+                                 </QuroGrid>);
+
+    private static string[] Cells(IRenderedComponent<QuroGrid<PoLine>> cut, string field) =>
+        cut.FindAll($"[role=gridcell][data-field={field}]").Select(c => c.TextContent.Trim()).ToArray();
+
+    // ── GS-092 Compute ──
+
+    /// <summary>GS-092: the computed value is shown with the column format; the field need not be a DataSet field</summary>
+    [Fact]
+    public void GS_092_Compute_ShowsFormattedValue()
+    {
+        var cut = RenderGrid(TestData.ThreeLines());
+
+        Assert.Equal(["25,000.0", "6,000.0", "37.5"], Cells(cut, "LineAmount"));
+    }
+
+    /// <summary>GS-092: the value follows the row after an edit of an input column</summary>
+    [Fact]
+    public async Task GS_092_Compute_FollowsRowChange()
+    {
+        var ds = TestData.ThreeLines();
+        var cut = RenderGrid(ds);
+
+        Assert.True(await cut.InvokeAsync(() => cut.Instance.CommitEdit(ds.RowKeys[1], "Qty", "6")));
+
+        cut.WaitForAssertion(() => Assert.Equal(["25,000.0", "7,200.0", "37.5"], Cells(cut, "LineAmount")));
+    }
+
+    /// <summary>GS-092: a computed cell is read-only — no editor, no commit, paste skips it</summary>
+    [Fact]
+    public async Task GS_092_Compute_ReadOnly()
+    {
+        var ds = TestData.ThreeLines();
+        var cut = RenderGrid(ds);
+        var row = ds.RowKeys[0];
+
+        Assert.All(cut.FindAll("[role=gridcell][data-field=LineAmount]"), c => Assert.Equal("true", c.GetAttribute("aria-readonly")));
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.BeginEdit(row, "LineAmount")));
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.CommitEdit(row, "LineAmount", "1")));
+
+        await cut.InvokeAsync(() => cut.Instance.Paste(row, "Qty", [["7", "999", "100"]]));
+
+        Assert.Equal(7m, ds.GetValue(row, "Qty"));
+        Assert.Equal(100m, ds.GetValue(row, "UnitPrice"));
+        Assert.Equal(new PasteSkip(row, "LineAmount", PasteKeys.ReadOnly), Assert.Single(_pasted!.Skipped));
+    }
+
+    /// <summary>GS-092: the footer Sum adds the computed values</summary>
+    [Fact]
+    public async Task GS_092_Compute_FooterSum()
+    {
+        var ds = TestData.ThreeLines();
+        var cut = RenderGrid(ds);
+
+        Assert.Equal("31,037.5", cut.Find("[data-footer-field=LineAmount]").TextContent.Trim());
+
+        await cut.InvokeAsync(() => cut.Instance.CommitEdit(ds.RowKeys[0], "Qty", "11"));
+        cut.WaitForAssertion(() => Assert.Equal("33,537.5", cut.Find("[data-footer-field=LineAmount]").TextContent.Trim()));
+    }
+
+    /// <summary>GS-092: header filter, sort and grouping are off; export leaves the column out (the server can't compute it)</summary>
+    [Fact]
+    public async Task GS_092_Compute_NoFilterSortGroupExport()
+    {
+        var cut = RenderGrid(TestData.ThreeLines());
+
+        Assert.Empty(cut.FindAll("[data-field='LineAmount'] .quro-filter-button"));
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.OpenFilter("LineAmount")));
+        await cut.InvokeAsync(() => cut.Instance.Sort("LineAmount", false));
+        Assert.Empty(cut.Instance.SortColumns);
+        await cut.InvokeAsync(() => cut.Instance.SetGroupBy(["LineAmount"]));
+        Assert.Empty(cut.Instance.GroupColumns);
+
+        Assert.Equal(["Qty", "UnitPrice"], cut.Instance.GetExportRequest().Columns.Select(c => c.Field));
+    }
+
+    // ── GS-093 CellStyle ──
+
+    private static string[] Tones(IRenderedComponent<QuroGrid<PoLine>> cut, string field) =>
+        cut.FindAll($"[role=gridcell][data-field={field}]")
+            .Select(c => string.Join(" ", c.ClassList.Where(n => n.StartsWith("quro-tone-")).Order()))
+            .ToArray();
+
+    /// <summary>GS-093: the tone becomes a class on the cell and follows the row after an edit</summary>
+    [Fact]
+    public async Task GS_093_CellStyle_ToneClass_FollowsValue()
+    {
+        var ds = TestData.ThreeLines();
+        var cut = RenderGrid(ds);
+
+        Assert.Equal(["", "", "quro-tone-danger"], Tones(cut, "Qty"));
+
+        await cut.InvokeAsync(() => cut.Instance.CommitEdit(ds.RowKeys[1], "Qty", "4"));
+        cut.WaitForAssertion(() => Assert.Equal(["", "quro-tone-danger", "quro-tone-danger"], Tones(cut, "Qty")));
+    }
+
+    /// <summary>GS-093: combined tones; on a Compute column the value is the computed value</summary>
+    [Fact]
+    public void GS_093_CellStyle_CombinedTones_ComputedValue()
+    {
+        var ds = TestData.ThreeLines();
+        var seen = new List<object?>();
+        CellTone Style(object row, object? value)
+        {
+            seen.Add(value);
+            return value is > 10000m ? CellTone.Bold | CellTone.Highlight : CellTone.Muted;
+        }
+
+        var cut = Render<QuroGrid<PoLine>>(@<QuroGrid DataSet="ds" Culture="En">
+                                               <QuroColumn Field="LineAmount" HeaderKey="mm.amount" Type="CellType.Number"
+                                                           Compute="LineAmount" CellStyle="Style" />
+                                           </QuroGrid>);
+
+        Assert.Equal(["quro-tone-bold quro-tone-highlight", "quro-tone-muted", "quro-tone-muted"], Tones(cut, "LineAmount"));
+        Assert.Contains(25000m, seen);
+    }
+
+    /// <summary>GS-093: every tone has a class in quro-grid.css colored from a --qg-tone-* token that the app can set with --quro-tone-* (dark mode, A-38)</summary>
+    [Fact]
+    public void GS_093_CellStyle_ToneClassesUseTokens()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (!File.Exists(Path.Combine(dir.FullName, "QuroGrid.slnx")))
+            dir = dir.Parent!;
+        var css = File.ReadAllText(Path.Combine(dir.FullName, "src", "Quro.Grid", "wwwroot", "quro-grid.css"));
+
+        foreach (var tone in new[] { "danger", "success", "muted", "highlight" })
+        {
+            Assert.Matches($@"--qg-tone-{tone}:\s*var\(--quro-tone-{tone},", css);
+            Assert.Matches($@"\.quro-tone-{tone}\s*\{{[^}}]*var\(--qg-tone-{tone}\)", css);
+        }
+        Assert.Matches(@"\.quro-tone-bold\s*\{[^}]*font-weight", css);
+    }
+}

@@ -4,6 +4,7 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 소비자(QuroERP)는 버전을 올리기 전에 이 파일을 읽는다.
 
 ## Unreleased
+- Added: `QuroColumn.Compute`(행 → 표시 전용 값, 읽기 전용·저장 안 함·합계 Sum 가능·필터·정렬·그룹·내보내기 제외)와 `QuroColumn.CellStyle`(행·값 → `CellTone`), 새 열거형 `CellTone`, CSS 클래스 `quro-tone-*`, 토큰 `--quro-tone-danger`·`-success`·`-muted`·`-highlight` (A-59, GS-092·GS-093). 소비자 조치: 없음
 
 ## 0.5.0-alpha.2 — 2026-10-31
 QuroUI 마스크 박스 (A-69), 셀 선택 목록 키보드 (A-68). BREAKING 없음. 소비자 조치: 없음 (쓰려면 `QuroGridVersion`을 0.5.0-alpha.2로)

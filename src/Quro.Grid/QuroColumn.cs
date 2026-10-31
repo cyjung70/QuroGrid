@@ -74,6 +74,16 @@ public sealed class QuroColumn : ComponentBase, IDisposable
     /// <summary>Button 셀 표시 문자열 리소스 키 (Spec 4.8). Button 컬럼의 Field는 식별자일 뿐 값을 읽지 않는다.</summary>
     [Parameter] public string? TextKey { get; set; }
 
+    /// <summary>
+    /// Display-only value from the row item (A-59). The grid doesn't evaluate expressions; the app gives the function.
+    /// The column is read-only and not saved, and <see cref="Field"/> is only an identifier. Header filter, sort,
+    /// grouping and export are off; the footer Sum adds the computed values.
+    /// </summary>
+    [Parameter] public Func<object, object?>? Compute { get; set; }
+
+    /// <summary>Cell look by row item and cell value (the computed value on a <see cref="Compute"/> column), A-59.</summary>
+    [Parameter] public Func<object, object?, CellTone>? CellStyle { get; set; }
+
     private object? _rendered;
 
     /// <inheritdoc />
@@ -88,15 +98,16 @@ public sealed class QuroColumn : ComponentBase, IDisposable
     protected override void OnParametersSet()
     {
         object now = (Field, HeaderKey, Type, Format, ReadOnly, Width, Aggregate, CurrencyField, Required, Min, Max,
-            (Lookup, Options, CheckedValue, UncheckedValue, TextKey), (NewRowOnly, Filterable, Sortable, Groupable));
+            (Lookup, Options, CheckedValue, UncheckedValue, TextKey), (NewRowOnly, Filterable, Sortable, Groupable),
+            (Compute, CellStyle));
         if (_rendered is not null && !Equals(now, _rendered))
             Host?.ColumnChanged(this);
         _rendered = now;
     }
 
-    internal bool CanFilter => Filterable && Type != CellType.Button;
-    internal bool CanSort => Sortable && Type != CellType.Button;
-    internal bool CanGroup => Groupable && Type != CellType.Button;
+    internal bool CanFilter => Filterable && Type != CellType.Button && Compute is null;
+    internal bool CanSort => Sortable && Type != CellType.Button && Compute is null;
+    internal bool CanGroup => Groupable && Type != CellType.Button && Compute is null;
 
     /// <summary>Removes the column from the grid.</summary>
     public void Dispose() => Host?.RemoveColumn(this);

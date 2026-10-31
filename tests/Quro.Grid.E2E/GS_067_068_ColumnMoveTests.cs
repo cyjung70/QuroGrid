@@ -41,7 +41,7 @@ public class GS_067_068_ColumnMoveTests(SampleServer server) : GridPageTest(serv
 
         await Status("toggle-price").ClickAsync();
         await Expect(Cell(1, "UnitPrice")).ToHaveTextAsync("2,500");
-        Assert.Equal(["LineNo", "ItemCode", "Qty", "UnitPrice", "Amount"], await HeadersAsync());
+        Assert.Equal(["LineNo", "ItemCode", "Qty", "UnitPrice", "Amount", "AmountWithTax"], await HeadersAsync());
     }
 
     [Fact]
@@ -64,9 +64,9 @@ public class GS_067_068_ColumnMoveTests(SampleServer server) : GridPageTest(serv
         await DragHeaderAsync("Qty", "ItemCode", before: true);
 
         await Expect(Page.Locator("[role=columnheader]").Nth(1)).ToHaveAttributeAsync("data-field", "Qty");
-        Assert.Equal(["LineNo", "Qty", "ItemCode", "UnitPrice", "Amount"], await HeadersAsync());
+        Assert.Equal(["LineNo", "Qty", "ItemCode", "UnitPrice", "Amount", "AmountWithTax"], await HeadersAsync());
         var cells = await Page.Locator("[role=row][data-row='1'] [role=gridcell]").EvaluateAllAsync<string[]>("els => els.map(e => e.dataset.field)");
-        Assert.Equal(["LineNo", "Qty", "ItemCode", "UnitPrice", "Amount"], cells);
+        Assert.Equal(["LineNo", "Qty", "ItemCode", "UnitPrice", "Amount", "AmountWithTax"], cells);
         await Page.WaitForTimeoutAsync(300);
         Assert.Equal(1, InvokeFrames - before);              // 놓을 때 1회 (드래그 중에는 없음)
         Assert.Null(await Header("Qty").GetAttributeAsync("aria-sort"));
@@ -83,7 +83,7 @@ public class GS_067_068_ColumnMoveTests(SampleServer server) : GridPageTest(serv
 
         await DragHeaderAsync("ItemCode", "UnitPrice", before: false);    // 오른쪽 절반 → 뒤로
         await Expect(Page.Locator("[role=columnheader]").Nth(3)).ToHaveAttributeAsync("data-field", "ItemCode");
-        Assert.Equal(["LineNo", "Qty", "UnitPrice", "ItemCode", "Amount"], await HeadersAsync());
+        Assert.Equal(["LineNo", "Qty", "UnitPrice", "ItemCode", "Amount", "AmountWithTax"], await HeadersAsync());
 
         var before = InvokeFrames;
         await DragHeaderAsync("Amount", "LineNo", before: true);          // 고정 열 앞으로는 못 감 → 일반 영역 맨 앞
@@ -104,7 +104,7 @@ public class GS_067_068_ColumnMoveTests(SampleServer server) : GridPageTest(serv
         await Page.Mouse.UpAsync();
 
         await Expect(Header("Qty")).ToHaveAttributeAsync("aria-sort", "ascending");
-        Assert.Equal(["LineNo", "ItemCode", "Qty", "UnitPrice", "Amount"], await HeadersAsync());
+        Assert.Equal(["LineNo", "ItemCode", "Qty", "UnitPrice", "Amount", "AmountWithTax"], await HeadersAsync());
         await Expect(Header("Qty")).Not.ToHaveAttributeAsync("class", new Regex("quro-dragging"));
     }
 }

@@ -195,7 +195,7 @@ public partial class QuroGrid<TItem> where TItem : class
     /// </summary>
     /// <param name="format">만들 파일 형식 (기본 xlsx)</param>
     public GridExportRequest GetExportRequest(ExportFormat format = ExportFormat.Xlsx) => new(
-        Columns.Where(c => c.Type != CellType.Button)
+        Columns.Where(c => c.Type != CellType.Button && c.Compute is null)   // the server can't run a Compute function (A-59)
             .Select(c => new ExportColumn(c.Field, c.HeaderKey, Text(c.HeaderKey), c.Type, c.Format, WidthOf(c),
                 c.CurrencyField, c.Aggregate, c.Options))
             .ToList(),
@@ -373,7 +373,7 @@ public partial class QuroGrid<TItem> where TItem : class
     {
         using var step = DataSet.BeginUndoStep();   // 사용자 동작 하나 = Undo 한 단계 (앱의 이벤트 처리 포함, A-33)
         var col = Column(field);
-        if (col.ReadOnly || NewRowLocked(rowKey, col))
+        if (col.ReadOnly || col.Compute is not null || NewRowLocked(rowKey, col))
             return false;
 
         if (col.Type == CellType.Popup && col.Lookup is not null && !string.IsNullOrEmpty(text))
@@ -519,14 +519,15 @@ public partial class QuroGrid<TItem> where TItem : class
     }
 
     private bool Editable(int rowKey, QuroColumn col) =>
-        !col.ReadOnly && col.Type != CellType.Button && DataSet.GetState(rowKey) != RowState.Deleted && !NewRowLocked(rowKey, col);
+        !col.ReadOnly && col.Type != CellType.Button && col.Compute is null && DataSet.GetState(rowKey) != RowState.Deleted
+        && !NewRowLocked(rowKey, col);
 
     /// <summary>A <see cref="QuroColumn.NewRowOnly"/> column on a row that is not an added row (G-01).</summary>
     private bool NewRowLocked(int rowKey, QuroColumn col) => col.NewRowOnly && DataSet.GetState(rowKey) != RowState.Inserted;
 
-    /// <summary>aria-readonly of a cell: read-only column, Button, or edit-new column on a saved row.</summary>
+    /// <summary>aria-readonly of a cell: read-only column, Button, Compute column, or edit-new column on a saved row.</summary>
     internal bool CellReadOnly(int rowKey, QuroColumn col) =>
-        col.ReadOnly || col.Type == CellType.Button || NewRowLocked(rowKey, col);
+        col.ReadOnly || col.Type == CellType.Button || col.Compute is not null || NewRowLocked(rowKey, col);
 
     private void EndEditing()
     {
@@ -1846,7 +1847,7 @@ public partial class QuroGrid<TItem> where TItem : class
     {
         if (_definitionRules.TryGetValue(col.Field, out var defined))
             DataSet.SetRule(col.Field, defined);   // column req/min/max merged with validate rows (QuroGrid.Definition.cs)
-        else if (col.Type != CellType.Button && (col.Required || col.Min is not null || col.Max is not null)
+        else if (col.Type != CellType.Button && col.Compute is null && (col.Required || col.Min is not null || col.Max is not null)
 )
             DataSet.SetRule(col.Field, new FieldRule { Required = col.Required, Min = col.Min, Max = col.Max });
     }
@@ -1907,7 +1908,7 @@ public partial class QuroGrid<TItem> where TItem : class
         if (col.Type is CellType.Button or CellType.Check)
             return "";   // Button은 바인딩 값이 없고, Check는 체크 표시로 그린다
 
-        var value = DataSet.GetValue(rowKey, col.Field);
+        var value = CellValue(rowKey, col);
         return col.Type switch
         {
             CellType.Currency => FormatNumber(value, CurrencyFormat(col, rowKey)),
@@ -1945,7 +1946,26 @@ public partial class QuroGrid<TItem> where TItem : class
     };
 
     internal CellMark? Mark(int rowKey, QuroColumn col) =>
-        col.Type == CellType.Button ? null : DataSet.GetCellMark(rowKey, col.Field);
+        col.Type == CellType.Button || col.Compute is not null ? null : DataSet.GetCellMark(rowKey, col.Field);
+
+    /// <summary>Cell value: the DataSet value, or the app's <see cref="QuroColumn.Compute"/> result (A-59).</summary>
+    private object? CellValue(int rowKey, QuroColumn col) =>
+        col.Compute is { } compute ? compute(DataSet.GetItem(rowKey)) : DataSet.GetValue(rowKey, col.Field);
+
+    /// <summary>Classes for the app's <see cref="QuroColumn.CellStyle"/> tones (A-59). Empty when there is none.</summary>
+    internal string ToneClass(int rowKey, QuroColumn col)
+    {
+        if (col.CellStyle is not { } style || col.Type == CellType.Button)
+            return "";
+        var tone = style(DataSet.GetItem(rowKey), CellValue(rowKey, col));
+        if (tone == CellTone.None)
+            return "";
+        var cls = new System.Text.StringBuilder();
+        foreach (var flag in Enum.GetValues<CellTone>())
+            if (flag != CellTone.None && tone.HasFlag(flag))
+                cls.Append(" quro-tone-").Append(flag.ToString().ToLowerInvariant());
+        return cls.ToString();
+    }
 
     private static string OptionText(QuroColumn col, object? value) =>
         col.Options?.FirstOrDefault(o => Equals(o.Value, value))?.Text ?? value?.ToString() ?? "";
@@ -1970,14 +1990,15 @@ public partial class QuroGrid<TItem> where TItem : class
         if (!Paging)
             return SumText(col, keys);
 
-        // 적재되지 않은 행이 있으므로 서버 합계 + 저장 전 변경분 (A-24). 서버 합계가 없으면 비운다
-        if (_totals is null || !_totals.TryGetValue(col.Field, out var total))
+        // 적재되지 않은 행이 있으므로 서버 합계 + 저장 전 변경분 (A-24). 서버 합계가 없으면 비운다.
+        // A Compute column has no server total (A-59)
+        if (col.Compute is not null || _totals is null || !_totals.TryGetValue(col.Field, out var total))
             return "";
         return FormatNumber(total + PendingDelta(col.Field), SumFormat(col, keys));
     }
 
     private string SumText(QuroColumn col, IReadOnlyList<int> keys) =>
-        FormatNumber(keys.Sum(k => Number(DataSet.GetValue(k, col.Field))), SumFormat(col, keys));
+        FormatNumber(keys.Sum(k => Number(CellValue(k, col))), SumFormat(col, keys));
 
     // 통화가 섞이면 합계 의미가 없으므로 첫 행의 통화 자릿수를 쓴다. 혼합 통화 합계 규칙은 Spec에 없다.
     private string? SumFormat(QuroColumn col, IReadOnlyList<int> keys) =>

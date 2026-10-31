@@ -19,6 +19,10 @@
     --qg-check-line: var(--quro-check-line, #667085);
     --qg-check-mark: var(--quro-check-mark, #fff);
     --qg-shadow: var(--quro-shadow, rgb(0 0 0 / 16%));
+    --qg-tone-danger: var(--quro-tone-danger, var(--qg-error-line));
+    --qg-tone-success: var(--quro-tone-success, #079455);
+    --qg-tone-muted: var(--quro-tone-muted, var(--qg-check-line));
+    --qg-tone-highlight: var(--quro-tone-highlight, color-mix(in srgb, var(--qg-warning-line) 18%, var(--qg-bg)));
 
     display: inline-block;
     overflow: auto;
@@ -71,6 +75,13 @@
 .quro-footer.quro-frozen {
     background: var(--qg-head-bg);
 }
+
+/* CellStyle tones (A-59). Before the marks so an error or warning background wins over Highlight */
+.quro-tone-danger { color: var(--qg-tone-danger); }
+.quro-tone-success { color: var(--qg-tone-success); }
+.quro-tone-muted { color: var(--qg-tone-muted); }
+.quro-tone-highlight { background: var(--qg-tone-highlight); }
+.quro-tone-bold { font-weight: 600; }
 
 .quro-mark-error {
     background: var(--qg-error);
