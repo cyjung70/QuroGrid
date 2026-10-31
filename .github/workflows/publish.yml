@@ -75,4 +75,9 @@ jobs:
 
       # Pushes each .nupkg with its .snupkg; --skip-duplicate makes a re-run safe
       - name: Push
-        run: dotnet nuget push "out/*.nupkg" --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+        run: |
+          # One file at a time: dotnet nuget push did not expand out/*.nupkg on the Windows runner
+          foreach ($p in Get-ChildItem out -Filter *.nupkg | Where-Object Extension -eq '.nupkg') {
+            dotnet nuget push $p.FullName --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+            if ($LASTEXITCODE -ne 0) { throw "Push failed: $($p.Name)" }
+          }
