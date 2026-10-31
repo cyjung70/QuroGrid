@@ -73,6 +73,9 @@
         <QuroColumn Field="DueDate" HeaderKey="mm.due_date" Type="CellType.Date" />
     }
     <QuroColumn Field="Amount" HeaderKey="mm.amount" Type="CellType.Number" ReadOnly="true" Aggregate="Aggregate.Sum" />
+    @* 표시 전용 계산 열과 값에 따른 스타일 (A-59, GS-092·GS-093): 그리드는 식을 모르고 앱 함수만 부른다 *@
+    <QuroColumn Field="AmountWithTax" HeaderKey="mm.amount_tax" Type="CellType.Number" Format="N0" Aggregate="Aggregate.Sum"
+                Compute="AmountWithTax" CellStyle="LargeAmount" />
 </QuroGrid>
 
 @* 화면 쪽 안내 (Addendum A-04: 표시 방식은 앱이 정한다). E2E 확인용 값도 함께 보여 준다. *@
@@ -123,6 +126,10 @@
         _priceHidden = !_priceHidden;
         _grid.SetColumnVisible("UnitPrice", !_priceHidden);
     }
+
+    private static object? AmountWithTax(object row) => ((PoLine)row).Amount * 1.1m;
+
+    private static CellTone LargeAmount(object row, object? value) => value is >= 100000m ? CellTone.Bold : CellTone.None;
 
     private int _refreshes;   // 상태 갱신 버튼 (E2E가 다시 그려진 것을 확인)
     private QuroGrid<PoLine> _grid = default!;

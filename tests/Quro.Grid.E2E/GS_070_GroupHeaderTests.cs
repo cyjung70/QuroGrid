@@ -71,11 +71,11 @@ public class GS_070_GroupHeaderTests(SampleServer server) : GridPageTest(server)
 
         await DragHeaderAsync("UnitPrice", "Qty", before: true);
         await Expect(Page.Locator("[role=columnheader][data-field]").Nth(2)).ToHaveAttributeAsync("data-field", "UnitPrice");
-        Assert.Equal(["LineNo", "ItemCode", "UnitPrice", "Qty", "Amount"], await LeavesAsync());
+        Assert.Equal(["LineNo", "ItemCode", "UnitPrice", "Qty", "Amount", "AmountWithTax"], await LeavesAsync());
 
         await DragHeaderAsync("ItemCode", "Qty", before: true);               // 그룹을 가르는 자리: 옮기지 않음
         await Page.WaitForTimeoutAsync(300);
-        Assert.Equal(["LineNo", "ItemCode", "UnitPrice", "Qty", "Amount"], await LeavesAsync());
+        Assert.Equal(["LineNo", "ItemCode", "UnitPrice", "Qty", "Amount", "AmountWithTax"], await LeavesAsync());
         await Expect(GroupHeader).ToHaveCountAsync(1);
     }
 }

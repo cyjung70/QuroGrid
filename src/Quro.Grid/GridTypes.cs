@@ -25,6 +25,27 @@ public enum CellType
     Button,
 }
 
+/// <summary>
+/// Cell look returned by <see cref="QuroColumn.CellStyle"/> (A-59). A fixed set, not CSS: each tone is a class
+/// <c>quro-tone-*</c> colored from the <c>--quro-tone-*</c> theme tokens.
+/// </summary>
+[Flags]
+public enum CellTone
+{
+    /// <summary>Default look.</summary>
+    None = 0,
+    /// <summary>Red text (e.g. negative amount).</summary>
+    Danger = 1,
+    /// <summary>Green text.</summary>
+    Success = 2,
+    /// <summary>Grey text.</summary>
+    Muted = 4,
+    /// <summary>Light background.</summary>
+    Highlight = 8,
+    /// <summary>Bold text.</summary>
+    Bold = 16,
+}
+
 /// <summary>합계 행 집계 (Spec 4.5).</summary>
 // JSON(저장 API 요청 등)에는 이름으로 쓴다 (GS-054)
 [JsonConverter(typeof(JsonStringEnumConverter<Aggregate>))]

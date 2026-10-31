@@ -8,7 +8,7 @@
     {
         var col = Grid.Columns[i];
         var mark = Grid.Mark(RowKey, col);
-        <div class="@MarkClass(Grid.CellClass(i, "quro-body-cell"), mark)" style="@Grid.CellStyle(i)" role="gridcell"
+        <div class="@(MarkClass(Grid.CellClass(i, "quro-body-cell"), mark) + Grid.ToneClass(RowKey, col))" style="@Grid.CellStyle(i)" role="gridcell"
              aria-colindex="@(i + 1)" data-field="@col.Field" data-type="@Grid.TypeAttribute(col)"
              data-copy="@Grid.CopyText(RowKey, col)"
              aria-readonly="@(Grid.CellReadOnly(RowKey, col) ? "true" : null)"
