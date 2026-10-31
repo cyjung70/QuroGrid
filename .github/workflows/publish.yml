@@ -1,0 +1,77 @@
+# Publishes the five Quro.* packages to nuget.org with Trusted Publishing (no stored API key).
+# Runs when a version tag (v0.5.0-alpha.4) is pushed, or by hand for an existing tag.
+name: publish
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to publish, e.g. v0.5.0-alpha.4'
+        required: true
+
+permissions:
+  contents: read
+  id-token: write   # nuget.org Trusted Publishing
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      DOTNET_NOLOGO: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # The tag must match the version in Directory.Build.props
+      - name: Version
+        id: version
+        run: |
+          [xml]$props = Get-Content Directory.Build.props
+          $group = $props.Project.PropertyGroup | Where-Object { $_.VersionPrefix } | Select-Object -First 1
+          $version = if ($group.VersionSuffix) { "$($group.VersionPrefix)-$($group.VersionSuffix)" } else { $group.VersionPrefix }
+          if ("v$version" -ne $env:TAG) { throw "Tag $env:TAG does not match Directory.Build.props version $version." }
+          "value=$version" >> $env:GITHUB_OUTPUT
+
+      # E2E starts the sample app with 'dotnet run --no-build' (Debug), so test the Debug build
+      - name: Build
+        run: dotnet build QuroGrid.slnx
+
+      - name: Install Playwright browsers
+        run: ./tests/Quro.Grid.E2E/bin/Debug/net10.0/playwright.ps1 install chromium
+
+      - name: Test
+        run: dotnet test QuroGrid.slnx --no-build
+
+      - name: Pack
+        run: |
+          $projects = 'Quro.Grid.Data', 'Quro.Grid.Definition', 'Quro.Grid', 'Quro.UI', 'Quro.Grid.DefLint'
+          foreach ($p in $projects) {
+            dotnet pack "src/$p/$p.csproj" -c Release -o out -p:Version=${{ steps.version.outputs.value }} -p:ContinuousIntegrationBuild=true
+            if ($LASTEXITCODE -ne 0) { throw "Pack failed: $p" }
+          }
+          Get-ChildItem out
+
+      - name: NuGet login
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      # Pushes each .nupkg with its .snupkg; --skip-duplicate makes a re-run safe
+      - name: Push
+        run: dotnet nuget push "out/*.nupkg" --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate

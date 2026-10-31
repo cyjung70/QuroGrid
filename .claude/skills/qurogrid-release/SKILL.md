@@ -35,6 +35,12 @@ git add CHANGELOG.md Directory.Build.props
 git commit -m "release: <버전>"
 git tag v<버전>
 ```
+## 6. nuget.org
+`git push origin v<버전>`이 `.github/workflows/publish.yml`을 실행한다: 태그와 `Directory.Build.props` 버전 일치 확인 → 빌드·전체 테스트 → 다섯 패키지 pack → Trusted Publishing으로 nuget.org push.
+- 결과 확인: `gh run list --workflow publish.yml`. 실패하면 고친 뒤 **새 버전**으로 다시 (같은 태그 재실행은 `--skip-duplicate`로 안전)
+- 기존 태그 수동 게시: `gh workflow run publish.yml -f tag=v<버전>`
+- nuget.org 버전은 지울 수 없다 (목록 숨김만 가능)
+
 보고 내용 (QuroERP 쪽 작업자에게 전달):
 - 새 버전, CHANGELOG 요약, `BREAKING` 여부와 소비자 수정 방법
 - QuroERP에서 할 일: `build/QuroGrid.props`의 `QuroGridVersion`을 새 버전으로 (QuroERP 스킬 `quro-grid` 3절)
