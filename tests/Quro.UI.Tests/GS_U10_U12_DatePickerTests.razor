@@ -8,8 +8,8 @@
 @code {
     // GS-U10 ~ GS-U12: QuroDatePicker bound to data set columns (Control Spec 10, A-65)
 
-    private static readonly CultureInfo Ko = new("ko-KR");
-    private static readonly CultureInfo En = new("en-US");
+    private static readonly CultureInfo Ko = new("ko-KR", useUserOverride: false);
+    private static readonly CultureInfo En = new("en-US", useUserOverride: false);
 
     private IRenderedComponent<QuroDatePicker<Period>> RenderDate(QuroDataSet<Period> ds, string field = "From",
         string? toField = null, bool month = false, CultureInfo? culture = null, bool readOnly = false) =>
@@ -35,7 +35,7 @@
     {
         var ds = Period.One();
 
-        Assert.Equal("2026-10-05", Input(RenderDate(ds)).GetAttribute("value"));
+        Assert.Equal("2026. 10. 5.", Input(RenderDate(ds)).GetAttribute("value"));
         var en = RenderDate(ds, culture: En);
         Assert.Equal("10/5/2026", Input(en).GetAttribute("value"));
         Assert.Equal("2026-10-05", Input(en).GetAttribute("data-iso"));
@@ -61,7 +61,7 @@
         var ds = Period.One();
         var changes = new List<DataSetValueChangedEventArgs>();
         ds.ValueChanged += (_, e) => changes.Add(e);
-        var c = new CultureInfo(culture);
+        var c = new CultureInfo(culture, useUserOverride: false);
         var date = RenderDate(ds, culture: c);
 
         Commit(date, text);
@@ -81,9 +81,9 @@
         var date = RenderDate(ds);
 
         Commit(date, "2026-13-45");
-        ShowsText(date, "2026-10-05");
+        ShowsText(date, "2026. 10. 5.");
         Commit(date, "20261005");
-        ShowsText(date, "2026-10-05");
+        ShowsText(date, "2026. 10. 5.");
 
         Assert.Equal(0, changes);
         Assert.Equal(new DateOnly(2026, 10, 5), ds.GetValue(1, "From"));
@@ -100,7 +100,7 @@
 
         var fixedDate = RenderDate(ds, field: "Fixed");
         Commit(fixedDate, "");
-        ShowsText(fixedDate, "2026-01-02");
+        ShowsText(fixedDate, "2026. 1. 2.");
         Assert.Equal(new DateOnly(2026, 1, 2), ds.GetValue(1, "Fixed"));
 
         Commit(RenderDate(ds, field: "Due"), "2026-11-30");
@@ -148,7 +148,7 @@
         var ko = RenderDate(ds, field: "CloseMonth", month: true);
         var en = RenderDate(ds, field: "CloseMonth", month: true, culture: En);
 
-        Assert.Equal("2026-10", Input(ko).GetAttribute("value"));
+        Assert.Equal("2026. 10", Input(ko).GetAttribute("value"));
         Assert.Equal("10/2026", Input(en).GetAttribute("value"));
         Assert.Equal("2026-10", Input(en).GetAttribute("data-iso"));
         Assert.Equal("true", Root(en).GetAttribute("data-quro-month"));
@@ -182,7 +182,7 @@
         var ds = Period.One();
         var range = RenderDate(ds, toField: "To");
 
-        Assert.Equal("2026-10-20", Input(range, "to").GetAttribute("value"));
+        Assert.Equal("2026. 10. 20.", Input(range, "to").GetAttribute("value"));
         Commit(range, "2026-10-31", "to");
 
         Assert.Equal(new DateOnly(2026, 10, 31), ds.GetValue(1, "To"));
@@ -197,9 +197,9 @@
         var range = RenderDate(ds, toField: "To");
 
         Commit(range, "2026-10-21");
-        ShowsText(range, "2026-10-05");
+        ShowsText(range, "2026. 10. 5.");
         Commit(range, "2026-10-04", "to");
-        ShowsText(range, "2026-10-20", "to");
+        ShowsText(range, "2026. 10. 20.", "to");
         Assert.False(ds.HasChanges);
 
         Commit(range, "2026-10-20");   // same day is fine

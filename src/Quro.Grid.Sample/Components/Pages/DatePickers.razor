@@ -34,7 +34,7 @@
 
     protected override void OnInitialized()
     {
-        _culture = new CultureInfo(CultureName ?? "ko-KR");
+        _culture = new CultureInfo(CultureName ?? "ko-KR", useUserOverride: false);   // standard data, not this machine's Windows date settings
         _period.Load([new SamplePeriod
         {
             Id = 1, Due = new DateOnly(2026, 10, 30), From = new DateOnly(2026, 10, 5), To = new DateOnly(2026, 10, 20),
