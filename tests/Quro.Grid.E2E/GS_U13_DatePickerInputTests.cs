@@ -61,7 +61,7 @@ public class GS_U13_DatePickerInputTests(SampleServer server) : PageTest
     public async Task GS_U13_KoreanCulture_TitleAndWeekdays()
     {
         await OpenAsync("ko-KR");
-        await Expect(Box("Due")).ToHaveValueAsync("2026-10-30");
+        await Expect(Box("Due")).ToHaveValueAsync("2026. 10. 30.");
 
         await Box("Due").ClickAsync();
 

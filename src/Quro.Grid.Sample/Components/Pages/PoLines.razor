@@ -150,7 +150,7 @@
     private IReadOnlyList<string>? _helpCodes;
     private TaskCompletionSource<string?>? _help;
     private int? _selectedRow;
-    private CultureInfo _culture = new("en-US");
+    private CultureInfo _culture = new("en-US", useUserOverride: false);
     private int _pastes;
     private int _skipped;
     private string _pasteMessage = "";
@@ -217,7 +217,7 @@
     protected override void OnInitialized()
     {
         if (!string.IsNullOrEmpty(CultureName))
-            _culture = new CultureInfo(CultureName);
+            _culture = new CultureInfo(CultureName, useUserOverride: false);
 
         PoLine[] rows =
         [

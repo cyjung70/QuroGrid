@@ -149,7 +149,7 @@ QuroGrid는 DI 등록 메서드(`AddQuroGrid`)와 서비스 인터페이스를 �
 | `Culture` | 표시·입력·달력의 culture. null이면 현재 culture |
 | `PlaceholderKey`·`Localizer`·`ReadOnly` | 텍스트 박스와 같다 |
 
-- 표시: culture 짧은 날짜(`d`, ko `2026-10-30`, en-US `10/30/2026`). 월 모드는 거기서 일을 뺀 형식(ko `2026-10`, en-US `10/2026`). `DateTime` 열에는 자정 값을 넣는다
+- 표시: culture 짧은 날짜(`d`, 표준 ko-KR `2026. 10. 30.`, en-US `10/30/2026`). 월 모드는 거기서 일을 뺀 형식(ko `2026. 10`, en-US `10/2026`). `DateTime` 열에는 자정 값을 넣는다. 형식은 넘긴 `CultureInfo`의 `ShortDatePattern`을 따른다: `new CultureInfo("ko-KR")`는 서버 Windows 사용자 설정을 따를 수 있으므로, ko에서 `2026-10-30`을 원하면 앱이 `DateTimeFormat.ShortDatePattern = "yyyy-MM-dd"`인 culture를 넘긴다
 - 입력 확정(포커스 이탈·Enter) 때 `SetValue` 1회: culture 짧은 날짜, `yyyy-MM-dd`, 숫자만(culture 순서: ko `20261030`, en-US `10302026`). 월 모드는 그 형식, `yyyy-MM`, 숫자 6자리. 읽을 수 없는 입력·nullable이 아닌 열의 빈 입력은 마지막 값으로 돌아간다. 같은 값이면 호출 없음
 - 달력은 브라우저(`quro-ui.js`, `Intl`)가 culture 언어의 월·요일 이름과 culture 주 시작 요일로 그린다. 달 이동은 서버 호출 없음(R2), 날짜를 누르면 1회. 칸 클릭·Alt+↓로 열고 Esc로 닫는다
 - CSS 클래스 `quro-ui-date`·`quro-ui-date-pop`·`quro-ui-cal-*`, 상태 `quro-ui-required`(시작·끝 중 하나라도 필수)·`quro-ui-readonly`, 변수는 4.4·4.5와 같다
