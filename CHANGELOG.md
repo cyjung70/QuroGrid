@@ -5,6 +5,10 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 
 ## Unreleased
 
+## 0.5.0-alpha.5 — 2026-11-01
+nuget.org 게시용 재릴리스. 패키지 코드는 0.5.0-alpha.4와 같다. BREAKING 없음. 소비자 조치: 없음
+- Fixed (테스트·문서): 날짜 표시 테스트가 개발 PC의 Windows 날짜 설정(ko-KR `yyyy-MM-dd`)에 기대던 것을 표준 culture 데이터(`useUserOverride: false`)로 고침. consumer-contract 4.6의 ko 표시 예를 표준 형식 `2026. 10. 30.`으로 바로잡고, `yyyy-MM-dd`를 원하면 앱이 `ShortDatePattern`을 지정한 culture를 넘긴다고 적음
+
 ## 0.5.0-alpha.4 — 2026-11-01
 첫 nuget.org 게시. 코드는 0.5.0-alpha.3과 같다. BREAKING 없음. 소비자 조치: 없음 (nuget.org에서 받으려면 `QuroGridVersion`을 0.5.0-alpha.4로)
 - Changed: 패키지 메타데이터 — 다섯 패키지 모두 설명·프로젝트 URL·저장소 URL·패키지 README(`docs/nuget/README.md`)를 갖는다

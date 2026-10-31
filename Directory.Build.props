@@ -3,7 +3,7 @@
        Version is overridden by scripts/pack-local.ps1 (-p:Version=...). -->
   <PropertyGroup>
     <VersionPrefix>0.5.0</VersionPrefix>
-    <VersionSuffix>alpha.4</VersionSuffix>
+    <VersionSuffix>alpha.5</VersionSuffix>
     <Authors>QuroERP Community</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/cyjung70/QuroGrid</PackageProjectUrl>
