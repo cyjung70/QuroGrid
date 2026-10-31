@@ -4,6 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <Description>QuroUI Blazor Server input controls bound to a data set column: text, mask, combo, date, label and static text.</Description>
   </PropertyGroup>
 
   <ItemGroup>

@@ -5,6 +5,10 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 
 ## Unreleased
 
+## 0.5.0-alpha.4 — 2026-11-01
+첫 nuget.org 게시. 코드는 0.5.0-alpha.3과 같다. BREAKING 없음. 소비자 조치: 없음 (nuget.org에서 받으려면 `QuroGridVersion`을 0.5.0-alpha.4로)
+- Changed: 패키지 메타데이터 — 다섯 패키지 모두 설명·프로젝트 URL·저장소 URL·패키지 README(`docs/nuget/README.md`)를 갖는다
+
 ## 0.5.0-alpha.3 — 2026-10-31
 그리드 계산 열·조건부 스타일 (A-59). BREAKING 없음. 소비자 조치: 없음 (쓰려면 `QuroGridVersion`을 0.5.0-alpha.3으로)
 - Added: `QuroColumn.Compute`(행 → 표시 전용 값, 읽기 전용·저장 안 함·합계 Sum 가능·필터·정렬·그룹·내보내기 제외)와 `QuroColumn.CellStyle`(행·값 → `CellTone`), 새 열거형 `CellTone`, CSS 클래스 `quro-tone-*`, 토큰 `--quro-tone-danger`·`-success`·`-muted`·`-highlight` (A-59, GS-092·GS-093). 소비자 조치: 없음
