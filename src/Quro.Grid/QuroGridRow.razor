@@ -32,10 +32,11 @@
                         {
                             @* 현재 값은 선택 표시만. 같은 항목을 다시 골라도 확정된다. 항목 클릭은 quro-grid.js가 받아 PickOption으로 1회 (R5) *@
                             var selected = Grid.PickerIndex(col);
+                            var options = Grid.OptionsOf(col, RowKey) ?? [];
                             <ul class="quro-options" role="listbox">
-                                @for (var o = 0; o < col.Options?.Count; o++)
+                                @for (var o = 0; o < options.Count; o++)
                                 {
-                                    <li class="quro-option" role="option" data-index="@o" aria-selected="@(o == selected ? "true" : null)">@col.Options[o].Text</li>
+                                    <li class="quro-option" role="option" data-index="@o" aria-selected="@(o == selected ? "true" : null)">@options[o].Text</li>
                                 }
                             </ul>
                         }

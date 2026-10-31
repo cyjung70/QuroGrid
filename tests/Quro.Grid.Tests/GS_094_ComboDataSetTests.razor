@@ -1,0 +1,209 @@
+@inherits GridTestContext
+
+@code {
+    // GS-094: Combo cell bound to a code DataSet — OptionsSource·ValueField·TextField, linked combo FilterField·ParentField (A-57)
+
+    public sealed class Address
+    {
+        public string? Country { get; set; }
+        public string? City { get; set; }
+    }
+
+    public sealed class Code
+    {
+        public string Value { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string? Parent { get; set; }
+    }
+
+    private static readonly CultureInfo En = new("en-US", useUserOverride: false);
+    private PastedArgs? _pasted;
+
+    private static QuroDataSet<Code> Countries()
+    {
+        var ds = new QuroDataSet<Code>();
+        ds.Load([new Code { Value = "KR", Name = "Korea" }, new Code { Value = "JP", Name = "Japan" }]);
+        return ds;
+    }
+
+    private static QuroDataSet<Code> Cities()
+    {
+        var ds = new QuroDataSet<Code>();
+        ds.Load(
+        [
+            new Code { Value = "SEL", Name = "Seoul", Parent = "KR" },
+            new Code { Value = "PUS", Name = "Busan", Parent = "KR" },
+            new Code { Value = "TYO", Name = "Tokyo", Parent = "JP" },
+        ]);
+        return ds;
+    }
+
+    private static QuroDataSet<Address> Addresses()
+    {
+        var ds = new QuroDataSet<Address>();
+        ds.Load([new Address { Country = "KR", City = "PUS" }, new Address { Country = "JP", City = "TYO" }, new Address()]);
+        return ds;
+    }
+
+    private IRenderedComponent<QuroGrid<Address>> RenderGrid(QuroDataSet<Address> ds, QuroDataSet<Code> countries, QuroDataSet<Code> cities) =>
+        Render<QuroGrid<Address>>(@<QuroGrid DataSet="ds" Culture="En" OnPasted="(PastedArgs e) => _pasted = e">
+                                      <QuroColumn Field="Country" HeaderKey="addr.country" Type="CellType.Combo"
+                                                  OptionsSource="countries" ValueField="Value" TextField="Name" />
+                                      <QuroColumn Field="City" HeaderKey="addr.city" Type="CellType.Combo"
+                                                  OptionsSource="cities" ValueField="Value" TextField="Name"
+                                                  FilterField="Parent" ParentField="Country" />
+                                  </QuroGrid>);
+
+    private static string[] Cells(IRenderedComponent<QuroGrid<Address>> cut, string field) =>
+        cut.FindAll($"[role=gridcell][data-field={field}]").Select(c => c.TextContent.Trim()).ToArray();
+
+    private static async Task<string[]> PickerItems(IRenderedComponent<QuroGrid<Address>> cut, int row, string field)
+    {
+        await cut.InvokeAsync(() => cut.Instance.BeginEdit(row, field));
+        await cut.InvokeAsync(() => cut.Instance.OpenPicker(row, field, null));
+        return cut.FindAll(".quro-picker [role=option]").Select(i => i.TextContent.Trim()).ToArray();
+    }
+
+    /// <summary>GS-094: cells show TextField of the matching code row; an unknown code shows as is</summary>
+    [Fact]
+    public void GS_094_ShowsCodeText()
+    {
+        var ds = Addresses();
+        ds.SetValue(ds.RowKeys[2], "Country", "US");
+        var cut = RenderGrid(ds, Countries(), Cities());
+
+        Assert.Equal(["Korea", "Japan", "US"], Cells(cut, "Country"));
+        Assert.Equal(["Busan", "Tokyo", ""], Cells(cut, "City"));
+    }
+
+    /// <summary>GS-094: the list comes from the code DataSet (deleted code rows left out); picking stores ValueField</summary>
+    [Fact]
+    public async Task GS_094_PickFromCodeDataSet()
+    {
+        var ds = Addresses();
+        var countries = Countries();
+        countries.AddRow(new Code { Value = "US", Name = "United States" });
+        countries.DeleteRow(countries.RowKeys[1]);
+        var cut = RenderGrid(ds, countries, Cities());
+        var row = ds.RowKeys[2];
+
+        Assert.Equal(["Korea", "United States"], await PickerItems(cut, row, "Country"));
+        await cut.InvokeAsync(() => cut.Instance.PickOption(1));
+
+        Assert.Equal("US", ds.GetValue(row, "Country"));
+        Assert.Equal("United States", Cells(cut, "Country")[2]);
+    }
+
+    /// <summary>GS-094: a linked combo lists only the codes of the row's parent value; none while the parent is empty</summary>
+    [Fact]
+    public async Task GS_094_LinkedCombo_ListsParentCodes()
+    {
+        var ds = Addresses();
+        var cut = RenderGrid(ds, Countries(), Cities());
+
+        Assert.Equal(["Seoul", "Busan"], await PickerItems(cut, ds.RowKeys[0], "City"));
+        await cut.InvokeAsync(() => cut.Instance.CancelEdit());
+        Assert.Equal(["Tokyo"], await PickerItems(cut, ds.RowKeys[1], "City"));
+        await cut.InvokeAsync(() => cut.Instance.CancelEdit());
+        Assert.Empty(await PickerItems(cut, ds.RowKeys[2], "City"));
+    }
+
+    /// <summary>GS-094: a parent change clears the child when its code left the list (undoable with RevertRow); a child still in the list stays</summary>
+    [Fact]
+    public async Task GS_094_ParentChange_ClearsChild()
+    {
+        var ds = Addresses();
+        var countries = Countries();
+        countries.AddRow(new Code { Value = "KP", Name = "Other" });
+        var cities = Cities();
+        cities.AddRow(new Code { Value = "TYO", Name = "Tokyo (KP)", Parent = "KP" });
+        var cut = RenderGrid(ds, countries, cities);
+        var row = ds.RowKeys[0];
+
+        Assert.True(await cut.InvokeAsync(() => cut.Instance.CommitEdit(row, "Country", "JP")));
+        Assert.Null(ds.GetValue(row, "City"));
+        cut.WaitForAssertion(() => Assert.Equal("", Cells(cut, "City")[0]));
+
+        ds.RevertRow(row);
+        Assert.Equal("KR", ds.GetValue(row, "Country"));
+        Assert.Equal("PUS", ds.GetValue(row, "City"));
+
+        var tokyo = ds.RowKeys[1];
+        Assert.True(await cut.InvokeAsync(() => cut.Instance.CommitEdit(tokyo, "Country", "KP")));
+        Assert.Equal("TYO", ds.GetValue(tokyo, "City"));
+        cut.WaitForAssertion(() => Assert.Equal("Tokyo (KP)", Cells(cut, "City")[1]));
+    }
+
+    /// <summary>GS-094: paste and typed text match code or text within the row's list; a city of another country is invalid</summary>
+    [Fact]
+    public async Task GS_094_PasteMatchesRowList()
+    {
+        var ds = Addresses();
+        var cut = RenderGrid(ds, Countries(), Cities());
+        var row = ds.RowKeys[0];
+
+        await cut.InvokeAsync(() => cut.Instance.Paste(row, "City", [["Seoul"], ["tyo"]]));
+
+        Assert.Equal("SEL", ds.GetValue(row, "City"));
+        Assert.Equal("TYO", ds.GetValue(ds.RowKeys[1], "City"));
+        Assert.Empty(_pasted!.Skipped);
+
+        await cut.InvokeAsync(() => cut.Instance.Paste(row, "City", [["Tokyo"]]));
+        Assert.Equal(new PasteSkip(row, "City", PasteKeys.Invalid), Assert.Single(_pasted!.Skipped));
+        Assert.Equal("SEL", ds.GetValue(row, "City"));
+    }
+
+    /// <summary>GS-094: when the code DataSet changes (text edit, Load, row added) the grid redraws the combo cells by itself</summary>
+    [Fact]
+    public async Task GS_094_CodeDataSetChange_Redraws()
+    {
+        var ds = Addresses();
+        var countries = Countries();
+        var cut = RenderGrid(ds, countries, Cities());
+
+        await cut.InvokeAsync(() => countries.SetValue(countries.RowKeys[0], "Name", "South Korea"));
+        cut.WaitForAssertion(() => Assert.Equal("South Korea", Cells(cut, "Country")[0]));
+
+        await cut.InvokeAsync(() => countries.Load([new Code { Value = "KR", Name = "대한민국" }]));
+        cut.WaitForAssertion(() => Assert.Equal(["대한민국", "JP", ""], Cells(cut, "Country")));
+
+        await cut.InvokeAsync(() => countries.AddRow(new Code { Value = "JP", Name = "日本" }));
+        cut.WaitForAssertion(() => Assert.Equal("日本", Cells(cut, "Country")[1]));
+    }
+
+    /// <summary>GS-094: header filter values and the export request come from the code DataSet</summary>
+    [Fact]
+    public void GS_094_FilterAndExportUseCodeDataSet()
+    {
+        var cut = RenderGrid(Addresses(), Countries(), Cities());
+        var city = cut.Instance.Columns.Single(c => c.Field == "City");
+
+        Assert.Equal([("SEL", "Seoul"), ("PUS", "Busan"), ("TYO", "Tokyo")], cut.Instance.FilterValues(city));
+        var export = cut.Instance.GetExportRequest().Columns.Single(c => c.Field == "Country");
+        Assert.Equal([new ComboOption("KR", "Korea"), new ComboOption("JP", "Japan")], export.Options);
+    }
+
+    /// <summary>GS-094: Options together with OptionsSource, a missing ValueField/TextField, a field not in the DataSet, or FilterField without ParentField is refused</summary>
+    [Theory]
+    [InlineData("both")]
+    [InlineData("noText")]
+    [InlineData("badField")]
+    [InlineData("badParent")]
+    [InlineData("filterOnly")]
+    public void GS_094_InvalidParameters_Throw(string kind)
+    {
+        var ds = Addresses();
+        var codes = Cities();
+        IReadOnlyList<ComboOption> options = [new("KR", "Korea")];
+
+        var ex = Assert.ThrowsAny<Exception>(() => Render<QuroGrid<Address>>(@<QuroGrid DataSet="ds" Culture="En">
+            <QuroColumn Field="City" HeaderKey="addr.city" Type="CellType.Combo"
+                        Options="@(kind == "both" ? options : null)"
+                        OptionsSource="codes" ValueField="Value"
+                        TextField="@(kind == "noText" ? "" : kind == "badField" ? "Missing" : "Name")"
+                        FilterField="@(kind is "badParent" or "filterOnly" ? "Parent" : null)"
+                        ParentField="@(kind == "badParent" ? "Nope" : null)" />
+        </QuroGrid>));
+        Assert.IsType<ArgumentException>(ex.GetBaseException(), exactMatch: false);
+    }
+}

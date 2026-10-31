@@ -197,7 +197,7 @@ public partial class QuroGrid<TItem> where TItem : class
     public GridExportRequest GetExportRequest(ExportFormat format = ExportFormat.Xlsx) => new(
         Columns.Where(c => c.Type != CellType.Button && c.Compute is null)   // the server can't run a Compute function (A-59)
             .Select(c => new ExportColumn(c.Field, c.HeaderKey, Text(c.HeaderKey), c.Type, c.Format, WidthOf(c),
-                c.CurrencyField, c.Aggregate, c.Options))
+                c.CurrencyField, c.Aggregate, AllOptions(c)))
             .ToList(),
         SortColumns,
         EffectiveCulture.Name,
@@ -293,9 +293,13 @@ public partial class QuroGrid<TItem> where TItem : class
         if (ReferenceEquals(_bound, DataSet))
             return;
         if (_bound is not null)
+        {
             _bound.CurrentRowChanged -= OnCurrentRowChanged;
+            _bound.ValueChanged -= OnDataSetValueChanged;
+        }
         _bound = DataSet;
         _bound.CurrentRowChanged += OnCurrentRowChanged;
+        _bound.ValueChanged += OnDataSetValueChanged;   // linked combo parent changes (A-57)
     }
 
     /// <summary>앱(또는 다른 컨트롤)이 현재 행을 옮기면 렌더 반영 뒤 그리드 활성 셀도 옮긴다. 포커스는 가져오지 않는다.</summary>
@@ -326,7 +330,10 @@ public partial class QuroGrid<TItem> where TItem : class
     public async ValueTask DisposeAsync()
     {
         if (_bound is not null)
+        {
             _bound.CurrentRowChanged -= OnCurrentRowChanged;
+            _bound.ValueChanged -= OnDataSetValueChanged;
+        }
         try
         {
             if (_module is not null)
@@ -389,7 +396,7 @@ public partial class QuroGrid<TItem> where TItem : class
                 return false;
         }
 
-        if (!TryParseCell(col, text, out var value) || !await ApplyValue(rowKey, col.Field, value))
+        if (!TryParseCell(rowKey, col, text, out var value) || !await ApplyValue(rowKey, col.Field, value))
             return false;
 
         EndEditing();
@@ -412,7 +419,7 @@ public partial class QuroGrid<TItem> where TItem : class
         var matches = col.Lookup is null ? [] : await col.Lookup(text);
         var chosen = await RaisePopup(rowKey, col, text, matches, PopupTrigger.F4);
         if (chosen is null
-            || !TryParseCell(col, chosen, out var value)
+            || !TryParseCell(rowKey, col, chosen, out var value)
             || !await ApplyValue(rowKey, col.Field, value))
             return false;
 
@@ -472,10 +479,10 @@ public partial class QuroGrid<TItem> where TItem : class
         return PickValue(value);
     }
 
-    /// <summary>열린 Combo 목록에서 항목을 골랐을 때 (quro-grid.js, 1회). <paramref name="index"/>는 <see cref="QuroColumn.Options"/> 순번.</summary>
+    /// <summary>열린 Combo 목록에서 항목을 골랐을 때 (quro-grid.js, 1회). <paramref name="index"/>는 그 행 목록(<see cref="OptionsOf"/>)의 순번.</summary>
     [JSInvokable]
     public Task PickOption(int index) =>
-        _picker is { } p && Column(p.Field).Options is { } options && index >= 0 && index < options.Count
+        _picker is { } p && OptionsOf(Column(p.Field), p.RowKey) is { } options && index >= 0 && index < options.Count
             ? PickValue(options[index].Value)
             : Task.CompletedTask;
 
@@ -540,7 +547,7 @@ public partial class QuroGrid<TItem> where TItem : class
     /// 입력·붙여넣기 문자열을 셀 값으로. Combo는 코드나 명칭, Check는 매핑 값이나 true/false (대소문자 무시),
     /// 그 밖은 DataSet이 사용자 로캘로 해석한다.
     /// </summary>
-    private bool TryParseCell(QuroColumn col, string? text, out object? value)
+    private bool TryParseCell(int rowKey, QuroColumn col, string? text, out object? value)
     {
         value = null;
         switch (col.Type)
@@ -548,7 +555,7 @@ public partial class QuroGrid<TItem> where TItem : class
             case CellType.Button:
                 return false;
             case CellType.Combo when !string.IsNullOrEmpty(text):
-                var option = col.Options?.FirstOrDefault(o => Same(o.Value?.ToString(), text) || Same(o.Text, text));
+                var option = OptionsOf(col, rowKey)?.FirstOrDefault(o => Same(o.Value?.ToString(), text) || Same(o.Text, text));
                 value = option?.Value;
                 return option is not null;
             case CellType.Check:
@@ -843,7 +850,7 @@ public partial class QuroGrid<TItem> where TItem : class
     {
         if (!Editable(rowKey, col))
             return PasteKeys.ReadOnly;
-        if (!TryParseCell(col, text, out var value))
+        if (!TryParseCell(rowKey, col, text, out var value))
             return PasteKeys.Invalid;
         return await ApplyValue(rowKey, col.Field, value) ? null : PasteKeys.Cancelled;
     }
@@ -950,7 +957,7 @@ public partial class QuroGrid<TItem> where TItem : class
     private object? SortValue(int rowKey, QuroColumn col)
     {
         var value = DataSet.GetValue(rowKey, col.Field);
-        return col.Type == CellType.Combo ? OptionText(col, value) : value;
+        return col.Type == CellType.Combo ? OptionText(col, value, rowKey) : value;
     }
 
     /// <summary>빈 값이 가장 작다. 문자열은 표시 로캘 기준(대소문자 무시).</summary>
@@ -1389,7 +1396,7 @@ public partial class QuroGrid<TItem> where TItem : class
     /// <summary>값 목록 (Combo는 옵션, Check는 체크·해제). Value는 언어 무관 문자열</summary>
     internal IReadOnlyList<(string Value, string Text)> FilterValues(QuroColumn col) => col.Type switch
     {
-        CellType.Combo => (col.Options ?? []).Select(o => (o.Value?.ToString() ?? "", o.Text)).ToList(),
+        CellType.Combo => (AllOptions(col) ?? []).Select(o => (o.Value?.ToString() ?? "", o.Text)).ToList(),
         CellType.Check =>
         [
             (col.CheckedValue?.ToString() ?? "", Text(GridKeys.FilterChecked)),
@@ -1800,6 +1807,7 @@ public partial class QuroGrid<TItem> where TItem : class
 
     void IColumnHost.AddColumn(QuroColumn column)
     {
+        CheckParentField(column);
         (column.Group?.Members ?? _definition).Add(column);
         RebuildColumns();
         RegisterRule(column);
@@ -1838,6 +1846,7 @@ public partial class QuroGrid<TItem> where TItem : class
 
     void IColumnHost.ColumnChanged(QuroColumn column)
     {
+        CheckParentField(column);
         RegisterRule(column);
         Relayout();
     }
@@ -1912,7 +1921,7 @@ public partial class QuroGrid<TItem> where TItem : class
         return col.Type switch
         {
             CellType.Currency => FormatNumber(value, CurrencyFormat(col, rowKey)),
-            CellType.Combo => OptionText(col, value),
+            CellType.Combo => OptionText(col, value, rowKey),
             _ => Format(value, col),
         };
     }
@@ -1920,7 +1929,7 @@ public partial class QuroGrid<TItem> where TItem : class
     internal bool IsPickerOpen(int rowKey) => _picker?.RowKey == rowKey;
 
     internal int PickerIndex(QuroColumn col) =>
-        _picker is { } p && col.Options is { } options
+        _picker is { } p && OptionsOf(col, p.RowKey) is { } options
             ? options.ToList().FindIndex(o => Equals(o.Value, DataSet.GetValue(p.RowKey, col.Field)))
             : -1;
 
@@ -1967,14 +1976,12 @@ public partial class QuroGrid<TItem> where TItem : class
         return cls.ToString();
     }
 
-    private static string OptionText(QuroColumn col, object? value) =>
-        col.Options?.FirstOrDefault(o => Equals(o.Value, value))?.Text ?? value?.ToString() ?? "";
 
     /// <summary>에디터 초기 값. 천 단위 구분 없이 사용자 로캘로. Combo는 명칭.</summary>
     internal string EditText(int rowKey, QuroColumn col) =>
         DataSet.GetValue(rowKey, col.Field) switch
         {
-            var v when col.Type == CellType.Combo => OptionText(col, v),
+            var v when col.Type == CellType.Combo => OptionText(col, v, rowKey),
             null => "",
             var date when date is DateOnly or DateTime => Format(date, col),
             IFormattable f => f.ToString(null, EffectiveCulture),

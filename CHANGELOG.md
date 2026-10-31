@@ -4,6 +4,8 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 소비자(QuroERP)는 버전을 올리기 전에 이 파일을 읽는다.
 
 ## Unreleased
+- Added: 그리드 Combo 셀의 코드 DataSet 바인딩 (A-57, GS-094) — `QuroColumn.OptionsSource`(`IQuroDataSet`)·`ValueField`·`TextField`, 연동 콤보 `FilterField`·`ParentField`(부모 값이 바뀌어 자식 코드가 목록에서 빠지면 자식 셀을 비움). 코드 DataSet이 바뀌면 그리드가 스스로 다시 그림. `Options`와 함께 쓰면 `ArgumentException`. 소비자 조치: 없음 (`Options`·`OptionsFor` 그대로)
+- Added: `Quro.Grid.Data`의 `IQuroDataSet` — `QuroDataSet<T>`가 구현하는 제네릭 아닌 읽기 전용 인터페이스(`RowKeys`·`GetValue`·`GetState`·`GetColumn`, 이벤트 `ValueChanged`·`RowAdded`·`RowDeleted`·`Loaded`). 소비자 조치: 없음
 
 ## 0.5.0-alpha.5 — 2026-11-01
 nuget.org 게시용 재릴리스. 패키지 코드는 0.5.0-alpha.4와 같다. BREAKING 없음. 소비자 조치: 없음
