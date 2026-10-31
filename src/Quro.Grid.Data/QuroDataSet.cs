@@ -10,7 +10,7 @@ namespace Quro.Grid.Data;
 /// <summary>
 /// 그리드 데이터 모델 (Spec 4.4). 행 상태·원본값·변경분을 관리한다. UI를 참조하지 않는다.
 /// </summary>
-public sealed class QuroDataSet<T> where T : class
+public sealed class QuroDataSet<T> : IQuroDataSet where T : class
 {
     private static readonly Dictionary<string, PropertyInfo> Fields =
         typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance)

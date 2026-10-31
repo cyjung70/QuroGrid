@@ -427,3 +427,11 @@ GS-090 — **완료** (2026-10-31 스테이블영 결정 1~5). GS-091 — **완�
 | GS-093 | 조건부 스타일 `CellStyle` | 앱 함수(행 항목, 셀 값 → `CellTone`)의 톤마다 셀 클래스 `quro-tone-*`(여러 톤 조합 가능), 값이 바뀌면 따라감. `Compute` 열이면 계산 값을 받음. `quro-grid.css`의 톤 색은 `--qg-tone-*` ← `--quro-tone-*` 토큰 | bUnit · xUnit (파일) | A-59 |
 
 GS-092·GS-093 — **완료** (2026-10-31 스테이블영 결정 1(a)·2·3(a)·4).
+
+### 6-5 코드 DataSet Combo · 연동 콤보 (A-57)
+
+| ID | 시나리오 | 기대 결과 | 계층 | 근거 |
+|---|---|---|---|---|
+| GS-094 | Combo 셀 코드 DataSet 바인딩 | `OptionsSource`·`ValueField`·`TextField`: 셀은 코드 행의 글자(없는 코드는 값 그대로), 목록은 삭제 표시가 아닌 코드 행, 고르면 코드 저장. 연동 콤보 `FilterField`·`ParentField`: 그 행 부모 값의 코드만(부모 null이면 빈 목록), 부모 값이 바뀌어 자식 코드가 목록에서 빠지면 자식 null(`RevertRow`로 복원), 남아 있으면 유지. 붙여넣기는 그 행 목록의 코드·글자만(다른 부모의 글자는 `Invalid`). 코드 DataSet 변경(`SetValue`·`Load`·`AddRow`)에 셀이 다시 그려짐. 헤더 필터 값·내보내기 `Options`는 코드 DataSet 전체. `Options`와 함께·필드 누락·없는 필드·`FilterField`만이면 `ArgumentException`. `IQuroDataSet`으로 읽기·이벤트 | bUnit · xUnit | A-57 |
+
+GS-094 — **완료** (2026-11-01 스테이블영 결정 1(a)·2~7).
