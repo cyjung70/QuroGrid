@@ -11,7 +11,7 @@ public class GS_080_ThemeTokenTests
 {
     private static readonly Regex ColorLiteral = new(@"#[0-9a-fA-F]{3,8}\b|\b(rgba?|hsla?)\(", RegexOptions.Compiled);
 
-    private static string Root()
+    internal static string Root()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "QuroGrid.slnx")))

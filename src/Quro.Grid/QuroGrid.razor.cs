@@ -383,7 +383,7 @@ public partial class QuroGrid<TItem> where TItem : class
     {
         using var step = DataSet.BeginUndoStep();   // 사용자 동작 하나 = Undo 한 단계 (앱의 이벤트 처리 포함, A-33)
         var col = Column(field);
-        if (col.ReadOnly || col.Type == CellType.Image || col.Compute is not null || NewRowLocked(rowKey, col))
+        if (col.ReadOnly || col.Type is CellType.Image or CellType.Label || col.Compute is not null || NewRowLocked(rowKey, col))
             return false;
 
         if (col.Type == CellType.Popup && col.Lookup is not null && !string.IsNullOrEmpty(text))
@@ -541,7 +541,7 @@ public partial class QuroGrid<TItem> where TItem : class
     }
 
     private bool Editable(int rowKey, QuroColumn col) =>
-        !col.ReadOnly && col.Type is not (CellType.Button or CellType.Image) && col.Compute is null && DataSet.GetState(rowKey) != RowState.Deleted
+        !col.ReadOnly && col.Type is not (CellType.Button or CellType.Image or CellType.Label) && col.Compute is null && DataSet.GetState(rowKey) != RowState.Deleted
         && !NewRowLocked(rowKey, col);
 
     /// <summary>A <see cref="QuroColumn.NewRowOnly"/> column on a row that is not an added row (G-01).</summary>
@@ -549,7 +549,7 @@ public partial class QuroGrid<TItem> where TItem : class
 
     /// <summary>aria-readonly of a cell: read-only column, Button, Compute column, or edit-new column on a saved row.</summary>
     internal bool CellReadOnly(int rowKey, QuroColumn col) =>
-        col.ReadOnly || col.Type is CellType.Button or CellType.Image || col.Compute is not null || NewRowLocked(rowKey, col);
+        col.ReadOnly || col.Type is CellType.Button or CellType.Image or CellType.Label || col.Compute is not null || NewRowLocked(rowKey, col);
 
     private void EndEditing()
     {
@@ -567,7 +567,7 @@ public partial class QuroGrid<TItem> where TItem : class
         value = null;
         switch (col.Type)
         {
-            case CellType.Button or CellType.Image:
+            case CellType.Button or CellType.Image or CellType.Label:
                 return false;
             case CellType.Mask when col.ParsedMask is { } mask:
                 if (string.IsNullOrEmpty(text))
@@ -1998,6 +1998,7 @@ public partial class QuroGrid<TItem> where TItem : class
         CellType.Button => "button",
         CellType.Mask => "mask",
         CellType.Image => "image",
+        CellType.Label => "label",
         _ => null,
     };
 

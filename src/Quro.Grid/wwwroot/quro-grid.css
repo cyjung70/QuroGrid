@@ -23,6 +23,7 @@
     --qg-tone-success: var(--quro-tone-success, #079455);
     --qg-tone-muted: var(--quro-tone-muted, var(--qg-check-line));
     --qg-tone-highlight: var(--quro-tone-highlight, color-mix(in srgb, var(--qg-warning-line) 18%, var(--qg-bg)));
+    --qg-label: var(--quro-label, #5b6475);   /* Label cell text, same token as QuroLabel */
     --qg-row-height: var(--quro-row-height, 28px);   /* layout value the grid sets from RowHeight (not a color) */
 
     display: inline-block;
@@ -78,6 +79,10 @@
 }
 
 /* CellStyle tones (A-59). Before the marks so an error or warning background wins over Highlight */
+/* Label cell (A-56): static text, read-only like Text; only the look differs.
+   Kept before the tone rules with the same specificity, so CellStyle tones win */
+[data-type="label"] { color: var(--qg-label); }
+
 .quro-tone-danger { color: var(--qg-tone-danger); }
 .quro-tone-success { color: var(--qg-tone-success); }
 .quro-tone-muted { color: var(--qg-tone-muted); }

@@ -4,7 +4,8 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 소비자(QuroERP)는 버전을 올리기 전에 이 파일을 읽는다.
 
 ## Unreleased
-그리드 Mask·Image 셀 (A-56). BREAKING 없음. 소비자 조치: 없음
+그리드 Mask·Image·Label 셀 (A-56). BREAKING 없음. 소비자 조치: 없음
+- Added: `CellType.Label` — 정적 텍스트. `ReadOnly` Text처럼 포커스·복사·필터·정렬 가능, 편집·붙여넣기 없음. 글자색은 토큰 `--quro-label`(CSS `[data-type="label"]`, `CellStyle` 톤이 이김) (A-56, GS-097). 소비자 조치: 없음
 - Added: `CellType.Image` — 문자열 열의 URL을 행 높이에 맞춰 비율 유지로 표시(`quro-image`), 대체 텍스트는 선택 `TextField`, 편집·붙여넣기 없음, Ctrl+C는 URL (A-56, GS-096). 소비자 조치: 없음
 - Added: `QuroGrid.OnCellClick`(`CellClickArgs<TItem>`: `RowKey`·`Field`·`Item`·`Value`) — Image 셀의 클릭·Enter·Space, 삭제 표시 행 제외. 다른 셀 타입은 내지 않는다 (A-56 결정 1(a)). JS 진입점 `ClickCell`. 소비자 조치: 없음
 - Added: `CellType.Mask`와 `QuroColumn.Mask` — 문자열 열에 마스크 입력(`0`·`A`·`*`·`\`, QuroMaskBox와 같은 문법), 고정 문자를 뺀 입력 문자만 저장, 셀·에디터·필터·그룹 머리는 고정 문자와 함께 표시, 덜 채우거나 맞지 않으면 확정하지 않음(편집 유지)·붙여넣기 `Invalid`, 입력 중 고정 문자 넣기는 quro-grid.js (A-56, GS-095). 소비자 조치: 없음

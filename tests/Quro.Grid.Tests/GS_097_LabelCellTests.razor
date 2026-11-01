@@ -1,0 +1,99 @@
+@inherits GridTestContext
+
+@code {
+    // GS-097: Label cell (A-56, decision 3(b)) — static text. Works like a ReadOnly Text cell (focus, copy, filter,
+    // sort) and only looks different (data-type="label", label color token).
+
+    public sealed class Spec
+    {
+        public string? Caption { get; set; }
+        public decimal Size { get; set; }
+    }
+
+    private static readonly CultureInfo En = new("en-US", useUserOverride: false);
+    private PastedArgs? _pasted;
+
+    private static QuroDataSet<Spec> Specs()
+    {
+        var ds = new QuroDataSet<Spec>();
+        ds.Load([new Spec { Caption = "Width", Size = 1234.5m }, new Spec { Caption = "Height", Size = 7m }]);
+        return ds;
+    }
+
+    private IRenderedComponent<QuroGrid<Spec>> RenderGrid(QuroDataSet<Spec> ds) =>
+        Render<QuroGrid<Spec>>(@<QuroGrid DataSet="ds" Culture="En" OnPasted="(PastedArgs e) => _pasted = e">
+                                   <QuroColumn Field="Caption" HeaderKey="spec.caption" Type="CellType.Label" />
+                                   <QuroColumn Field="Size" HeaderKey="spec.size" Type="CellType.Label" Format="N1" />
+                               </QuroGrid>);
+
+    /// <summary>GS-097: shows the value with the column Format; marked read-only and as a label</summary>
+    [Fact]
+    public void GS_097_ShowsStaticText()
+    {
+        var cut = RenderGrid(Specs());
+
+        var cells = cut.FindAll("[role=gridcell][data-field=Size]");
+        Assert.Equal(["1,234.5", "7.0"], cells.Select(c => c.TextContent.Trim()));
+        var caption = cut.Find("[role=gridcell][data-field=Caption]");
+        Assert.Equal("Width", caption.TextContent.Trim());
+        Assert.Equal("label", caption.GetAttribute("data-type"));
+        Assert.Equal("true", caption.GetAttribute("aria-readonly"));
+        Assert.Null(caption.GetAttribute("data-copy"));   // Ctrl+C copies the shown text, like Text
+    }
+
+    /// <summary>GS-097: not editable — no editor, commit refused, paste skipped as ReadOnly</summary>
+    [Fact]
+    public async Task GS_097_NotEditable()
+    {
+        var ds = Specs();
+        var cut = RenderGrid(ds);
+        var row = ds.RowKeys[0];
+
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.BeginEdit(row, "Caption")));
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.CommitEdit(row, "Caption", "Depth")));
+        await cut.InvokeAsync(() => cut.Instance.Paste(row, "Caption", [["Depth"]]));
+
+        Assert.Equal("Width", ds.GetValue(row, "Caption"));
+        Assert.Equal(RowState.Normal, ds.GetState(row));
+        Assert.Equal(PasteKeys.ReadOnly, Assert.Single(_pasted!.Skipped).MessageKey);
+    }
+
+    /// <summary>GS-097: the app still changes the value; the cell follows</summary>
+    [Fact]
+    public async Task GS_097_FollowsAppValue()
+    {
+        var ds = Specs();
+        var cut = RenderGrid(ds);
+
+        ds.SetValue(ds.RowKeys[1], "Caption", "Depth");
+        await cut.InvokeAsync(() => cut.Instance.Refresh());
+
+        Assert.Equal("Depth", cut.FindAll("[role=gridcell][data-field=Caption]")[1].TextContent.Trim());
+    }
+
+    /// <summary>GS-097: filter and sort work as on a Text cell</summary>
+    [Fact]
+    public async Task GS_097_FilterAndSort()
+    {
+        var ds = Specs();
+        var cut = RenderGrid(ds);
+
+        await cut.InvokeAsync(() => cut.Instance.SetSort([new SortColumn("Caption", SortDirection.Ascending)]));
+        Assert.Equal(["Height", "Width"], cut.FindAll("[role=gridcell][data-field=Caption]").Select(c => c.TextContent.Trim()));
+
+        await cut.InvokeAsync(() => cut.Instance.SetFilters([new ColumnFilter("Caption") { Contains = "wid" }]));
+        Assert.Equal(["Width"], cut.FindAll("[role=gridcell][data-field=Caption]").Select(c => c.TextContent.Trim()));
+    }
+
+    /// <summary>GS-097: the label color comes from the --quro-label token (same token as QuroLabel); CellStyle tones win</summary>
+    [Fact]
+    public void GS_097_Css_LabelColorToken()
+    {
+        var css = File.ReadAllText(Path.Combine(GS_080_ThemeTokenTests.Root(), "src", "Quro.Grid", "wwwroot", "quro-grid.css"));
+
+        Assert.Matches(@"--qg-label:\s*var\(--quro-label,", css);
+        Assert.Matches(@"\[data-type=""?label""?\][^{]*\{[^}]*color:\s*var\(--qg-label\)", css);
+        Assert.Matches(@"(?m)^\[data-type=""label""\] \{", css);   // same specificity as .quro-tone-*
+        Assert.True(css.IndexOf("[data-type=\"label\"] {", StringComparison.Ordinal) < css.IndexOf(".quro-tone-danger {", StringComparison.Ordinal));
+    }
+}
