@@ -76,7 +76,10 @@ public sealed class QuroColumn : ComponentBase, IDisposable
     /// <summary>Field of <see cref="OptionsSource"/> that holds the code (the stored value).</summary>
     [Parameter] public string? ValueField { get; set; }
 
-    /// <summary>Field of <see cref="OptionsSource"/> that holds the shown text.</summary>
+    /// <summary>
+    /// Field of <see cref="OptionsSource"/> that holds the shown text. On a <see cref="CellType.Image"/> column: the
+    /// grid row field that holds the alt text (A-56); without it the alt text is empty.
+    /// </summary>
     [Parameter] public string? TextField { get; set; }
 
     /// <summary>Linked combo: field of <see cref="OptionsSource"/> holding each code's parent value. Set with <see cref="ParentField"/>.</summary>

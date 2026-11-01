@@ -141,6 +141,9 @@ public partial class QuroGrid<TItem> where TItem : class
     /// <summary>Button 셀 클릭 (Addendum A-19).</summary>
     [Parameter] public EventCallback<CellButtonClickArgs<TItem>> OnCellButtonClick { get; set; }
 
+    /// <summary>Image cell click — mouse, Enter or Space (A-56). Other cell types don't raise it. Not on deleted rows.</summary>
+    [Parameter] public EventCallback<CellClickArgs<TItem>> OnCellClick { get; set; }
+
     /// <summary>
     /// 미저장 변경이 있으면 페이지 이탈을 확인한다 (R7, Addendum A-20: 기본 켬).
     /// 창 닫기·새로고침은 브라우저 경고, 앱 안 화면 이동은 확인창(또는 <see cref="OnLeaving"/>).
@@ -380,7 +383,7 @@ public partial class QuroGrid<TItem> where TItem : class
     {
         using var step = DataSet.BeginUndoStep();   // 사용자 동작 하나 = Undo 한 단계 (앱의 이벤트 처리 포함, A-33)
         var col = Column(field);
-        if (col.ReadOnly || col.Compute is not null || NewRowLocked(rowKey, col))
+        if (col.ReadOnly || col.Type == CellType.Image || col.Compute is not null || NewRowLocked(rowKey, col))
             return false;
 
         if (col.Type == CellType.Popup && col.Lookup is not null && !string.IsNullOrEmpty(text))
@@ -513,6 +516,18 @@ public partial class QuroGrid<TItem> where TItem : class
         return ok;
     }
 
+    /// <summary>Image cell click (click·Enter·Space, GS-096, A-56). Not on deleted rows; false for other cell types.</summary>
+    [JSInvokable]
+    public async Task<bool> ClickCell(int rowKey, string field)
+    {
+        var col = Column(field);
+        if (col.Type != CellType.Image || DataSet.GetState(rowKey) == RowState.Deleted)
+            return false;
+
+        await OnCellClick.InvokeAsync(new CellClickArgs<TItem>(rowKey, col.Field, DataSet.GetItem(rowKey), DataSet.GetValue(rowKey, col.Field)));
+        return true;
+    }
+
     /// <summary>Button 셀 클릭 (클릭·Enter·Space, GS-063). 삭제 표시 행에서는 발생하지 않는다.</summary>
     [JSInvokable]
     public async Task<bool> ClickButton(int rowKey, string field)
@@ -526,7 +541,7 @@ public partial class QuroGrid<TItem> where TItem : class
     }
 
     private bool Editable(int rowKey, QuroColumn col) =>
-        !col.ReadOnly && col.Type != CellType.Button && col.Compute is null && DataSet.GetState(rowKey) != RowState.Deleted
+        !col.ReadOnly && col.Type is not (CellType.Button or CellType.Image) && col.Compute is null && DataSet.GetState(rowKey) != RowState.Deleted
         && !NewRowLocked(rowKey, col);
 
     /// <summary>A <see cref="QuroColumn.NewRowOnly"/> column on a row that is not an added row (G-01).</summary>
@@ -534,7 +549,7 @@ public partial class QuroGrid<TItem> where TItem : class
 
     /// <summary>aria-readonly of a cell: read-only column, Button, Compute column, or edit-new column on a saved row.</summary>
     internal bool CellReadOnly(int rowKey, QuroColumn col) =>
-        col.ReadOnly || col.Type == CellType.Button || col.Compute is not null || NewRowLocked(rowKey, col);
+        col.ReadOnly || col.Type is CellType.Button or CellType.Image || col.Compute is not null || NewRowLocked(rowKey, col);
 
     private void EndEditing()
     {
@@ -552,7 +567,7 @@ public partial class QuroGrid<TItem> where TItem : class
         value = null;
         switch (col.Type)
         {
-            case CellType.Button:
+            case CellType.Button or CellType.Image:
                 return false;
             case CellType.Mask when col.ParsedMask is { } mask:
                 if (string.IsNullOrEmpty(text))
@@ -1815,7 +1830,7 @@ public partial class QuroGrid<TItem> where TItem : class
     void IColumnHost.AddColumn(QuroColumn column)
     {
         CheckParentField(column);
-        CheckMaskField(column);
+        CheckStringField(column);
         (column.Group?.Members ?? _definition).Add(column);
         RebuildColumns();
         RegisterRule(column);
@@ -1824,11 +1839,16 @@ public partial class QuroGrid<TItem> where TItem : class
             StateHasChanged();   // 그룹 안 컬럼은 그리드 본문(Deferred)이 그려진 뒤에 등록된다 (GS-070)
     }
 
-    /// <summary>A Mask cell stores the typed characters, so its field must be a string column (A-56).</summary>
-    private void CheckMaskField(QuroColumn col)
+    /// <summary>
+    /// Mask and Image cells take string columns (A-56): Mask stores the typed characters, Image a URL.
+    /// An Image column's alt text <see cref="QuroColumn.TextField"/> must be a field of the data set.
+    /// </summary>
+    private void CheckStringField(QuroColumn col)
     {
-        if (col.Type == CellType.Mask && col.Compute is null && DataSet.GetColumn(col.Field).Type != typeof(string))
-            throw new ArgumentException($"QuroColumn '{col.Field}': Mask 셀은 문자열 컬럼에만 씁니다.", nameof(col));
+        if (col.Type is CellType.Mask or CellType.Image && col.Compute is null && DataSet.GetColumn(col.Field).Type != typeof(string))
+            throw new ArgumentException($"QuroColumn '{col.Field}': {col.Type} 셀은 문자열 컬럼에만 씁니다.", nameof(col));
+        if (col.Type == CellType.Image && col.TextField is { } alt)
+            DataSet.GetColumn(alt);   // ArgumentException for an unknown field
     }
 
     void IColumnHost.AddGroup(QuroColumnGroup group) => (group.Parent?.Members ?? _definition).Add(group);
@@ -1862,7 +1882,7 @@ public partial class QuroGrid<TItem> where TItem : class
     void IColumnHost.ColumnChanged(QuroColumn column)
     {
         CheckParentField(column);
-        CheckMaskField(column);
+        CheckStringField(column);
         RegisterRule(column);
         Relayout();
     }
@@ -1930,8 +1950,8 @@ public partial class QuroGrid<TItem> where TItem : class
 
     internal string DisplayText(int rowKey, QuroColumn col)
     {
-        if (col.Type is CellType.Button or CellType.Check)
-            return "";   // Button은 바인딩 값이 없고, Check는 체크 표시로 그린다
+        if (col.Type is CellType.Button or CellType.Check or CellType.Image)
+            return "";   // Image is drawn as an img   // Button은 바인딩 값이 없고, Check는 체크 표시로 그린다
 
         var value = CellValue(rowKey, col);
         return col.Type switch
@@ -1949,6 +1969,14 @@ public partial class QuroGrid<TItem> where TItem : class
             ? options.ToList().FindIndex(o => Equals(o.Value, DataSet.GetValue(p.RowKey, col.Field)))
             : -1;
 
+    /// <summary>Image cell URL; null when empty (nothing is drawn).</summary>
+    internal string? ImageUrl(int rowKey, QuroColumn col) =>
+        DataSet.GetValue(rowKey, col.Field) is string { Length: > 0 } url ? url : null;
+
+    /// <summary>Image alt text from <see cref="QuroColumn.TextField"/>; empty when there is none (decorative).</summary>
+    internal string ImageAlt(int rowKey, QuroColumn col) =>
+        col.TextField is { } alt ? DataSet.GetValue(rowKey, alt)?.ToString() ?? "" : "";
+
     internal bool IsChecked(int rowKey, QuroColumn col) => Equals(DataSet.GetValue(rowKey, col.Field), col.CheckedValue);
 
     /// <summary>복사(Ctrl+C)용 값. 표시 문자열과 다른 셀(Check·Button)만, 그 밖은 null.</summary>
@@ -1956,6 +1984,7 @@ public partial class QuroGrid<TItem> where TItem : class
     {
         CellType.Check => DataSet.GetValue(rowKey, col.Field)?.ToString() ?? "",
         CellType.Button => "",
+        CellType.Image => DataSet.GetValue(rowKey, col.Field)?.ToString() ?? "",
         _ => null,
     };
 
@@ -1968,6 +1997,7 @@ public partial class QuroGrid<TItem> where TItem : class
         CellType.Popup => "popup",
         CellType.Button => "button",
         CellType.Mask => "mask",
+        CellType.Image => "image",
         _ => null,
     };
 

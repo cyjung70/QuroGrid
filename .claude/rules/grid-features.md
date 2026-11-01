@@ -8,7 +8,7 @@ paths:
 # QuroGrid 기능 규칙
 
 ## 셀 타입 (P0)
-`Text`, `Number`, `Currency`, `Date`, `Combo`, `Check`, `Popup`, `Button`, `Mask` (A-56; `Image`·`Label` 예정)
+`Text`, `Number`, `Currency`, `Date`, `Combo`, `Check`, `Popup`, `Button`, `Mask`, `Image` (A-56; `Label` 예정)
 - 편집 중인 셀 **하나에만** 에디터를 띄운다.
 - `Currency`의 소수 자릿수는 통화 마스터를 따른다 (로캘과 분리). 통화 정보는 앱이 주입한다.
 - `Popup`: 코드 입력 후 Tab → 1건 일치면 자동 확정, 복수면 팝업, **0건이면 팝업 없음**(2026-10-28, Spec 4.6과 다름). 0건 입력값은 잠정으로 확정하지 않고 편집 유지. F4는 항상 팝업.
@@ -31,7 +31,7 @@ Enter(확정·이동, 기본 오른쪽 O-05, 마지막 셀 새 행은 옵션·�
 - 그리드는 식을 평가하지 않는다 (A-44 ④·A-59). 저장할 계산(금액)은 앱이 `OnCellValueChanged`에서 한다. 표시 전용 계산 열은 앱 함수 `Compute`, 조건부 스타일은 앱 함수 `CellStyle`.
 
 ## 이벤트 API
-`OnCellValueChanging`(취소 가능), `OnCellValueChanged`, `OnRowAdding`/`OnRowAdded`, `OnRowDeleting`(취소 가능), `OnPopupRequested`, `OnPasting`(취소 가능), `OnSelectionChanged`
+`OnCellValueChanging`(취소 가능), `OnCellValueChanged`, `OnRowAdding`/`OnRowAdded`, `OnRowDeleting`(취소 가능), `OnPopupRequested`, `OnPasting`(취소 가능), `OnSelectionChanged`, `OnCellButtonClick`, `OnCellClick`(Image 셀만, A-56)
 
 ## v1 범위 외
 그리드가 평가하는 셀 수식, 피벗, 인쇄 레이아웃, 본문 셀 병합, 행 끌어 놓기 순서 변경. 요청이 오면 Spec 범위 밖임을 알린다. 트리 그리드는 v1 포함 (A-61).

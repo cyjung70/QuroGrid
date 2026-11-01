@@ -221,7 +221,8 @@ function onMouseDown(s, e) {
     const target = position(cell);
     const extend = e.shiftKey && !!s.anchor;
     // 셀 안 체크 표시·버튼을 누르면 활성화 후 바로 동작 (셀마다 핸들러를 달지 않는다, R5)
-    const type = e.target.closest('.quro-check') ? 'check' : e.target.closest('.quro-button') ? 'button' : null;
+    const type = e.target.closest('.quro-check') ? 'check' : e.target.closest('.quro-button') ? 'button'
+        : e.target.closest('.quro-image') ? 'image' : null;
     s.dragging = true;
     enqueue(s, async () => {
         if (s.editing && !(await commit(s))) return;
@@ -487,7 +488,7 @@ async function handleKey(s, k) {
     const type = cellType(currentCell(s));
     if (k.char) {
         if (s.editing) appendText(s.editing.input, k.key);
-        else if (type === 'check' || type === 'button') { if (k.key === ' ') await cellAction(s, type); }   // Space: 토글·클릭
+        else if (type === 'check' || type === 'button' || type === 'image') { if (k.key === ' ') await cellAction(s, type); }   // Space: 토글·클릭
         else if (hasEditor(currentCell(s))) await beginEdit(s, k.key);   // 문자 입력: 덮어쓰기
         return;
     }
@@ -503,7 +504,7 @@ async function handleKey(s, k) {
             if (s.editing) await cancel(s);
             return;
         case 'Enter':
-            if (!s.editing && type === 'button') return cellAction(s, type);   // Button 셀: 클릭, 이동 없음
+            if (!s.editing && (type === 'button' || type === 'image')) return cellAction(s, type);   // Button·Image 셀: 클릭, 이동 없음
             if (s.editing && !(await commit(s, true))) return;
             await moveEnter(s);
             return;
@@ -930,9 +931,10 @@ function placePicker(s) {
     picker.style.top = `${below ? r.bottom : Math.max(0, r.top - picker.offsetHeight)}px`;
 }
 
-/** Check 토글 · Button 클릭 (서버 호출 1회) */
+/** Check 토글 · Button 클릭 · Image 클릭 (서버 호출 1회) */
 function cellAction(s, type) {
-    return s.dotnet.invokeMethodAsync(type === 'check' ? 'ToggleCheck' : 'ClickButton', s.active.row, s.active.field);
+    const method = type === 'check' ? 'ToggleCheck' : type === 'image' ? 'ClickCell' : 'ClickButton';
+    return s.dotnet.invokeMethodAsync(method, s.active.row, s.active.field);
 }
 
 async function cancel(s) {
@@ -1357,7 +1359,7 @@ function applyMask(input) {
     input.setSelectionRange(newCaret, newCaret);
 }
 
-/** 셀 종류 (서버가 data-type으로 표시: date·combo·check·popup·button·mask, Text·Number·Currency는 없음) */
+/** 셀 종류 (서버가 data-type으로 표시: date·combo·check·popup·button·mask·image, Text·Number·Currency는 없음) */
 function cellType(cell) {
     return cell?.dataset.type ?? null;
 }
@@ -1365,7 +1367,7 @@ function cellType(cell) {
 /** 에디터를 여는 셀인지 (Check·Button은 에디터 없이 토글·클릭) */
 function hasEditor(cell) {
     const type = cellType(cell);
-    return editable(cell) && type !== 'check' && type !== 'button';
+    return editable(cell) && type !== 'check' && type !== 'button' && type !== 'image';
 }
 
 /** 서버 렌더 결과가 DOM에 반영될 때까지 기다린다 (최대 3초). */

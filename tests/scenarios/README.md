@@ -441,7 +441,8 @@ GS-094 — **완료** (2026-11-01 스테이블영 결정 1(a)·2~7).
 | ID | 시나리오 | 기대 결과 | 계층 | 근거 |
 |---|---|---|---|---|
 | GS-095 | Mask 셀 | `Type=Mask` + `Mask` 패턴(QuroMaskBox 문법): 셀·에디터는 고정 문자와 함께, 저장은 입력 문자만(고정 문자 있든 없든), 빈 입력은 null. 덜 채우거나 맞지 않으면 `CommitEdit` false·편집 유지·값 그대로, 붙여넣기는 `Invalid`. 헤더 텍스트 필터는 보이는 글자·저장 값 모두. 내보내기 `ExportColumn.Mask`. `Mask` 없는 Mask 셀·다른 타입의 `Mask`·입력 자리 없는 마스크·문자열 아닌 열은 `ArgumentException`. 브라우저: 입력 중 고정 문자 넣기·맞지 않는 문자 버리기(첫 글자 입력으로 편집 시작 포함), 확정까지 서버 호출 없음, Enter로 1회. `QuroMask`는 `Quro.Grid.Data` 공개 타입 | bUnit · xUnit · Playwright | A-56 |
-| GS-096 | Image 셀 | (예정) 값 = URL 문자열, 편집 없음, 행 높이에 맞춰 비율 유지, 대체 텍스트는 선택 `TextField`, 클릭은 `OnCellClick` | bUnit · Playwright | A-56 |
+| GS-096 | Image 셀 | 값 = URL 문자열 → `img.quro-image`(빈 값은 그리지 않음), 대체 텍스트는 선택 `TextField`(없으면 빈 alt), `data-copy` = URL, `aria-readonly`. `BeginEdit`·`CommitEdit` false, 붙여넣기 `ReadOnly`. `ClickCell` → `OnCellClick`(행 키·필드·항목·값), 다른 타입·삭제 표시 행은 false. 문자열 아닌 열·없는 `TextField`는 `ArgumentException`. 브라우저: 이미지가 셀 높이 안에서 비율 유지, 이미지 클릭·Enter·Space로 발생, 빈 셀 클릭은 없음, 에디터 없음 | bUnit · Playwright | A-56 |
 | GS-097 | Label 셀 | (예정) 정적 텍스트, 편집 없음. 포커스·복사는 `ReadOnly` Text와 같고 모양만 다름 | bUnit | A-56 |
 
 GS-095 — **완료** (2026-11-01 스테이블영 결정 1(a)·2(a)·3(b)·4).
+GS-096 — **완료** (2026-11-01 스테이블영 결정: `OnCellClick`은 Image 셀만 1(a), Enter·Space도 발생 2).

@@ -1,0 +1,108 @@
+@inherits GridTestContext
+
+@code {
+    // GS-096: Image cell (A-56) — value = URL string, not editable, fits the row height, alt text from TextField,
+    // click / Enter / Space raise OnCellClick (Image cells only).
+
+    public sealed class Product
+    {
+        public string? Photo { get; set; }
+        public string? Name { get; set; }
+        public int Count { get; set; }
+    }
+
+    private readonly List<CellClickArgs<Product>> _clicks = [];
+    private PastedArgs? _pasted;
+
+    private static QuroDataSet<Product> Products()
+    {
+        var ds = new QuroDataSet<Product>();
+        ds.Load([new Product { Photo = "/img/a.png", Name = "Apple" }, new Product { Photo = "", Name = "Pear" }, new Product()]);
+        return ds;
+    }
+
+    private IRenderedComponent<QuroGrid<Product>> RenderGrid(QuroDataSet<Product> ds, string? textField = "Name") =>
+        Render<QuroGrid<Product>>(@<QuroGrid DataSet="ds" OnCellClick="(CellClickArgs<Product> e) => _clicks.Add(e)"
+                                             OnPasted="(PastedArgs e) => _pasted = e">
+                                      <QuroColumn Field="Photo" HeaderKey="product.photo" Type="CellType.Image" TextField="@textField" />
+                                      <QuroColumn Field="Name" HeaderKey="product.name" />
+                                  </QuroGrid>);
+
+    private static AngleSharp.Dom.IElement Cell(IRenderedComponent<QuroGrid<Product>> cut, int index) =>
+        cut.FindAll("[role=gridcell][data-field=Photo]")[index];
+
+    /// <summary>GS-096: a URL shows an img with the alt text from TextField; an empty value shows nothing</summary>
+    [Fact]
+    public void GS_096_ShowsImage()
+    {
+        var cut = RenderGrid(Products());
+
+        var img = Cell(cut, 0).QuerySelector("img.quro-image");
+        Assert.NotNull(img);
+        Assert.Equal("/img/a.png", img.GetAttribute("src"));
+        Assert.Equal("Apple", img.GetAttribute("alt"));
+        Assert.Null(Cell(cut, 1).QuerySelector("img"));
+        Assert.Null(Cell(cut, 2).QuerySelector("img"));
+        Assert.Equal("image", Cell(cut, 0).GetAttribute("data-type"));
+        Assert.Equal("true", Cell(cut, 0).GetAttribute("aria-readonly"));
+        Assert.Equal("/img/a.png", Cell(cut, 0).GetAttribute("data-copy"));   // Ctrl+C copies the URL
+    }
+
+    /// <summary>GS-096: without TextField the alt text is empty (decorative)</summary>
+    [Fact]
+    public void GS_096_NoTextField_EmptyAlt()
+    {
+        var cut = RenderGrid(Products(), textField: null);
+
+        Assert.Equal("", Cell(cut, 0).QuerySelector("img")!.GetAttribute("alt"));
+    }
+
+    /// <summary>GS-096: ClickCell raises OnCellClick with the row, field, item and value; not on deleted rows or other cells</summary>
+    [Fact]
+    public async Task GS_096_ClickRaisesOnCellClick()
+    {
+        var ds = Products();
+        var cut = RenderGrid(ds);
+        var row = ds.RowKeys[0];
+
+        Assert.True(await cut.InvokeAsync(() => cut.Instance.ClickCell(row, "Photo")));
+        var e = Assert.Single(_clicks);
+        Assert.Equal(row, e.RowKey);
+        Assert.Equal("Photo", e.Field);
+        Assert.Equal("Apple", e.Item.Name);
+        Assert.Equal("/img/a.png", e.Value);
+
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.ClickCell(row, "Name")));   // Image cells only (A-56 decision 1(a))
+        ds.DeleteRow(row);
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.ClickCell(row, "Photo")));
+        Assert.Single(_clicks);
+    }
+
+    /// <summary>GS-096: not editable — no editor, commit refused, paste skipped as ReadOnly</summary>
+    [Fact]
+    public async Task GS_096_NotEditable()
+    {
+        var ds = Products();
+        var cut = RenderGrid(ds);
+        var row = ds.RowKeys[2];
+
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.BeginEdit(row, "Photo")));
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.CommitEdit(row, "Photo", "/img/x.png")));
+        await cut.InvokeAsync(() => cut.Instance.Paste(row, "Photo", [["/img/y.png"]]));
+
+        Assert.Null(ds.GetValue(row, "Photo"));
+        Assert.Equal(PasteKeys.ReadOnly, Assert.Single(_pasted!.Skipped).MessageKey);
+    }
+
+    /// <summary>GS-096: a non-string column or an unknown TextField is an ArgumentException</summary>
+    [Fact]
+    public void GS_096_InvalidColumn_Throws()
+    {
+        var ds = Products();
+
+        Assert.Throws<ArgumentException>(() => Render<QuroGrid<Product>>(
+            @<QuroGrid DataSet="ds"><QuroColumn Field="Count" HeaderKey="h" Type="CellType.Image" /></QuroGrid>));
+        Assert.Throws<ArgumentException>(() => Render<QuroGrid<Product>>(
+            @<QuroGrid DataSet="ds"><QuroColumn Field="Photo" HeaderKey="h" Type="CellType.Image" TextField="Nope" /></QuroGrid>));
+    }
+}
