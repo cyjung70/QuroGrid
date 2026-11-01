@@ -7,7 +7,7 @@
 ## 1. 패키지
 | 패키지 | 내용 | 소비자 참조 위치 (QuroERP) |
 |---|---|---|
-| `Quro.Grid.Data` | QuroDataSet, IQuroDataSet, RowState, ChangeSet, SaveResult | `QuroErp.Web` (전이 참조로 충분) |
+| `Quro.Grid.Data` | QuroDataSet, IQuroDataSet, RowState, ChangeSet, SaveResult, QuroMask | `QuroErp.Web` (전이 참조로 충분) |
 | `Quro.Grid.Definition` | TOON 화면 정의 파서·검증기·불변 모델 | `QuroErp.Web` (전이 참조로 충분) |
 | `Quro.Grid` | Blazor 컴포넌트(RCL), quro-grid.js | `QuroErp.Web` |
 | `Quro.UI` | QuroUI 컨트롤(RCL): `QuroTextBox`, `QuroComboBox`, `QuroDatePicker`, `QuroLabel`, `QuroStaticText`, `QuroMaskBox`, quro-ui.js (A-53·A-63~A-66·A-69) | `QuroErp.Web` |
@@ -54,6 +54,7 @@ QuroGrid는 DI 등록 메서드(`AddQuroGrid`)와 서비스 인터페이스를 �
 - 계산 열·조건부 스타일 (A-59, GS-092·GS-093, 0.5.0-alpha.3부터): 그리드는 식을 평가하지 않고 앱 함수만 부른다.
   - `Compute` (`Func<object, object?>`, 인자 = 행 항목 `TItem`): 표시 전용 값. 열은 항상 읽기 전용(편집·붙여넣기·저장 없음, 붙여넣기는 `PasteKeys.ReadOnly`로 건너뜀), `Field`는 식별자일 뿐 DataSet 필드가 아니어도 된다. 표시는 열 `Type`·`Format`. 헤더 필터·정렬·그룹과 내보내기 요청에서 빠진다. 합계 행 `Sum`은 계산 값을 더한다(서버 페이징 중에는 비움). 행이 바뀌어 다시 그려질 때 다시 계산(서버 호출 늘지 않음). 저장할 계산(금액)은 지금처럼 `OnCellValueChanged`
   - `CellStyle` (`Func<object, object?, CellTone>`, 인자 = 행 항목, 셀 값 — `Compute` 열이면 계산 값): `[Flags] enum CellTone { None, Danger, Success, Muted, Highlight, Bold }`. 셀 클래스 `quro-tone-danger`·`-success`·`-muted`·`-highlight`·`-bold`. 색 토큰 `--quro-tone-danger`(기본 `--quro-error-line`)·`--quro-tone-success`·`--quro-tone-muted`(기본 `--quro-check-line`)·`--quro-tone-highlight`. 오류·경고 표시(`SetCellMark`) 배경이 `Highlight`보다 우선. 임의 CSS는 받지 않는다
+- Mask 셀 (A-56, GS-095, 0.5.0-alpha.7부터): `Type="CellType.Mask"` + `Mask` 패턴(QuroMaskBox 4.8과 같은 문법: `0` 숫자, `A` 모든 언어의 글자, `*` 글자나 숫자, `\` 다음 문자 고정, 그 밖은 고정 문자). **문자열** 열만. 저장 값은 고정 문자를 뺀 입력 문자만(`123-45-67890` → `1234567890`), 빈 입력은 null. 셀·에디터·헤더 필터·그룹 머리는 고정 문자와 함께 보이고(맞지 않는 저장 값은 그대로), 필터는 보이는 글자와 저장 값 모두로 찾는다. 확정·붙여넣기는 고정 문자가 있든 없든 마스크 끝까지 맞아야 하며, 덜 채우거나 맞지 않으면 확정하지 않고 편집을 유지(Number와 같음, QuroMaskBox는 마지막 값으로 되돌림), 붙여넣기는 `PasteKeys.Invalid`로 건너뜀. 입력 중 고정 문자 넣기·맞지 않는 문자 버리기는 quro-grid.js(R2, 에디터 `data-mask`). 셀 `data-type="mask"`. `Mask` 없이 `CellType.Mask`, 다른 타입에 `Mask`, 입력 자리 없는 마스크, 문자열이 아닌 열은 `ArgumentException`. 마스크 해석은 `Quro.Grid.Data`의 `QuroMask`(`Parse`·`TryRead`·`Format`·`Length`)로 QuroMaskBox와 같다
 - 코드 DataSet Combo (A-57, GS-094, 0.5.0-alpha.6부터): `QuroColumn`의 `OptionsSource`(`IQuroDataSet`, 예: `QuroDataSet<CityCode>`)·`ValueField`(저장되는 코드)·`TextField`(표시). 목록 = 삭제 표시가 아닌 코드 행, 행 순서. 셀 글자·에디터 목록·입력·붙여넣기(코드나 글자, 대소문자 무시)·헤더 필터 값·내보내기 `Options`가 모두 이 목록을 쓴다. 코드 DataSet이 바뀌면(`Load`·`SetValue`·행 추가·삭제) 그리드가 스스로 다시 그린다. 연동 콤보: `FilterField`(코드 행의 부모 값 필드)와 `ParentField`(그리드 행의 부모 값 필드)를 함께 — 그 행의 부모 값과 `FilterField`가 같은 코드만, 부모 값이 null이면 빈 목록. 부모 값이 바뀌어(그리드 편집·붙여넣기·앱의 `SetValue`) 자식 코드가 목록에서 빠지면 자식 셀을 null로(`SetValue` 1회, 같은 Undo 단계, `RevertRow`로 되돌림, `ReadOnly` 열은 그대로). `Options`와 함께 쓰거나, `ValueField`·`TextField`가 없거나, 없는 필드거나, `FilterField`·`ParentField` 한쪽만이면 `ArgumentException`. `Options`·`OptionsFor`는 그대로. 다른 사용자 언어의 글자는 코드 DataSet을 다시 `Load`
 - 검증 규칙 `FieldRule`: `Required`, `Min`·`Max` (+ `MinExclusive`·`MaxExclusive`), `NotEqual`, `MessageKey` (범위·ne 오류 키를 바꿈, 필수는 그대로). 기본 키 `quro.validation.required`·`min`·`max`·`minExclusive`·`maxExclusive`·`notEqual` (G-02)
 - `QuroDataSet` 필드 이름은 정확히 같은 이름을 먼저(대소문자 구분), 없으면 대소문자를 무시하고 찾는다 (정의 id `qty` → 속성 `Qty`). 대소문자만 다른 속성이 둘 이상이면 정확한 이름만 (A-46)
@@ -94,6 +95,7 @@ QuroGrid는 DI 등록 메서드(`AddQuroGrid`)와 서비스 인터페이스를 �
 | 공개 API | 설명 |
 |---|---|
 | `GetExportRequest(ExportFormat format = ExportFormat.Xlsx)` | 현재 화면의 컬럼(화면 순서·사용자 언어 헤더·너비)·정렬·필터·로캘. 앱이 조회 조건과 함께 저장 API에 보낸다 |
+| `ExportColumn(…, Options, Mask = null)` | `Mask`는 Mask 셀의 마스크 (A-56, 0.5.0-alpha.7부터). 저장 값은 입력 문자만이므로 저장 API가 고정 문자를 넣어 보인다 |
 | `GridExportRequest(Columns, Sort, Culture, Filters, Format)` | `Format` 기본 `Xlsx`. JSON은 `"xlsx"`·`"csv"` |
 | `ExportFormat` | `Xlsx`, `Csv` |
 

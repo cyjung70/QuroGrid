@@ -1,6 +1,7 @@
 @page "/mask"
 @rendermode InteractiveServer
 @implements IDisposable
+@using Quro.Grid
 @using Quro.Grid.Data
 @using Quro.Grid.Sample.Data
 @using Quro.UI
@@ -15,6 +16,12 @@
                  PlaceholderKey="sample.mask.bizno" Localizer="L" />
     <QuroMaskBox TItem="SampleCustomer" DataSet="_customer" Field="Phone" Mask="000-0000-0000" />
 </div>
+
+@* the same data set in a grid with Mask cells (GS-095, A-56) *@
+<QuroGrid TItem="SampleCustomer" DataSet="_customer" Localizer="L" Height="120px">
+    <QuroColumn Field="BizNo" HeaderKey="sample.mask.bizno" Type="CellType.Mask" Mask="000-00-00000" Width="160" />
+    <QuroColumn Field="Phone" HeaderKey="sample.mask.phone" Type="CellType.Mask" Mask="000-0000-0000" Width="160" />
+</QuroGrid>
 
 @* stored value shown read-only with the mask (GS-U20) *@
 <p>

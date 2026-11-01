@@ -1,13 +1,14 @@
 using System.Text;
 
-namespace Quro.UI;
+namespace Quro.Grid.Data;
 
 /// <summary>
 /// Input mask (Control Spec 11, Addendum A-69): <c>0</c> digit, <c>A</c> letter of any language, <c>*</c> letter or
 /// digit, <c>\</c> makes the next character fixed, every other character is fixed. The column stores only the typed
-/// characters; the fixed characters are added for display. quro-ui.js applies the same rules while typing.
+/// characters; the fixed characters are added for display. Shared by the grid Mask cell and QuroMaskBox (A-56);
+/// quro-grid.js and quro-ui.js apply the same rules while typing.
 /// </summary>
-internal sealed class QuroMask
+public sealed class QuroMask
 {
     private enum Kind { Digit, Letter, LetterOrDigit, Fixed }
 
@@ -21,7 +22,7 @@ internal sealed class QuroMask
     public int Length => _slots.Length;
 
     /// <summary>Reads a mask. Throws <see cref="ArgumentException"/> when it has no input position.</summary>
-    public static QuroMask Parse(string? mask, string paramName)
+    public static QuroMask Parse(string? mask, string? paramName = null)
     {
         var slots = new List<Slot>();
         var text = mask ?? "";

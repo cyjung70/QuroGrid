@@ -15,6 +15,7 @@ namespace Quro.Grid;
 /// <param name="CurrencyField">Currency 셀의 통화 코드 필드</param>
 /// <param name="Aggregate">합계 행 집계</param>
 /// <param name="Options">Combo 셀 목록 (코드 → 명칭)</param>
+/// <param name="Mask">Mask 셀의 마스크 (A-56). 값은 입력 문자만이므로 저장 API가 고정 문자를 넣어 보인다</param>
 public sealed record ExportColumn(
     string Field,
     string HeaderKey,
@@ -24,7 +25,8 @@ public sealed record ExportColumn(
     int Width,
     string? CurrencyField,
     Aggregate Aggregate,
-    IReadOnlyList<ComboOption>? Options);
+    IReadOnlyList<ComboOption>? Options,
+    string? Mask = null);
 
 /// <summary>내보내기 요청. 앱이 조회 조건과 함께 저장 API 서버에 보낸다.</summary>
 /// <param name="Columns">내보낼 컬럼 (화면 순서, Button 셀 제외)</param>

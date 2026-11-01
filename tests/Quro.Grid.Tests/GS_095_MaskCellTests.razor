@@ -1,0 +1,148 @@
+@inherits GridTestContext
+
+@code {
+    // GS-095: Mask cell (A-56) — QuroColumn.Mask with the QuroMaskBox grammar (0 digit, A letter, * letter or digit, \ fixed).
+    // The column stores only the typed characters; cells, editor, filter and group heads show the fixed characters.
+
+    public sealed class Vendor
+    {
+        public string? BizNo { get; set; }
+        public int Count { get; set; }
+    }
+
+    private const string BizMask = "000-00-00000";
+    private static readonly CultureInfo En = new("en-US", useUserOverride: false);
+    private PastedArgs? _pasted;
+
+    private static QuroDataSet<Vendor> Vendors()
+    {
+        var ds = new QuroDataSet<Vendor>();
+        ds.Load([new Vendor { BizNo = "1234567890" }, new Vendor { BizNo = "12" }, new Vendor()]);
+        return ds;
+    }
+
+    private IRenderedComponent<QuroGrid<Vendor>> RenderGrid(QuroDataSet<Vendor> ds) =>
+        Render<QuroGrid<Vendor>>(@<QuroGrid DataSet="ds" Culture="En" OnPasted="(PastedArgs e) => _pasted = e">
+                                     <QuroColumn Field="BizNo" HeaderKey="vendor.bizno" Type="CellType.Mask" Mask="@BizMask" />
+                                 </QuroGrid>);
+
+    private static string[] Cells(IRenderedComponent<QuroGrid<Vendor>> cut) =>
+        cut.FindAll("[role=gridcell][data-field=BizNo]").Select(c => c.TextContent.Trim()).ToArray();
+
+    /// <summary>GS-095: cells show the stored value with the fixed characters; a value that doesn't fit shows as is</summary>
+    [Fact]
+    public void GS_095_ShowsFixedCharacters()
+    {
+        var cut = RenderGrid(Vendors());
+
+        Assert.Equal(["123-45-67890", "12", ""], Cells(cut));
+        Assert.Equal("mask", cut.Find("[role=gridcell][data-field=BizNo]").GetAttribute("data-type"));
+    }
+
+    /// <summary>GS-095: the editor starts with the fixed characters and carries the mask for quro-grid.js (R2)</summary>
+    [Fact]
+    public async Task GS_095_EditorCarriesMask()
+    {
+        var ds = Vendors();
+        var cut = RenderGrid(ds);
+
+        await cut.InvokeAsync(() => cut.Instance.BeginEdit(ds.RowKeys[0], "BizNo"));
+
+        var editor = cut.Find(".quro-editor");
+        Assert.Equal("123-45-67890", editor.GetAttribute("value"));
+        Assert.Equal(BizMask, editor.GetAttribute("data-mask"));
+    }
+
+    /// <summary>GS-095: commit stores only the typed characters, with or without the fixed characters; empty clears</summary>
+    [Fact]
+    public async Task GS_095_CommitStoresTypedCharacters()
+    {
+        var ds = Vendors();
+        var cut = RenderGrid(ds);
+        var row = ds.RowKeys[2];
+
+        Assert.True(await cut.InvokeAsync(() => cut.Instance.CommitEdit(row, "BizNo", "222-33-44444")));
+        Assert.Equal("2223344444", ds.GetValue(row, "BizNo"));
+
+        Assert.True(await cut.InvokeAsync(() => cut.Instance.CommitEdit(row, "BizNo", "5556677777")));
+        Assert.Equal("5556677777", ds.GetValue(row, "BizNo"));
+
+        Assert.True(await cut.InvokeAsync(() => cut.Instance.CommitEdit(row, "BizNo", "")));
+        Assert.Null(ds.GetValue(row, "BizNo"));
+    }
+
+    /// <summary>GS-095: a short or misfitting input is not committed and the value stays (edit stays open, like Number)</summary>
+    [Theory]
+    [InlineData("123-45")]
+    [InlineData("12A-45-67890")]
+    [InlineData("123-45-678901")]
+    public async Task GS_095_CommitRejectsMisfit(string text)
+    {
+        var ds = Vendors();
+        var cut = RenderGrid(ds);
+        var row = ds.RowKeys[0];
+        await cut.InvokeAsync(() => cut.Instance.BeginEdit(row, "BizNo"));
+
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.CommitEdit(row, "BizNo", text)));
+        Assert.Equal("1234567890", ds.GetValue(row, "BizNo"));
+        Assert.Equal(RowState.Normal, ds.GetState(row));
+        Assert.NotNull(cut.Find(".quro-editor"));
+    }
+
+    /// <summary>GS-095: paste reads each cell against the mask; misfits are skipped as Invalid</summary>
+    [Fact]
+    public async Task GS_095_PasteChecksMask()
+    {
+        var ds = Vendors();
+        var cut = RenderGrid(ds);
+
+        await cut.InvokeAsync(() => cut.Instance.Paste(ds.RowKeys[0], "BizNo", [["999-88-77777"], ["123"], ["1112233333"]]));
+
+        Assert.Equal("9998877777", ds.GetValue(ds.RowKeys[0], "BizNo"));
+        Assert.Equal("12", ds.GetValue(ds.RowKeys[1], "BizNo"));
+        Assert.Equal("1112233333", ds.GetValue(ds.RowKeys[2], "BizNo"));
+        var skip = Assert.Single(_pasted!.Skipped);
+        Assert.Equal(PasteKeys.Invalid, skip.MessageKey);
+    }
+
+    /// <summary>GS-095: the header text filter matches the shown text (with fixed characters) and the stored value</summary>
+    [Fact]
+    public async Task GS_095_FilterMatchesShownText()
+    {
+        var ds = Vendors();
+        var cut = RenderGrid(ds);
+
+        await cut.InvokeAsync(() => cut.Instance.SetFilters([new ColumnFilter("BizNo") { Contains = "45-6" }]));
+        Assert.Equal(["123-45-67890"], Cells(cut));
+
+        await cut.InvokeAsync(() => cut.Instance.SetFilters([new ColumnFilter("BizNo") { Contains = "4567" }]));
+        Assert.Equal(["123-45-67890"], Cells(cut));
+    }
+
+    /// <summary>GS-095: export carries the mask so the save API can show the fixed characters</summary>
+    [Fact]
+    public void GS_095_ExportCarriesMask()
+    {
+        var cut = RenderGrid(Vendors());
+
+        var column = Assert.Single(cut.Instance.GetExportRequest().Columns);
+        Assert.Equal(CellType.Mask, column.Type);
+        Assert.Equal(BizMask, column.Mask);
+    }
+
+    /// <summary>GS-095: Mask type without a mask, a mask on another type, a mask with no input position, a non-string column</summary>
+    [Fact]
+    public void GS_095_InvalidColumn_Throws()
+    {
+        var ds = Vendors();
+
+        Assert.Throws<ArgumentException>(() => Render<QuroGrid<Vendor>>(
+            @<QuroGrid DataSet="ds"><QuroColumn Field="BizNo" HeaderKey="h" Type="CellType.Mask" /></QuroGrid>));
+        Assert.Throws<ArgumentException>(() => Render<QuroGrid<Vendor>>(
+            @<QuroGrid DataSet="ds"><QuroColumn Field="BizNo" HeaderKey="h" Mask="000" /></QuroGrid>));
+        Assert.Throws<ArgumentException>(() => Render<QuroGrid<Vendor>>(
+            @<QuroGrid DataSet="ds"><QuroColumn Field="BizNo" HeaderKey="h" Type="CellType.Mask" Mask="--" /></QuroGrid>));
+        Assert.Throws<ArgumentException>(() => Render<QuroGrid<Vendor>>(
+            @<QuroGrid DataSet="ds"><QuroColumn Field="Count" HeaderKey="h" Type="CellType.Mask" Mask="000" /></QuroGrid>));
+    }
+}
