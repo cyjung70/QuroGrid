@@ -54,6 +54,7 @@ public sealed class SampleLocalizer : IStringLocalizer
         ["sample.date.title"] = ("QuroUI 날짜 선택기", "QuroUI date pickers"),
         ["sample.mask.title"] = ("QuroUI 마스크 박스", "QuroUI mask boxes"),
         ["sample.mask.bizno"] = ("사업자등록번호", "Business number"),
+        ["sample.mask.phone"] = ("전화번호", "Phone"),
         ["sample.combo.title"] = ("QuroUI 콤보 박스", "QuroUI combo boxes"),
         ["sample.combo.select"] = ("(선택)", "(Select)"),
         ["sample.combo.name"] = ("이름", "Name"),

@@ -23,6 +23,10 @@ public enum CellType
     Popup,
     /// <summary>Button that raises OnCellButtonClick.</summary>
     Button,
+    /// <summary>
+    /// Text typed into <see cref="QuroColumn.Mask"/> (A-56). Stores only the typed characters; shows the fixed ones.
+    /// </summary>
+    Mask,
 }
 
 /// <summary>

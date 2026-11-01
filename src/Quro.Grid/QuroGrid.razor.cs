@@ -197,7 +197,7 @@ public partial class QuroGrid<TItem> where TItem : class
     public GridExportRequest GetExportRequest(ExportFormat format = ExportFormat.Xlsx) => new(
         Columns.Where(c => c.Type != CellType.Button && c.Compute is null)   // the server can't run a Compute function (A-59)
             .Select(c => new ExportColumn(c.Field, c.HeaderKey, Text(c.HeaderKey), c.Type, c.Format, WidthOf(c),
-                c.CurrencyField, c.Aggregate, AllOptions(c)))
+                c.CurrencyField, c.Aggregate, AllOptions(c), c.Mask))
             .ToList(),
         SortColumns,
         EffectiveCulture.Name,
@@ -554,6 +554,13 @@ public partial class QuroGrid<TItem> where TItem : class
         {
             case CellType.Button:
                 return false;
+            case CellType.Mask when col.ParsedMask is { } mask:
+                if (string.IsNullOrEmpty(text))
+                    return true;   // clears the cell
+                if (!mask.TryRead(text.Trim(), out var typed))
+                    return false;
+                value = typed;
+                return true;
             case CellType.Combo when !string.IsNullOrEmpty(text):
                 var option = OptionsOf(col, rowKey)?.FirstOrDefault(o => Same(o.Value?.ToString(), text) || Same(o.Text, text));
                 value = option?.Value;
@@ -1808,12 +1815,20 @@ public partial class QuroGrid<TItem> where TItem : class
     void IColumnHost.AddColumn(QuroColumn column)
     {
         CheckParentField(column);
+        CheckMaskField(column);
         (column.Group?.Members ?? _definition).Add(column);
         RebuildColumns();
         RegisterRule(column);
         Relayout();
         if (column.Group is not null)
             StateHasChanged();   // 그룹 안 컬럼은 그리드 본문(Deferred)이 그려진 뒤에 등록된다 (GS-070)
+    }
+
+    /// <summary>A Mask cell stores the typed characters, so its field must be a string column (A-56).</summary>
+    private void CheckMaskField(QuroColumn col)
+    {
+        if (col.Type == CellType.Mask && col.Compute is null && DataSet.GetColumn(col.Field).Type != typeof(string))
+            throw new ArgumentException($"QuroColumn '{col.Field}': Mask 셀은 문자열 컬럼에만 씁니다.", nameof(col));
     }
 
     void IColumnHost.AddGroup(QuroColumnGroup group) => (group.Parent?.Members ?? _definition).Add(group);
@@ -1847,6 +1862,7 @@ public partial class QuroGrid<TItem> where TItem : class
     void IColumnHost.ColumnChanged(QuroColumn column)
     {
         CheckParentField(column);
+        CheckMaskField(column);
         RegisterRule(column);
         Relayout();
     }
@@ -1951,6 +1967,7 @@ public partial class QuroGrid<TItem> where TItem : class
         CellType.Check => "check",
         CellType.Popup => "popup",
         CellType.Button => "button",
+        CellType.Mask => "mask",
         _ => null,
     };
 
@@ -1984,6 +2001,7 @@ public partial class QuroGrid<TItem> where TItem : class
             var v when col.Type == CellType.Combo => OptionText(col, v, rowKey),
             null => "",
             var date when date is DateOnly or DateTime => Format(date, col),
+            string s when col.ParsedMask is { } mask => mask.Format(s),
             IFormattable f => f.ToString(null, EffectiveCulture),
             var v => v.ToString() ?? "",
         };
@@ -2028,6 +2046,7 @@ public partial class QuroGrid<TItem> where TItem : class
         DateOnly d => d.ToString(col.Format ?? "d", EffectiveCulture),
         DateTime d => d.ToString(col.Format ?? "d", EffectiveCulture),
         _ when col.Type == CellType.Number => FormatNumber(value, col.Format),
+        string s when col.ParsedMask is { } mask => mask.Format(s),
         IFormattable f => f.ToString(col.Format, EffectiveCulture),
         _ => value.ToString() ?? "",
     };

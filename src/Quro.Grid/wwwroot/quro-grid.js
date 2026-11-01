@@ -38,7 +38,10 @@ export function init(root, dotnet, options) {
     s.onReconnect = e => onReconnectState(s, e.detail?.state);
     s.onLinkClick = e => onLinkClick(s, e);
     s.onPaste = e => onPaste(s, e);
+    s.onInput = e => { if (!e.isComposing) applyMask(e.target); };   // IME: apply when composition ends
     root.addEventListener('keydown', s.onKeyDown);
+    root.addEventListener('input', s.onInput);
+    root.addEventListener('compositionend', s.onInput);
     root.addEventListener('mousedown', s.onMouseDown);
     root.addEventListener('mousemove', s.onMouseMove);
     root.addEventListener('dblclick', s.onDblClick);
@@ -63,6 +66,8 @@ export function dispose(root) {
     const s = grids.get(root);
     if (!s) return;
     root.removeEventListener('keydown', s.onKeyDown);
+    root.removeEventListener('input', s.onInput);
+    root.removeEventListener('compositionend', s.onInput);
     root.removeEventListener('mousedown', s.onMouseDown);
     root.removeEventListener('dblclick', s.onDblClick);
     root.removeEventListener('focusout', s.onFocusOut);
@@ -730,6 +735,7 @@ async function beginEdit(s, initialText) {
     if (initialText !== null) input.value = initialText;
     input.focus();
     input.setSelectionRange(input.value.length, input.value.length);
+    if (initialText !== null) applyMask(input);   // a typed character that doesn't fit the first position is dropped
     s.editing = { row, field, input };
     return true;
 }
@@ -1296,7 +1302,62 @@ function editable(cell) {
     return !!cell && cell.getAttribute('aria-readonly') !== 'true';
 }
 
-/** 셀 종류 (서버가 data-type으로 표시: date·combo·check·popup·button, Text·Number·Currency는 없음) */
+// ── Mask cell editor (GS-095, A-56) ──
+// Same rules as QuroMask on the server (0 digit, A letter of any language, * letter or digit, \ makes the next
+// character fixed). While typing, characters that don't fit their position are dropped and the fixed characters
+// between typed ones are added; the caret stays after the same typed character. The server reads the text on commit.
+const maskCache = new Map();
+
+function parseMask(mask) {
+    if (maskCache.has(mask)) return maskCache.get(mask);
+    const slots = [];
+    for (let i = 0; i < mask.length; i++) {
+        const c = mask[i];
+        if (c === '\\' && i + 1 < mask.length) slots.push({ fixed: mask[++i] });
+        else if (c === '0') slots.push({ test: ch => /[0-9]/.test(ch) });
+        else if (c === 'A') slots.push({ test: ch => /\p{L}/u.test(ch) });
+        else if (c === '*') slots.push({ test: ch => /[0-9]|\p{L}/u.test(ch) });
+        else slots.push({ fixed: c });
+    }
+    maskCache.set(mask, slots);
+    return slots;
+}
+
+/** Characters of text that fit the mask's input positions in order (fixed characters and misfits are dropped). */
+function maskedChars(slots, text) {
+    const inputs = slots.filter(x => x.test);
+    const typed = [];
+    for (const ch of text) {
+        if (typed.length === inputs.length) break;
+        if (inputs[typed.length].test(ch)) typed.push(ch);
+    }
+    return typed;
+}
+
+function applyMask(input) {
+    if (!(input instanceof HTMLInputElement) || !input.classList.contains('quro-editor')) return;
+    const mask = input.dataset.mask;
+    if (!mask) return;
+    const slots = parseMask(mask);
+    const text = input.value;
+    const caret = input.selectionStart ?? text.length;
+    const typed = maskedChars(slots, text);
+    const before = maskedChars(slots, text.slice(0, caret)).length;
+
+    let shown = '';
+    let next = 0;
+    let newCaret = 0;
+    for (const slot of slots) {
+        if (next === typed.length) break;
+        shown += slot.fixed ?? typed[next++];
+        if (slot.test && next === before) newCaret = shown.length;
+    }
+    if (shown === text) return;
+    input.value = shown;
+    input.setSelectionRange(newCaret, newCaret);
+}
+
+/** 셀 종류 (서버가 data-type으로 표시: date·combo·check·popup·button·mask, Text·Number·Currency는 없음) */
 function cellType(cell) {
     return cell?.dataset.type ?? null;
 }

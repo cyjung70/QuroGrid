@@ -107,6 +107,16 @@ public sealed class QuroColumn : ComponentBase, IDisposable
     /// <summary>Cell look by row item and cell value (the computed value on a <see cref="Compute"/> column), A-59.</summary>
     [Parameter] public Func<object, object?, CellTone>? CellStyle { get; set; }
 
+    /// <summary>
+    /// Input mask of a <see cref="CellType.Mask"/> column (A-56), same grammar as QuroMaskBox: <c>0</c> digit,
+    /// <c>A</c> letter, <c>*</c> letter or digit, <c>\</c> makes the next character fixed, anything else is fixed.
+    /// String columns only.
+    /// </summary>
+    [Parameter] public string? Mask { get; set; }
+
+    /// <summary>Parsed <see cref="Mask"/>; null when the column is not a Mask cell.</summary>
+    internal QuroMask? ParsedMask { get; private set; }
+
     private object? _rendered;
     private IQuroDataSet? _codes;   // OptionsSource whose events this column follows
     private Dictionary<string, List<ComboOption>>? _lists;   // code lists by parent key (AllCodes = no filter), dropped on any code change
@@ -119,6 +129,7 @@ public sealed class QuroColumn : ComponentBase, IDisposable
         if (Host is null)
             throw new InvalidOperationException($"{nameof(QuroColumn)}은 QuroGrid 안에서만 쓸 수 있습니다.");
         CheckCodeSource();
+        CheckMask();
         BindCodes(OptionsSource);
         Host.AddColumn(this);
     }
@@ -128,15 +139,25 @@ public sealed class QuroColumn : ComponentBase, IDisposable
     {
         object now = (Field, HeaderKey, Type, Format, ReadOnly, Width, Aggregate, CurrencyField, Required, Min, Max,
             (Lookup, Options, CheckedValue, UncheckedValue, TextKey), (NewRowOnly, Filterable, Sortable, Groupable),
-            (Compute, CellStyle), (OptionsSource, ValueField, TextField, FilterField, ParentField));
+            (Compute, CellStyle), (OptionsSource, ValueField, TextField, FilterField, ParentField), Mask);
         if (_rendered is not null && !Equals(now, _rendered))
         {
             CheckCodeSource();
+            CheckMask();
             BindCodes(OptionsSource);
             _lists = null;
             Host?.ColumnChanged(this);
         }
         _rendered = now;
+    }
+
+    private void CheckMask()
+    {
+        if (Type == CellType.Mask && string.IsNullOrEmpty(Mask))
+            throw new ArgumentException($"QuroColumn '{Field}': Mask 셀에는 Mask가 필요합니다.", nameof(Mask));
+        if (Type != CellType.Mask && Mask is not null)
+            throw new ArgumentException($"QuroColumn '{Field}': Mask는 Type이 Mask인 컬럼에만 씁니다.", nameof(Mask));
+        ParsedMask = Mask is null ? null : QuroMask.Parse(Mask, nameof(Mask));
     }
 
     private void CheckCodeSource()

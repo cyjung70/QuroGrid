@@ -435,3 +435,13 @@ GS-092·GS-093 — **완료** (2026-10-31 스테이블영 결정 1(a)·2·3(a)·
 | GS-094 | Combo 셀 코드 DataSet 바인딩 | `OptionsSource`·`ValueField`·`TextField`: 셀은 코드 행의 글자(없는 코드는 값 그대로), 목록은 삭제 표시가 아닌 코드 행, 고르면 코드 저장. 연동 콤보 `FilterField`·`ParentField`: 그 행 부모 값의 코드만(부모 null이면 빈 목록), 부모 값이 바뀌어 자식 코드가 목록에서 빠지면 자식 null(`RevertRow`로 복원), 남아 있으면 유지. 붙여넣기는 그 행 목록의 코드·글자만(다른 부모의 글자는 `Invalid`). 코드 DataSet 변경(`SetValue`·`Load`·`AddRow`)에 셀이 다시 그려짐. 헤더 필터 값·내보내기 `Options`는 코드 DataSet 전체. `Options`와 함께·필드 누락·없는 필드·`FilterField`만이면 `ArgumentException`. `IQuroDataSet`으로 읽기·이벤트 | bUnit · xUnit | A-57 |
 
 GS-094 — **완료** (2026-11-01 스테이블영 결정 1(a)·2~7).
+
+### 6-6 새 셀 타입 (A-56)
+
+| ID | 시나리오 | 기대 결과 | 계층 | 근거 |
+|---|---|---|---|---|
+| GS-095 | Mask 셀 | `Type=Mask` + `Mask` 패턴(QuroMaskBox 문법): 셀·에디터는 고정 문자와 함께, 저장은 입력 문자만(고정 문자 있든 없든), 빈 입력은 null. 덜 채우거나 맞지 않으면 `CommitEdit` false·편집 유지·값 그대로, 붙여넣기는 `Invalid`. 헤더 텍스트 필터는 보이는 글자·저장 값 모두. 내보내기 `ExportColumn.Mask`. `Mask` 없는 Mask 셀·다른 타입의 `Mask`·입력 자리 없는 마스크·문자열 아닌 열은 `ArgumentException`. 브라우저: 입력 중 고정 문자 넣기·맞지 않는 문자 버리기(첫 글자 입력으로 편집 시작 포함), 확정까지 서버 호출 없음, Enter로 1회. `QuroMask`는 `Quro.Grid.Data` 공개 타입 | bUnit · xUnit · Playwright | A-56 |
+| GS-096 | Image 셀 | (예정) 값 = URL 문자열, 편집 없음, 행 높이에 맞춰 비율 유지, 대체 텍스트는 선택 `TextField`, 클릭은 `OnCellClick` | bUnit · Playwright | A-56 |
+| GS-097 | Label 셀 | (예정) 정적 텍스트, 편집 없음. 포커스·복사는 `ReadOnly` Text와 같고 모양만 다름 | bUnit | A-56 |
+
+GS-095 — **완료** (2026-11-01 스테이블영 결정 1(a)·2(a)·3(b)·4).
