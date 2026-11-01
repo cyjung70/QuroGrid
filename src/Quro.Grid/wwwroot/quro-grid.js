@@ -80,6 +80,7 @@ export function dispose(root) {
     document.removeEventListener('components-reconnect-state-changed', s.onReconnect, true);
     document.removeEventListener('click', s.onLinkClick, true);
     clearTimeout(s.notifyTimer);
+    s.editing?.observer?.disconnect();
     s.style.remove();
     s.resizeStyle?.remove();
     s.dragStyle?.remove();
@@ -130,20 +131,32 @@ function onKeyDown(s, e) {
     // 열린 선택 목록 (GS-091, A-68): 화살표는 강조 이동(브라우저만, R2), Enter는 강조 항목을 고른다(서버 1회)
     if (s.editing && pickerKey(s, e)) return;
     // Undo / Redo (GS-076, A-33): 편집 중이 아니면 서버 1회. 편집 중에는 입력란의 기본 Undo
-    if (!s.editing && isUndoKey(e)) {
+    if ((!s.editing || isClean(s)) && isUndoKey(e)) {
         e.preventDefault();
         const redo = e.key.toLowerCase() === 'y' || e.shiftKey;
-        enqueue(s, () => s.editing ? null : s.dotnet.invokeMethodAsync(redo ? 'Redo' : 'Undo'));
+        enqueue(s, () => s.editing && !isClean(s) ? null : s.dotnet.invokeMethodAsync(redo ? 'Redo' : 'Undo'));
         return;
     }
     // 편집 중이고 밀린 동작이 없으면 문자·화살표는 에디터가 그대로 받는다 (서버 호출 없음, R2)
-    if (s.editing && s.pending === 0 && !['Enter', 'Tab', 'Escape', 'F4'].includes(e.key) && !isPickerKey(e)) return;
+    if (s.editing && s.pending === 0 && !gridKeyWhileEditing(s, e)) return;
     if (!HANDLED.has(e.key) && !isChar(e) && !isRowDelete(e)) return;
 
     e.preventDefault();
     const key = { key: isRowDelete(e) ? 'RowDelete' : e.key, shift: e.shiftKey, alt: e.altKey, ctrl: e.ctrlKey, char: isChar(e) };
     enqueue(s, () => typeAheadFilter(s, key)
         || (s.header ? handleHeaderKey(s, key) : s.group ? handleGroupKey(s, key) : handleKey(s, key)));
+}
+
+/**
+ * Keys the grid handles while an editor is open. Server editor: Enter·Tab·Esc·F4·Alt+↓.
+ * Select editor (EditOnSelect, A-58): also arrows and F2 until F2 switches to caret mode, and Insert·Ctrl+Delete
+ * while its text is unchanged.
+ */
+function gridKeyWhileEditing(s, e) {
+    if (['Enter', 'Tab', 'Escape', 'F4'].includes(e.key) || isPickerKey(e)) return true;
+    if (!s.editing.local) return false;
+    if (!s.editing.caret && (e.key.startsWith('Arrow') || e.key === 'F2')) return true;
+    return isClean(s) && (e.key === 'Insert' || isRowDelete(e));
 }
 
 /** 필터 패널이 열리는 동안 먼저 친 키는 패널이 받는다 (편집 시작 중 입력과 같음). 처리했으면 true */
@@ -182,7 +195,10 @@ function onMouseDown(s, e) {
         }
         return;
     }
-    if (e.button !== 0 || e.target.closest('.quro-editor')) return;
+    if (e.button !== 0 || e.target.closest('.quro-editor')) {
+        if (e.button === 0 && s.editing?.local && e.target === s.editing.input) s.editing.caret = true;   // clicking the text places the caret
+        return;
+    }
     const filterButton = e.target.closest('.quro-head .quro-filter-button');
     if (filterButton) {
         e.preventDefault();   // 정렬·드래그가 아니다
@@ -218,6 +234,7 @@ function onMouseDown(s, e) {
     }
     const cell = e.target.closest('.quro-body [role=gridcell][data-field]');
     if (!cell) return;
+    if (editOnSelect(s)) e.preventDefault();   // the select editor takes the focus, not the grid (A-58)
     const target = position(cell);
     const extend = e.shiftKey && !!s.anchor;
     // 셀 안 체크 표시·버튼을 누르면 활성화 후 바로 동작 (셀마다 핸들러를 달지 않는다, R5)
@@ -379,7 +396,8 @@ function clipboardOff(s) {
 }
 
 function hasFocus(s) {
-    return !s.editing && s.root.contains(document.activeElement);
+    // a select editor with unchanged text in select mode copies and pastes cells like the grid (A-58)
+    return (!s.editing || (isClean(s) && !s.editing.caret)) && s.root.contains(document.activeElement);
 }
 
 /** Ctrl+C: 선택 범위의 표시 값을 엑셀 형식(탭·줄바꿈)으로. 표시와 값이 다른 셀(Check·Button)은 data-copy. */
@@ -446,6 +464,10 @@ function onDblClick(s, e) {
     }
     const cell = e.target.closest('.quro-body [role=gridcell][data-field]');
     if (!cell || !hasEditor(cell)) return;
+    if (s.editing?.local) {
+        s.editing.caret = true;
+        return;
+    }
     const target = position(cell);
     enqueue(s, async () => {
         activate(s, target.row, target.field);
@@ -485,23 +507,28 @@ async function handleKey(s, k) {
         return;
     }
 
+    dropLostEditor(s);
     const type = cellType(currentCell(s));
     if (k.char) {
         if (s.editing) appendText(s.editing.input, k.key);
         else if (type === 'check' || type === 'button' || type === 'image') { if (k.key === ' ') await cellAction(s, type); }   // Space: 토글·클릭
+        else if (openSelectEditor(s)) appendText(s.editing.input, k.key);
         else if (hasEditor(currentCell(s))) await beginEdit(s, k.key);   // 문자 입력: 덮어쓰기
         return;
     }
 
     switch (k.key) {
         case 'F2':
-            if (!s.editing && hasEditor(currentCell(s))) await beginEdit(s, null);   // 기존 값 유지
+            if (!s.editing) openSelectEditor(s);
+            if (s.editing?.local) caretMode(s);
+            else if (!s.editing && hasEditor(currentCell(s))) await beginEdit(s, null);   // 기존 값 유지
             return;
         case 'F4':
             if (type === 'popup') await requestPopup(s);
             return;
         case 'Escape':
-            if (s.editing) await cancel(s);
+            if (s.editing?.local) revertSelectEditor(s);
+            else if (s.editing) await cancel(s);
             return;
         case 'Enter':
             if (!s.editing && (type === 'button' || type === 'image')) return cellAction(s, type);   // Button·Image 셀: 클릭, 이동 없음
@@ -513,11 +540,13 @@ async function handleKey(s, k) {
             moveToEditable(s, k.shift ? -1 : 1);
             return;
         case 'Insert':
+            if (isClean(s)) closeSelectEditor(s);
             if (!s.editing) await addRow(s, s.active.row);   // 활성 행 바로 아래 (A-15)
             return;
         case 'RowDelete':
             // 선택 범위의 행을 한 번에 (R3). 남은 행으로의 이동은 서버 렌더 뒤 ensureActive가 한다.
             // 페이징 중에는 화면 밖까지 이어진 범위를 위치로 보낸다 (A-25). 서버가 필요한 범위를 적재한 뒤 삭제
+            if (isClean(s)) closeSelectEditor(s);
             if (s.editing) return;
             if (s.options.paging) {
                 const { topIndex, bottomIndex } = selection(s);
@@ -527,6 +556,7 @@ async function handleKey(s, k) {
             }
             return;
         case 'ArrowUp': {
+            if (!(await leaveSelectEditor(s))) return;
             // 헤더로 (GS-064): Ctrl+↑는 어느 행에서나, ↑는 첫 행에서. 위가 그룹 머리 행이면 그 행으로 (GS-074)
             if (k.ctrl) return enterHeader(s, s.active.field);
             if (!k.shift && s.options.paging && rowIndexOf(rowEl(s, s.active.row)) === 0) return enterHeader(s, s.active.field);
@@ -539,12 +569,13 @@ async function handleKey(s, k) {
         }
         case 'ArrowDown': {
             if (k.alt) return openPicker(s);
+            if (!(await leaveSelectEditor(s))) return;
             const next = !k.shift && !s.options.paging ? navNeighbor(s, rowEl(s, s.active.row), 1) : null;
             if (next && isGroupHead(next)) return enterGroup(s, next);
             return moveBy(s, 1, 0, k.shift);
         }
-        case 'ArrowLeft': return moveBy(s, 0, -1, k.shift);
-        case 'ArrowRight': return moveBy(s, 0, 1, k.shift);
+        case 'ArrowLeft': return (await leaveSelectEditor(s)) && moveBy(s, 0, -1, k.shift);
+        case 'ArrowRight': return (await leaveSelectEditor(s)) && moveBy(s, 0, 1, k.shift);
     }
 }
 
@@ -744,11 +775,16 @@ async function beginEdit(s, initialText) {
 /** 셀 이탈 커밋. byKey(Enter·Tab)면 Popup 셀 코드도움 팝업이 닫힌 뒤에도 포커스를 그리드로 되찾는다. */
 async function commit(s, byKey = false) {
     const { row, field, input } = s.editing;
+    if (isClean(s)) {   // select editor with unchanged text: nothing to send (A-58)
+        closeSelectEditor(s);
+        return true;
+    }
     if (!(await s.dotnet.invokeMethodAsync('CommitEdit', row, field, input.value))) {
         input.focus();   // 해석 실패·OnCellValueChanging 취소·0건·팝업 취소: 편집 유지
         if (byKey) reclaimFocus(s, input);
         return false;
     }
+    closeSelectEditor(s);
     s.editing = null;
     s.root.focus({ preventScroll: true });
     if (byKey) reclaimFocus(s, s.root);
@@ -779,9 +815,11 @@ async function requestPopup(s) {
         reclaimFocus(s, s.editing.input);
         return;
     }
+    closeSelectEditor(s);
     s.editing = null;
     s.root.focus({ preventScroll: true });
     reclaimFocus(s, s.root);
+    openSelectEditor(s);
 }
 
 /** Alt+↓: Date 달력·Combo 목록 (Addendum A-17). 편집 중이 아니면 편집을 시작하고 연다. 고르면 서버가 확정 후 endEdit. */
@@ -789,6 +827,13 @@ async function openPicker(s) {
     const cell = currentCell(s);
     const type = cellType(cell);
     if ((type !== 'date' && type !== 'combo') || !editable(cell)) return;
+    if (s.editing?.local) {
+        // the list needs the server editor: hand the typed text over to it
+        const text = s.editing.input.value;
+        closeSelectEditor(s);
+        if (!(await beginEdit(s, null))) return openSelectEditor(s);
+        s.editing.input.value = text;
+    }
     if (!s.editing && !(await beginEdit(s, null))) return;
     if (!(await s.dotnet.invokeMethodAsync('OpenPicker', s.editing.row, s.editing.field, s.editing.input.value))) return;
     await waitFor(() => s.root.querySelector('.quro-picker'));
@@ -941,11 +986,13 @@ async function cancel(s) {
     s.editing = null;
     await s.dotnet.invokeMethodAsync('CancelEdit');
     s.root.focus({ preventScroll: true });
+    openSelectEditor(s);
 }
 
+/** Types text at the caret, replacing the selected text (a select editor starts with all of it selected). */
 function appendText(input, text) {
-    input.value += text;
-    input.setSelectionRange(input.value.length, input.value.length);
+    input.setRangeText(text, input.selectionStart ?? input.value.length, input.selectionEnd ?? input.value.length, 'end');
+    applyMask(input);
 }
 
 // ── 이동 (서버 호출 없음) ──
@@ -1006,8 +1053,11 @@ function activate(s, row, field, extend = false, focus = true) {
     const index = rowIndexOf(rowEl(s, row));
     if (s.header) leaveHeader(s);
     if (s.group) leaveGroup(s);
+    dropLostEditor(s);
+    const hadFocus = s.root.contains(document.activeElement);
     s.active = { row, field, index };
     if (!extend || !s.anchor) s.anchor = { row, field, index };
+    if (s.editing?.local && (!same(s.editing, s.active) || !same(s.anchor, s.active)) && isClean(s)) closeSelectEditor(s);
 
     const sel = selection(s);
     s.root.setAttribute('data-active-row', String(row));
@@ -1025,6 +1075,7 @@ function activate(s, row, field, extend = false, focus = true) {
     markSelected(s, sel.rowEls.flatMap(r => sel.fields.map(f => cellAt(s, rowKey(r), f))).filter(Boolean));
     currentCell(s)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     if (focus && !s.editing && document.activeElement !== s.root) s.root.focus({ preventScroll: true });
+    if (focus || hadFocus) openSelectEditor(s);
     notifySelection(s);
 }
 
@@ -1153,6 +1204,7 @@ export function endEdit(root) {
     if (!s) return;
     s.editing = null;
     s.root.focus({ preventScroll: true });
+    openSelectEditor(s);
 }
 
 /**
@@ -1182,7 +1234,7 @@ export function ensureActive(root) {
  */
 export function activateRow(root, row, index) {
     const s = grids.get(root);
-    if (!s || s.editing) return;
+    if (!s || (s.editing && !isClean(s))) return;
     const place = () => {
         const el = rowEl(s, row);
         if (!el) return false;
@@ -1302,6 +1354,96 @@ function same(a, b) {
 
 function editable(cell) {
     return !!cell && cell.getAttribute('aria-readonly') !== 'true';
+}
+
+// ── Select editor (EditOnSelect, GS-098, A-58) ──
+// With the option on, the browser opens its own editor on the selected cell: no server call (R2). The text is selected,
+// so typing replaces it; arrows leave the cell until F2 (or a click in the text) switches to caret mode. Leaving commits
+// once through CommitEdit, and only when the text changed. Date·Combo lists (Alt+↓) still use the server editor.
+
+function editOnSelect(s) {
+    return s.root.dataset.editOnSelect === 'true';
+}
+
+/** A select editor whose text is unchanged (so there is nothing to commit). */
+function isClean(s) {
+    return !!s.editing?.local && s.editing.input.value === s.editing.initial;
+}
+
+/** Editor text of a cell: data-edit when it differs from the shown text. */
+function editTextOf(cell) {
+    return cell.dataset.edit ?? cell.textContent.trim();
+}
+
+/** Opens the select editor on the active cell when the option is on and one editable cell is selected. True if open. */
+function openSelectEditor(s) {
+    if (s.editing) return !!s.editing.local;
+    if (!editOnSelect(s) || !s.active || !same(s.anchor, s.active) || s.header || s.group) return false;
+    const cell = currentCell(s);
+    if (!hasEditor(cell) || cell.closest('.quro-deleted')) return false;
+    const input = document.createElement('input');
+    input.className = 'quro-editor quro-select-editor';
+    if (cell.dataset.mask) input.dataset.mask = cell.dataset.mask;
+    const text = editTextOf(cell);
+    input.value = text;
+    cell.appendChild(input);
+    // the server may change the cell while it is selected (app value, Undo, paste): follow it while the text is unchanged
+    const observer = new MutationObserver(() => syncSelectEditor(s, input));
+    observer.observe(cell, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['data-edit', 'aria-readonly'] });
+    s.editing = { row: s.active.row, field: s.active.field, input, local: true, initial: text, caret: false, observer };
+    input.focus({ preventScroll: true });
+    input.select();
+    return true;
+}
+
+function syncSelectEditor(s, input) {
+    const ed = s.editing;
+    if (!ed?.local || ed.input !== input) return;
+    const cell = input.parentElement;
+    if (!input.isConnected || !hasEditor(cell)) return closeSelectEditor(s);
+    if (input.value !== ed.initial) return;   // the user's text wins
+    const text = editTextOf(cell);
+    if (text === ed.initial) return;
+    ed.initial = input.value = text;
+    if (!ed.caret) input.select();
+}
+
+/** Removes the select editor (without committing). The grid keeps the focus. */
+function closeSelectEditor(s) {
+    const ed = s.editing;
+    if (!ed?.local) return;
+    s.editing = null;
+    ed.observer.disconnect();
+    if (document.activeElement === ed.input) s.root.focus({ preventScroll: true });
+    ed.input.remove();
+}
+
+/** The server re-created the row and the editor went with it. */
+function dropLostEditor(s) {
+    if (s.editing?.local && !s.editing.input.isConnected) {
+        s.editing.observer.disconnect();
+        s.editing = null;
+    }
+}
+
+/** F2 in a select editor: arrows now move the caret inside the text until the cell is left. */
+function caretMode(s) {
+    const input = s.editing.input;
+    s.editing.caret = true;
+    input.setSelectionRange(input.value.length, input.value.length);
+}
+
+/** Esc: back to the cell's text, selected again. No server call. */
+function revertSelectEditor(s) {
+    const ed = s.editing;
+    ed.input.value = ed.initial;
+    ed.caret = false;
+    ed.input.select();
+}
+
+/** Before an arrow key leaves the cell: commit the select editor (only if the text changed). False keeps the editor. */
+function leaveSelectEditor(s) {
+    return s.editing?.local ? commit(s, true) : true;
 }
 
 // ── Mask cell editor (GS-095, A-56) ──

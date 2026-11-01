@@ -1,0 +1,90 @@
+@inherits GridTestContext
+
+@code {
+    // GS-098: EditOnSelect (A-58) — server side. quro-grid.js opens its own editor on the active cell (no server call),
+    // so the grid marks the root (data-edit-on-select) and gives each editable cell its edit text in data-edit when it
+    // differs from the shown text (e.g. Format N0 rounds what is shown; the editor must start from the stored value).
+
+    public sealed class Line
+    {
+        public string? Name { get; set; }
+        public decimal Qty { get; set; }
+        public string? Kind { get; set; }
+    }
+
+    private static readonly CultureInfo En = new("en-US", useUserOverride: false);
+    private static readonly ComboOption[] Kinds = [new("A", "Alpha"), new("B", "Beta")];
+
+    private static QuroDataSet<Line> Lines()
+    {
+        var ds = new QuroDataSet<Line>();
+        ds.Load([new Line { Name = "Apple", Qty = 1234.5m, Kind = "A" }, new Line { Name = "Pear", Qty = 7m }]);
+        return ds;
+    }
+
+    private IRenderedComponent<QuroGrid<Line>> RenderGrid(QuroDataSet<Line> ds, bool editOnSelect = true, bool qtyReadOnly = false) =>
+        Render<QuroGrid<Line>>(@<QuroGrid DataSet="ds" Culture="En" EditOnSelect="editOnSelect">
+                                   <QuroColumn Field="Name" HeaderKey="line.name" />
+                                   <QuroColumn Field="Qty" HeaderKey="line.qty" Type="CellType.Number" Format="N0" ReadOnly="qtyReadOnly" />
+                                   <QuroColumn Field="Kind" HeaderKey="line.kind" Type="CellType.Combo" Options="Kinds" />
+                               </QuroGrid>);
+
+    private static AngleSharp.Dom.IElement Cell(IRenderedComponent<QuroGrid<Line>> cut, string field, int index = 0) =>
+        cut.FindAll($"[role=gridcell][data-field={field}]")[index];
+
+    /// <summary>GS-098: the option is off by default; the root says when it is on</summary>
+    [Fact]
+    public void GS_098_RootMarksOption()
+    {
+        Assert.Equal("true", RenderGrid(Lines()).Find("[role=grid]").GetAttribute("data-edit-on-select"));
+        Assert.Null(RenderGrid(Lines(), editOnSelect: false).Find("[role=grid]").GetAttribute("data-edit-on-select"));
+        Assert.False(new QuroGrid<Line>().EditOnSelect);
+    }
+
+    /// <summary>GS-098: data-edit only where the edit text differs from the shown text</summary>
+    [Fact]
+    public void GS_098_EditText_OnlyWhereItDiffers()
+    {
+        var cut = RenderGrid(Lines());
+
+        Assert.Equal("1,235", Cell(cut, "Qty").TextContent.Trim());
+        Assert.Equal("1234.5", Cell(cut, "Qty").GetAttribute("data-edit"));
+        Assert.Null(Cell(cut, "Qty", 1).GetAttribute("data-edit"));    // "7" both ways
+        Assert.Null(Cell(cut, "Name").GetAttribute("data-edit"));
+        Assert.Null(Cell(cut, "Kind").GetAttribute("data-edit"));      // Combo edits its text
+    }
+
+    /// <summary>GS-098: no data-edit when the option is off or the cell has no editor</summary>
+    [Fact]
+    public void GS_098_EditText_NotWhenOffOrReadOnly()
+    {
+        Assert.Null(Cell(RenderGrid(Lines(), editOnSelect: false), "Qty").GetAttribute("data-edit"));
+        Assert.Null(Cell(RenderGrid(Lines(), qtyReadOnly: true), "Qty").GetAttribute("data-edit"));
+    }
+
+    /// <summary>GS-098: data-edit follows the value</summary>
+    [Fact]
+    public async Task GS_098_EditText_FollowsValue()
+    {
+        var ds = Lines();
+        var cut = RenderGrid(ds);
+
+        Assert.True(await cut.InvokeAsync(() => cut.Instance.CommitEdit(ds.RowKeys[1], "Qty", "9876.25")));
+
+        Assert.Equal("9,876", Cell(cut, "Qty", 1).TextContent.Trim());
+        Assert.Equal("9876.25", Cell(cut, "Qty", 1).GetAttribute("data-edit"));
+    }
+
+    /// <summary>GS-098: CommitEdit works without BeginEdit (the browser editor never calls it)</summary>
+    [Fact]
+    public async Task GS_098_CommitWithoutBeginEdit()
+    {
+        var ds = Lines();
+        var cut = RenderGrid(ds);
+
+        Assert.True(await cut.InvokeAsync(() => cut.Instance.CommitEdit(ds.RowKeys[0], "Name", "Plum")));
+
+        Assert.Equal("Plum", ds.GetValue(ds.RowKeys[0], "Name"));
+        Assert.Empty(cut.FindAll(".quro-editor"));
+    }
+}

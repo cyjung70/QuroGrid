@@ -4,6 +4,7 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 소비자(QuroERP)는 버전을 올리기 전에 이 파일을 읽는다.
 
 ## Unreleased
+- Added: `QuroGrid.EditOnSelect` (기본 false) — 편집 가능한 셀에 서면 브라우저 에디터가 바로 열린다(서버 호출 없음, R2). 글자 전체 선택·입력하면 덮어씀·화살표는 셀 이탈·F2는 커서 모드·Esc는 되돌림, 셀을 떠날 때 글자가 바뀐 경우에만 `CommitEdit` 1회 (A-58, GS-098). 소비자 조치: 없음
 
 ## 0.5.0-alpha.7 — 2026-11-01
 그리드 Mask·Image·Label 셀 (A-56). BREAKING 없음. 소비자 조치: 없음 (쓰려면 `QuroGridVersion`을 0.5.0-alpha.7로)
