@@ -32,6 +32,11 @@ public enum CellType
     /// <see cref="QuroColumn.TextField"/>; click, Enter and Space raise OnCellClick.
     /// </summary>
     Image,
+    /// <summary>
+    /// Static text (A-56). Works like a <see cref="QuroColumn.ReadOnly"/> Text cell (focus, copy, filter, sort) and
+    /// only looks different (label color, <c>--quro-label</c>).
+    /// </summary>
+    Label,
 }
 
 /// <summary>

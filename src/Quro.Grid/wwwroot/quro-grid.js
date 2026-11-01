@@ -1359,7 +1359,7 @@ function applyMask(input) {
     input.setSelectionRange(newCaret, newCaret);
 }
 
-/** 셀 종류 (서버가 data-type으로 표시: date·combo·check·popup·button·mask·image, Text·Number·Currency는 없음) */
+/** 셀 종류 (서버가 data-type으로 표시: date·combo·check·popup·button·mask·image·label, Text·Number·Currency는 없음) */
 function cellType(cell) {
     return cell?.dataset.type ?? null;
 }
