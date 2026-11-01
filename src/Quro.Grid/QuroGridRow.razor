@@ -47,6 +47,14 @@
             {
                 <span class="quro-check" role="checkbox" aria-checked="@(Grid.IsChecked(RowKey, col) ? "true" : "false")"></span>
             }
+            else if (col.Type == CellType.Image)
+            {
+                @if (Grid.ImageUrl(RowKey, col) is { } url)
+                {
+                    @* the click is received by quro-grid.js on the grid (R5) and sent once as ClickCell *@
+                    <img class="quro-image" src="@url" alt="@Grid.ImageAlt(RowKey, col)" />
+                }
+            }
             else if (col.Type == CellType.Button)
             {
                 <span class="quro-button" role="button">@Grid.Text(col.TextKey ?? "")</span>

@@ -1,0 +1,40 @@
+@page "/cells"
+@rendermode InteractiveServer
+@using Quro.Grid
+@using Quro.Grid.Data
+@using Quro.Grid.Sample.Data
+
+<PageTitle>@L["sample.cells.title"]</PageTitle>
+
+<h1>@L["sample.cells.title"]</h1>
+
+@* Image cells (GS-096, A-56): URL values, alt text from Name, click / Enter / Space raise OnCellClick *@
+<QuroGrid TItem="SampleProduct" DataSet="_products" Localizer="L" OnCellClick="OnCellClick">
+    <QuroColumn Field="Photo" HeaderKey="sample.cells.photo" Type="CellType.Image" TextField="Name" Width="80" />
+    <QuroColumn Field="Name" HeaderKey="sample.cells.name" Width="160" />
+</QuroGrid>
+
+<p>
+    <span data-testid="clicks">@_clicks</span> ·
+    <span data-testid="clicked">@_clicked</span>
+</p>
+
+@code {
+    private static readonly SampleLocalizer L = new();
+    private readonly QuroDataSet<SampleProduct> _products = new();
+    private int _clicks;
+    private string? _clicked;
+
+    protected override void OnInitialized() =>
+        _products.Load(
+        [
+            new SampleProduct { Id = 1, Name = "Blue box", Photo = "img/box.svg" },
+            new SampleProduct { Id = 2, Name = "No photo" },
+        ]);
+
+    private void OnCellClick(CellClickArgs<SampleProduct> e)
+    {
+        _clicks++;
+        _clicked = $"{e.RowKey}:{e.Value}";
+    }
+}

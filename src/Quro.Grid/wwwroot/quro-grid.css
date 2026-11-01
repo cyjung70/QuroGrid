@@ -23,6 +23,7 @@
     --qg-tone-success: var(--quro-tone-success, #079455);
     --qg-tone-muted: var(--quro-tone-muted, var(--qg-check-line));
     --qg-tone-highlight: var(--quro-tone-highlight, color-mix(in srgb, var(--qg-warning-line) 18%, var(--qg-bg)));
+    --qg-row-height: var(--quro-row-height, 28px);   /* layout value the grid sets from RowHeight (not a color) */
 
     display: inline-block;
     overflow: auto;
@@ -321,6 +322,16 @@
     border: 1px solid var(--qg-border);
     border-radius: 3px;
     background: var(--qg-head-bg);
+    cursor: pointer;
+}
+
+.quro-image {
+    /* fits the row height and keeps the aspect ratio (A-56) */
+    display: inline-block;
+    max-width: 100%;
+    height: calc(var(--qg-row-height) - 6px);
+    object-fit: contain;
+    vertical-align: middle;
     cursor: pointer;
 }
 

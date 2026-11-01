@@ -1,7 +1,7 @@
 # QuroGrid Spec v1 보완 문서 (Addendum A)
 
 - 대상: `docs/QuroGrid_FeatureMatrix_Spec_v1.pdf` (Spec v1 초안 Draft v0.2, 2026-10-28 — 4.9·5장 본문 개정)
-- 문서 상태: A.29 (2026-11-01) · 스테이블영 결정 사항 반영
+- 문서 상태: A.30 (2026-11-01) · 스테이블영 결정 사항 반영
 - 이 문서는 Spec v1의 일부입니다. **아래 항목은 Spec 본문보다 우선합니다.** 본문에 없는 내용은 "보완", 본문과 다른 내용은 "변경"으로 표시합니다.
 
 ---
@@ -65,7 +65,7 @@
 | A-53 | Control Spec 8~11, Q-03 | 결정 | **QuroUI 컨트롤(텍스트 박스·콤보·날짜·정적 텍스트·마스크)은 이 저장소의 새 패키지 `Quro.UI`** (RCL, NuGet). 의존 `Quro.UI` → `Quro.Grid.Data`. 그리드 셀 에디터와의 공통 부분은 나중에 정리 | 2026-10-30 |
 | A-54 | Control Spec 2.2, Q-06 | 결정 | **정렬·필터는 그리드 화면 순서에 둔다** (A-22·A-31·A-40 유지, 다른 컨트롤에는 영향 없음). DataSet에는 정렬·필터 조건으로 행 키 목록을 돌려주는 조회 함수만 추가한다 (순서·상태는 바꾸지 않음) | 2026-10-30 |
 | A-55 | Control Spec 3.1·6, Q-08 | 결정 | **서버 페이징(`ItemsProvider`, A-24) 유지.** Control Spec의 "v1 = 가상 스크롤만"은 "v1에서 서버 페이징을 요구하지 않음"으로 읽는다 | 2026-10-30 |
-| A-56 | Control Spec 3.2, Q-09 | 결정 | **셀 타입은 `Type`(CellType) 하나 + `ReadOnly` 유지** (표시·편집 방식을 나누지 않음). 새 타입 `Mask`(+ 열 `Mask` 패턴)·`Image`·`Label`(정적) 추가. Number·Currency·Popup·Button 유지. Image 값은 URL 문자열, 클릭은 `OnCellClick`. **구현 (2026-11-01 스테이블영 결정 1(a)·2(a)·3(b)·4)**: ① 마스크 해석 `QuroMask`를 `Quro.Grid.Data` 공개 타입으로 옮겨 그리드와 QuroMaskBox가 함께 쓴다 (GS-095). Mask 셀은 문자열 열만, 저장은 입력 문자만, 덜 채우거나 맞지 않으면 다른 셀처럼 확정하지 않고 편집 유지(QuroMaskBox의 되돌림과 다름), 내보내기 `ExportColumn.Mask`. ② Image 셀은 행 높이에 맞춰 비율 유지, 대체 텍스트는 선택 `TextField` (GS-096). ③ Label 셀은 `ReadOnly` Text처럼 포커스·복사 가능, 모양만 다름 (GS-097). ④ 순서: A-56 → A-58 → A-54 → A-61 → A-50 백로그 | 2026-10-30 |
+| A-56 | Control Spec 3.2, Q-09 | 결정 | **셀 타입은 `Type`(CellType) 하나 + `ReadOnly` 유지** (표시·편집 방식을 나누지 않음). 새 타입 `Mask`(+ 열 `Mask` 패턴)·`Image`·`Label`(정적) 추가. Number·Currency·Popup·Button 유지. Image 값은 URL 문자열, 클릭은 `OnCellClick`. **구현 (2026-11-01 스테이블영 결정 1(a)·2(a)·3(b)·4)**: ① 마스크 해석 `QuroMask`를 `Quro.Grid.Data` 공개 타입으로 옮겨 그리드와 QuroMaskBox가 함께 쓴다 (GS-095). Mask 셀은 문자열 열만, 저장은 입력 문자만, 덜 채우거나 맞지 않으면 다른 셀처럼 확정하지 않고 편집 유지(QuroMaskBox의 되돌림과 다름), 내보내기 `ExportColumn.Mask`. ② Image 셀은 행 높이에 맞춰 비율 유지, 대체 텍스트는 선택 `TextField` (GS-096). `OnCellClick`(`CellClickArgs<TItem>`: 행 키·필드·항목·값)은 **Image 셀만** 내고(다른 셀 클릭은 서버 호출 없음 유지, 나중에 비파괴로 넓힐 수 있음), 마우스 클릭·Enter·Space 모두 (2026-11-01 스테이블영 결정 1(a)·2). ③ Label 셀은 `ReadOnly` Text처럼 포커스·복사 가능, 모양만 다름 (GS-097). ④ 순서: A-56 → A-58 → A-54 → A-61 → A-50 백로그 | 2026-10-30 |
 | A-57 | Control Spec 3.2·9, Q-10 | 결정 | **콤보 DataSet 바인딩 추가 (비파괴)**: 열 `OptionsSource`(코드 DataSet)·`ValueField`·`TextField`, 연동 콤보는 `FilterField`(부모 값으로 거름). 기존 `Options`·`OptionsFor`(A-49)도 유지. **구현 (2026-11-01 스테이블영 결정 1(a)·2~7, GS-094)**: `OptionsSource`는 새 제네릭 아닌 읽기 전용 인터페이스 `IQuroDataSet`(`Quro.Grid.Data`, `QuroDataSet<T>`가 구현). 연동 콤보는 `QuroComboBox`처럼 `FilterField`(코드 행의 부모 값)와 `ParentField`(그리드 행의 부모 값)를 함께 쓴다. 부모 값이 바뀌어 자식 코드가 목록에서 빠지면 자식 셀을 비운다(`SetValue` 1회, 같은 Undo 단계). 코드 DataSet이 바뀌면 그리드가 스스로 다시 그린다. `Options`와 함께 쓰면 `ArgumentException`. 목록은 글자만 (`ShowCode`·`EmptyKey`·`ListColumns`·`Multiple`과 TOON 키는 범위 밖) | 2026-10-30 |
 | A-58 | Control Spec 3.2·7(8), Q-11 | 결정 | **선택 즉시 편집은 그리드 옵션 `EditOnSelect`, 기본 끔.** 켜면 셀에 서는 즉시 브라우저 에디터가 열리고(서버 호출 없음, R2), 화살표는 에디터 밖으로 이동, Shift+화살표 범위 선택 유지 | 2026-10-30 |
 | A-59 | Control Spec 3.3·7(2)(3), Q-14 | 결정 | **A-44 ④ 유지 — 그리드는 식을 평가하지 않는다.** 열 파라미터 `Compute`(행 → 값, 앱 함수, **표시 전용**: 편집·저장 안 함)와 `CellStyle`(행·값 → 스타일 클래스, 앱 함수; 글자색·배경·굵게만, 임의 CSS 금지)을 추가. TOON 식은 `Quro.Grid.Definition`이 함수로 만들어 넘긴다. 저장할 계산은 지금처럼 `rules`의 `calc`. **구현 (2026-10-31 스테이블영 결정 1(a)·2·3(a)·4, GS-092·GS-093)**: `Compute`는 `Func<object, object?>`(인자 = 행 항목), `CellStyle`은 `Func<object, object?, CellTone>`(행 항목, 셀 값 — `Compute` 열이면 계산 값). `CellTone`은 `[Flags]` `None·Danger·Success·Muted·Highlight·Bold` → 클래스 `quro-tone-*`, 색 토큰 `--quro-tone-*`. `Compute` 열은 `Field`가 식별자일 뿐이고 읽기 전용(붙여넣기 건너뜀), 헤더 필터·정렬·그룹·내보내기 제외, 합계 `Sum`은 계산 값(서버 페이징 중 비움). TOON 키는 TOON v0.3에서 별도 | 2026-10-30 |
@@ -89,6 +89,7 @@
 | `OnRowDeleted` (A-14) | 행 삭제 후. 삭제 호출 1회에 한 번, 실제 삭제된 행 키 목록(취소 행 제외) | — |
 | `OnPopupRequested` (A-16) | 코드도움 요청. 입력 문자열, 후보(Lookup 결과), 계기(`Commit`·`F4`) 전달. 앱이 `Value`에 고른 코드 | — (Value 없음 = 미확정) |
 | `OnCellButtonClick` (A-19) | Button 셀 클릭. 행 키·필드·행 객체 | — |
+| `OnCellClick` (A-56) | Image 셀 클릭·Enter·Space. 행 키·필드·행 객체·값(URL). 다른 셀 타입·삭제 표시 행은 내지 않음 | — |
 | `OnSortChanged` (A-22) | 사용자가 헤더로 정렬을 바꾼 뒤. 정렬 목록(`SortColumn(필드, 방향)`, 비면 해제). 앱의 `SetSort`·`ClearSort`로는 발생하지 않음 | — |
 | `OnColumnResized` (A-23) | 경계 드래그가 끝난 뒤. 필드·새 너비(px) | — |
 | `OnFilterChanged` (A-40) | 사용자가 필터 패널에서 조건을 적용·해제한 뒤. 현재 필터 목록(컬럼마다 하나, 적용 순서). 앱의 `SetFilters`·`ClearFilters`로는 발생하지 않음 | — |

@@ -88,6 +88,19 @@ public sealed class CellButtonClickArgs<TItem>(int rowKey, string field, TItem i
     public TItem Item { get; } = item;
 }
 
+/// <summary>Image cell click — mouse, Enter or Space (OnCellClick, A-56).</summary>
+public sealed class CellClickArgs<TItem>(int rowKey, string field, TItem item, object? value) where TItem : class
+{
+    /// <summary>Row key.</summary>
+    public int RowKey { get; } = rowKey;
+    /// <summary>Field of the clicked column.</summary>
+    public string Field { get; } = field;
+    /// <summary>Row item.</summary>
+    public TItem Item { get; } = item;
+    /// <summary>Cell value (the image URL).</summary>
+    public object? Value { get; } = value;
+}
+
 /// <summary>활성 행 변경 (OnSelectionChanged, Addendum A-13).</summary>
 public sealed class SelectionChangedArgs<TItem>(int rowKey, TItem item) where TItem : class
 {

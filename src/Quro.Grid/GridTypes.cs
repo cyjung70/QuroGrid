@@ -27,6 +27,11 @@ public enum CellType
     /// Text typed into <see cref="QuroColumn.Mask"/> (A-56). Stores only the typed characters; shows the fixed ones.
     /// </summary>
     Mask,
+    /// <summary>
+    /// Image from a URL string value (A-56). Not editable; fits the row height. Alt text from
+    /// <see cref="QuroColumn.TextField"/>; click, Enter and Space raise OnCellClick.
+    /// </summary>
+    Image,
 }
 
 /// <summary>
