@@ -1,0 +1,41 @@
+@page "/edit-select"
+@rendermode InteractiveServer
+@using System.Globalization
+@using Quro.Grid
+@using Quro.Grid.Data
+@using Quro.Grid.Sample.Data
+
+<PageTitle>@L["sample.editselect.title"]</PageTitle>
+
+<h1>@L["sample.editselect.title"]</h1>
+
+@* EditOnSelect (GS-098, A-58): the editor opens as soon as a cell is selected, without a server call *@
+<QuroGrid TItem="SampleProduct" DataSet="_products" Localizer="L" Culture="En" EditOnSelect="true">
+    <QuroColumn Field="Id" HeaderKey="sample.editselect.id" Type="CellType.Label" Width="60" />
+    <QuroColumn Field="Name" HeaderKey="sample.cells.name" Width="160" />
+    <QuroColumn Field="Qty" HeaderKey="sample.editselect.qty" Type="CellType.Number" Format="N0" Width="100" />
+    <QuroColumn Field="Kind" HeaderKey="sample.editselect.kind" Type="CellType.Combo" Options="_kinds" Width="120" />
+</QuroGrid>
+
+<p>
+    <span data-testid="name-value">@_products.GetValue(1, "Name")</span> ·
+    <span data-testid="qty-value">@(((decimal?)_products.GetValue(1, "Qty"))?.ToString(CultureInfo.InvariantCulture))</span> ·
+    <span data-testid="kind-value">@_products.GetValue(1, "Kind")</span>
+</p>
+
+@code {
+    private static readonly SampleLocalizer L = new();
+    private static readonly CultureInfo En = new("en-US", useUserOverride: false);
+    private readonly QuroDataSet<SampleProduct> _products = new();
+    private readonly ComboOption[] _kinds = [new("A", "Alpha"), new("B", "Beta")];
+
+    protected override void OnInitialized()
+    {
+        _products.Load(
+        [
+            new SampleProduct { Id = 1, Name = "Apple", Qty = 1234.5m, Kind = "A" },
+            new SampleProduct { Id = 2, Name = "Pear", Qty = 7m },
+        ]);
+        _products.ValueChanged += (_, _) => InvokeAsync(StateHasChanged);
+    }
+}

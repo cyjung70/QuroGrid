@@ -10,7 +10,7 @@
         var mark = Grid.Mark(RowKey, col);
         <div class="@(MarkClass(Grid.CellClass(i, "quro-body-cell"), mark) + Grid.ToneClass(RowKey, col))" style="@Grid.CellStyle(i)" role="gridcell"
              aria-colindex="@(i + 1)" data-field="@col.Field" data-type="@Grid.TypeAttribute(col)"
-             data-copy="@Grid.CopyText(RowKey, col)"
+             data-copy="@Grid.CopyText(RowKey, col)" data-edit="@Grid.EditAttribute(RowKey, col)" data-mask="@(Grid.EditOnSelect ? col.Mask : null)"
              aria-readonly="@(Grid.CellReadOnly(RowKey, col) ? "true" : null)"
              aria-invalid="@(mark?.Level == CellMarkLevel.Error ? "true" : null)"
              title="@(mark is null ? null : Grid.Text(mark.MessageKey))">

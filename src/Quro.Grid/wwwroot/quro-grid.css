@@ -351,6 +351,20 @@
     outline: none;
 }
 
+/* EditOnSelect (A-58): the browser editor covers the cell text, inside the active cell outline */
+.quro-grid[data-edit-on-select] .quro-body-cell:not(.quro-frozen) {
+    position: relative;
+}
+
+.quro-select-editor {
+    position: absolute;
+    inset: 2px;
+    width: auto;
+    padding: 0 4px;
+    background: var(--qg-bg);
+    text-align: inherit;
+}
+
 /* 헤더 필터 (A-31): 헤더 오른쪽 버튼(▽, 필터 중이면 채움 ▼) · 헤더 아래 패널 */
 .quro-header:has(.quro-filter-button) {
     padding-right: 20px;

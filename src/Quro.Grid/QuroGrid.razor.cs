@@ -108,6 +108,13 @@ public partial class QuroGrid<TItem> where TItem : class
     /// <summary>마지막 편집 가능 셀에서 Enter 시 새 행 추가 (2026-10-28 결정: 옵션, 기본 끔 잠정).</summary>
     [Parameter] public bool AddRowOnLastEnter { get; set; }
 
+    /// <summary>
+    /// Opens the editor as soon as an editable cell is selected (A-58, default off). quro-grid.js draws the editor in the
+    /// browser without a server call (R2): the text is selected so typing replaces it, arrows leave the cell and F2 moves
+    /// the caret inside the text. Leaving commits once, only when the text changed.
+    /// </summary>
+    [Parameter] public bool EditOnSelect { get; set; }
+
     /// <summary>붙여넣기 행이 모자라면 자동 추가 (Spec 4.7, Addendum A-03: 기본 켬).</summary>
     [Parameter] public bool AddRowsOnPaste { get; set; } = true;
 
@@ -233,7 +240,7 @@ public partial class QuroGrid<TItem> where TItem : class
     {
         BindDataSet();
         ApplyDefinition();
-        object layout = (DataSet, Localizer, Culture, FrozenColumns, CurrencyDigits, DeletedRows);
+        object layout = (DataSet, Localizer, Culture, FrozenColumns, CurrencyDigits, DeletedRows, EditOnSelect);
         if (!Equals(layout, _layoutParameters))
         {
             _layoutParameters = layout;
@@ -2024,6 +2031,18 @@ public partial class QuroGrid<TItem> where TItem : class
         return cls.ToString();
     }
 
+
+    /// <summary>
+    /// data-edit of a cell (EditOnSelect, A-58): the editor text when it differs from the shown text, so the browser editor
+    /// starts from the stored value (e.g. Format N0 shows 1,235 for 1234.5). Null when the option is off or the cell has no editor.
+    /// </summary>
+    internal string? EditAttribute(int rowKey, QuroColumn col)
+    {
+        if (!EditOnSelect || col.Type is CellType.Check or CellType.Button || !Editable(rowKey, col))
+            return null;
+        var edit = EditText(rowKey, col);
+        return edit == DisplayText(rowKey, col) ? null : edit;
+    }
 
     /// <summary>에디터 초기 값. 천 단위 구분 없이 사용자 로캘로. Combo는 명칭.</summary>
     internal string EditText(int rowKey, QuroColumn col) =>

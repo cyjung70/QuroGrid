@@ -33,6 +33,7 @@
          role="grid" tabindex="0" aria-colcount="@Columns.Count"
          aria-rowcount="@(headerRows + bodyRows + (ShowFooter ? 1 : 0))" data-header-rows="@headerRows"
          data-dirty="@(DataSet.HasChanges ? "true" : null)" data-clipboard="@(Clipboard ? null : "off")"
+         data-edit-on-select="@(EditOnSelect ? "true" : null)"
          data-leave-message="@(ConfirmLeave ? Text(GridKeys.LeaveUnsaved) : null)">
         @* 연결 끊김 중에는 서버가 그릴 수 없으므로 안내를 미리 그려 두고 quro-grid.js가 보이게 한다 (R7, A-21) *@
         <div class="quro-notice quro-notice-offline" role="alert">
