@@ -18,4 +18,7 @@ public sealed class SampleProduct
 
     /// <summary>Kind code (Combo, EditOnSelect sample, GS-098).</summary>
     public string? Kind { get; set; }
+
+    /// <summary>Check cell (row read-only sample, GS-099).</summary>
+    public bool Active { get; set; }
 }

@@ -24,6 +24,7 @@
     --qg-tone-muted: var(--quro-tone-muted, var(--qg-check-line));
     --qg-tone-highlight: var(--quro-tone-highlight, color-mix(in srgb, var(--qg-warning-line) 18%, var(--qg-bg)));
     --qg-label: var(--quro-label, #5b6475);   /* Label cell text, same token as QuroLabel */
+    --qg-readonly-bg: var(--quro-readonly-bg, color-mix(in srgb, var(--qg-check-line) 14%, var(--qg-bg)));   /* locked row (RowReadOnly) */
     --qg-row-height: var(--quro-row-height, 28px);   /* layout value the grid sets from RowHeight (not a color) */
 
     display: inline-block;
@@ -76,6 +77,12 @@
 .quro-header.quro-frozen,
 .quro-footer.quro-frozen {
     background: var(--qg-head-bg);
+}
+
+/* Locked row (RowReadOnly, GS-099). :where keeps the specificity of one class: after .quro-frozen so frozen cells are grey too,
+   before the tones and marks so Highlight, errors and warnings still show */
+:where(.quro-row-readonly) .quro-cell {
+    background: var(--qg-readonly-bg);
 }
 
 /* CellStyle tones (A-59). Before the marks so an error or warning background wins over Highlight */

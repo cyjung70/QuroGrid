@@ -455,3 +455,11 @@ GS-097 — **완료** (2026-11-01 스테이블영 결정 3(b)).
 | GS-098 | `EditOnSelect` | 기본 끔. 켜면 그리드 `data-edit-on-select`, 편집 가능 셀에 보이는 글자와 다를 때만 `data-edit`(Format N0 `1,235` ↔ `1234.5`), 끄거나 읽기 전용이면 없음, 값을 따라감. `CommitEdit`는 `BeginEdit` 없이 동작. 브라우저: 셀 클릭·이동마다 에디터가 열리고 글자 전체 선택, 이동·열기에 서버 호출 없음, 바뀌지 않은 셀은 확정 없음. 입력하면 덮어쓰고 화살표로 `CommitEdit` 1회 후 다음 셀 에디터. F2 커서 모드(화살표가 글자 안). Esc 되돌림(서버 호출 없음). 확정 실패면 에디터 유지·이동 없음. Shift+화살표 범위는 에디터 없음, Label 셀 에디터 없음. 글자가 그대로면 Ctrl+Z는 그리드 Undo이고 에디터가 따라감. Alt+↓ Combo 목록에서 고르면 확정 후 에디터 복귀 | bUnit · Playwright | A-58 |
 
 GS-098 — **완료** (2026-11-01 스테이블영 결정 1(a)·2~5 권장안, 6).
+
+### 6-8 행 읽기 전용 (A-70)
+
+| ID | 시나리오 | 기대 결과 | 계층 | 근거 |
+|---|---|---|---|---|
+| GS-099 | `RowReadOnly` | Given 화면이 잠근 줄이 있을 때 / When 그리드가 그 줄을 그리면 / Then 셀이 `aria-readonly`이고 회색이다. 기본은 잠금 없음. `BeginEdit`·`OpenPicker`·`CommitEdit`·`ToggleCheck` 거부, `data-edit` 없음, 붙여넣기는 그 행만 `PasteKeys.ReadOnly`. Button 클릭·행 삭제는 동작. 값 변경 없이 잠금만 바뀌면 `Refresh`로 그 행만 다시 그림(`HasChanges` 그대로). 브라우저: 입력·F2·더블클릭 에디터 없음, Tab은 잠긴 행을 건너뜀, Check 클릭·Space 거부, Ctrl+C 동작, `EditOnSelect` 에디터 없음, 잠금이 오면 열린 에디터 닫힘 | bUnit · Playwright | A-70 |
+
+GS-099 — **완료** (2026-11-07 스테이블영 결정 1(a)·2·3, QuroERP 요청 R6).
