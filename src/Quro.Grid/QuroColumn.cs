@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Components;
 using Quro.Grid.Data;
+using Quro.Grid.Definition;
 
 namespace Quro.Grid;
 
@@ -40,6 +41,12 @@ public sealed class QuroColumn : ComponentBase, IDisposable
 
     /// <summary>Grouping by this column allowed (G-04). Default true.</summary>
     [Parameter] public bool Groupable { get; set; } = true;
+
+    /// <summary>
+    /// Text alignment of the body and footer cells (GS-102). Null is the default for the type: Number, Currency and fields of a
+    /// numeric type are right, Check, Combo, Button and Image are centered, the rest left. Headers are not affected.
+    /// </summary>
+    [Parameter] public ColumnAlign? Align { get; set; }
 
     /// <summary>열 너비 (px).</summary>
     [Parameter] public int Width { get; set; } = 120;
@@ -142,7 +149,7 @@ public sealed class QuroColumn : ComponentBase, IDisposable
     {
         object now = (Field, HeaderKey, Type, Format, ReadOnly, Width, Aggregate, CurrencyField, Required, Min, Max,
             (Lookup, Options, CheckedValue, UncheckedValue, TextKey), (NewRowOnly, Filterable, Sortable, Groupable),
-            (Compute, CellStyle), (OptionsSource, ValueField, TextField, FilterField, ParentField), Mask);
+            (Compute, CellStyle, Align), (OptionsSource, ValueField, TextField, FilterField, ParentField), Mask);
         if (_rendered is not null && !Equals(now, _rendered))
         {
             CheckCodeSource();

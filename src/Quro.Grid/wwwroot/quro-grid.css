@@ -87,6 +87,10 @@
     background: var(--qg-readonly-bg);
 }
 
+/* Default cell alignment (GS-102): the grid picks by column type, or QuroColumn.Align. Left has no class */
+.quro-align-right { text-align: right; }
+.quro-align-center { text-align: center; }
+
 /* Row number column (ShowRowNumbers, GS-100). The width variable is set on the root by the grid.
    After the read-only rule with the same specificity: the gutter stays the header color on a locked row */
 .quro-row-number {
@@ -217,6 +221,7 @@
    위치(top·left)는 quro-grid.js가 셀 좌표로 정한다. */
 .quro-picker {
     position: fixed;
+    text-align: left;   /* the list is not the cell: a centered Combo cell keeps a left list */
     z-index: 1400;
     min-width: 160px;
     background: var(--qg-bg);
@@ -362,6 +367,7 @@
 
 .quro-editor {
     box-sizing: border-box;
+    text-align: inherit;   /* the editor sits where the value is (GS-102) */
     width: 100%;
     border: 0;
     padding: 0;

@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Components.Web.Virtualization;
 using Microsoft.Extensions.Localization;
 using Microsoft.JSInterop;
 using Quro.Grid.Data;
+using Quro.Grid.Definition;
 
 namespace Quro.Grid;
 
@@ -2071,6 +2072,30 @@ public partial class QuroGrid<TItem> where TItem : class
         return cls.ToString();
     }
 
+
+    /// <summary>Alignment class of a body, footer or subtotal cell (GS-102). Left is the browser's default, so it has no class.</summary>
+    internal string AlignClass(QuroColumn col) => (col.Align ?? DefaultAlign(col)) switch
+    {
+        ColumnAlign.Right => " quro-align-right",
+        ColumnAlign.Center => " quro-align-center",
+        _ => "",
+    };
+
+    /// <summary>The column type decides first. A plain Text or Label column follows its field's C# type; a Compute column has no field.</summary>
+    private ColumnAlign DefaultAlign(QuroColumn col) => col.Type switch
+    {
+        CellType.Number or CellType.Currency => ColumnAlign.Right,
+        CellType.Check or CellType.Combo or CellType.Button or CellType.Image => ColumnAlign.Center,
+        CellType.Text or CellType.Label when col.Compute is null && IsNumeric(DataSet.GetColumn(col.Field).Type) => ColumnAlign.Right,
+        _ => ColumnAlign.Left,
+    };
+
+    private static bool IsNumeric(Type type)
+    {
+        var target = Nullable.GetUnderlyingType(type) ?? type;
+        return !target.IsEnum && Type.GetTypeCode(target) is TypeCode.SByte or TypeCode.Byte or TypeCode.Int16 or TypeCode.UInt16
+            or TypeCode.Int32 or TypeCode.UInt32 or TypeCode.Int64 or TypeCode.UInt64 or TypeCode.Single or TypeCode.Double or TypeCode.Decimal;
+    }
 
     /// <summary>
     /// data-edit of a cell (EditOnSelect, A-58): the editor text when it differs from the shown text, so the browser editor

@@ -4,6 +4,8 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 소비자(QuroERP)는 버전을 올리기 전에 이 파일을 읽는다.
 
 ## Unreleased
+- Changed: 셀 기본 정렬. 숫자(`Number`·`Currency`·숫자 필드의 `Text`·`Label`)는 오른쪽, `Check`·`Combo`·`Button`·`Image`는 가운데, 나머지는 왼쪽. 합계·소계·에디터가 따르고 헤더는 왼쪽 그대로 (A-72, GS-102). 소비자 조치: 없음, 단 기존 화면의 모양이 바뀐다. 예전 정렬이 필요한 열은 `Align`으로 지정
+- Added: `QuroColumn.Align` (`ColumnAlign?`) — 열별 정렬. TOON `align`도 이제 적용된다 (A-72, GS-102)
 - Added: `QuroGrid.ShowRowNumbers`·`RowNumberHeaderKey` — 표시 전용 행 번호 열. 화면 순서 1..N, 추가·삭제·정렬·필터·그룹·Undo 뒤 갱신, 행 상태 변경 없음, 포커스·복사·내보내기 제외 (A-71, GS-100). 소비자 조치: 없음
 - Fixed: 그리드가 열 전체보다 좁을 때 멀리 스크롤하면 고정 열이 함께 밀려 나가던 문제. `.quro-row`가 이제 셀 전체 폭이다 (GS-100). 소비자 조치: 없음
 

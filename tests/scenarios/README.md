@@ -471,3 +471,11 @@ GS-099 — **완료** (2026-11-07 스테이블영 결정 1(a)·2·3, QuroERP 요
 | GS-100 | `ShowRowNumbers` | Given 줄이 추가·제거되거나 삭제 표시되었을 때 / When 순서가 바뀌면 / Then 행 상태를 바꾸지 않고 번호 열이 갱신된다 (Ctrl+Z 뒤에도). 기본 끔. 첫 칸 `rowheader`(data-field 없음), `aria-colindex`·`aria-colcount` 1 증가. 헤더는 `RowNumberHeaderKey` 또는 빈 칸. 정렬·필터·그룹 뒤 1..N, 그룹 머리·소계 행은 빈 칸, 접힌 행 제외. 보이는 삭제 표시 행은 번호 유지. 페이징은 절대 위치. 폭은 그리드 변수 하나(최소 2자리), 자릿수가 늘어도 행을 다시 그리지 않음. 고정 열은 번호 열 뒤. 내보내기 열 변화 없음. 브라우저: Insert·Ctrl+Delete·Ctrl+Z 뒤 번호 갱신, 클릭은 아무것도 선택하지 않고 열린 에디터 유지, 화살표·Tab이 건너뜀, 복사에서 빠짐, 끝까지 가로 스크롤해도 번호·고정 열 유지, 키보드 이동 셀이 번호 열에 가려지지 않음, 세 자리 잘리지 않음 | bUnit · Playwright | A-71 |
 
 GS-100 — **완료** (2026-11-07 스테이블영 결정 4·5(a)·6, QuroERP 요청 R7).
+
+### 6-10 셀 정렬 (A-72)
+
+| ID | 시나리오 | 기대 결과 | 계층 | 근거 |
+|---|---|---|---|---|
+| GS-102 | 기본 셀 정렬 | Given 열을 그릴 때 / When `Align`을 지정하지 않으면 / Then `Number`·`Currency`·숫자 필드의 `Text`·`Label`은 오른쪽, `Check`·`Combo`·`Button`·`Image`는 가운데, 그 밖(`Date`·`Popup`·`Mask` 포함)은 왼쪽이다. `Compute` 열은 `Type`만 본다. 합계·소계는 열을 따르고 헤더는 그대로. `QuroColumn.Align`과 TOON `align`이 기본을 덮어쓴다. 브라우저: 계산된 정렬, Check·Button이 셀 가운데, 서버·선택 에디터가 셀을 따름, 가운데 Combo 셀의 목록은 왼쪽 | bUnit · Playwright | A-72 |
+
+GS-102 — **완료** (2026-11-07 스테이블영 결정 4~8 권장안).
