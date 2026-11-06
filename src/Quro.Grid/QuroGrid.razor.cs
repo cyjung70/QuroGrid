@@ -266,9 +266,11 @@ public partial class QuroGrid<TItem> where TItem : class
     /// </summary>
     protected override void OnParametersSet()
     {
+        if (TreeMode && Paging)
+            throw new InvalidOperationException("A tree grid needs all rows loaded: TreeKeyField and TreeParentField cannot be used with ItemsProvider (A-61).");
         BindDataSet();
         ApplyDefinition();
-        object layout = (DataSet, Localizer, Culture, FrozenColumns, CurrencyDigits, DeletedRows, EditOnSelect, ShowRowNumbers);
+        object layout = (DataSet, Localizer, Culture, FrozenColumns, CurrencyDigits, DeletedRows, EditOnSelect, ShowRowNumbers, TreeKeyField, TreeParentField, TreeColumn);
         if (!Equals(layout, _layoutParameters))
         {
             _layoutParameters = layout;
@@ -1519,7 +1521,7 @@ public partial class QuroGrid<TItem> where TItem : class
 
     // ── 그룹핑·소계 (GS-074·GS-075, Addendum A-32·A-42): 메모리 모드에서만. 페이징 중에는 하지 않는다 ──
 
-    private bool Grouped => !Paging && _groupBy.Count > 0;
+    private bool Grouped => !Paging && !TreeMode && _groupBy.Count > 0;
 
     /// <summary>현재 그룹 컬럼 (목록 순서 = 단 순서). 비어 있으면 그룹핑하지 않는다.</summary>
     public IReadOnlyList<string> GroupColumns => _groupBy.ToList();
@@ -1530,7 +1532,7 @@ public partial class QuroGrid<TItem> where TItem : class
     /// </summary>
     public void SetGroupBy(IReadOnlyList<string> fields)
     {
-        if (Paging)
+        if (Paging || TreeMode)
             return;
         _groupBy.Clear();
         _groupBy.AddRange(fields.Select(Column).Where(c => c.CanGroup).Select(c => c.Field).Distinct());
@@ -1575,7 +1577,7 @@ public partial class QuroGrid<TItem> where TItem : class
 
     /// <summary>본문의 한 줄: 데이터 행, 그룹 머리 행, 소계 행. Index는 화면 위치 (aria-rowindex)</summary>
     internal sealed record BodyItem(BodyItemKind Kind, int Index, int RowKey = 0, string? GroupId = null, int Level = 0,
-        string? Text = null, bool Expanded = true, IReadOnlyList<int>? Rows = null);
+        string? Text = null, bool Expanded = true, IReadOnlyList<int>? Rows = null, bool HasChildren = false);
 
     /// <summary>메모리 모드 본문 (화면 순서). 그룹핑 중이면 그룹 머리 행·소계 행이 끼고, 접힌 그룹의 행은 빠진다</summary>
     internal List<BodyItem> BodyItems() => BuildBody(all: false);
@@ -1583,6 +1585,8 @@ public partial class QuroGrid<TItem> where TItem : class
     /// <summary><paramref name="all"/>이면 접힌 그룹 안까지 (모두 접기·그룹 확인용)</summary>
     private List<BodyItem> BuildBody(bool all)
     {
+        if (TreeMode)
+            return BuildTree(all);
         var keys = FilteredRowKeys().ToList();
         var items = new List<BodyItem>(keys.Count);
         if (!Grouped)
@@ -1990,7 +1994,7 @@ public partial class QuroGrid<TItem> where TItem : class
 
     /// <summary>메모리 모드의 화면 데이터 행 (화면 순서). 그룹핑 중이면 그룹 순서이고 접힌 그룹의 행은 빠진다</summary>
     private IEnumerable<int> VisibleRowKeys() =>
-        Grouped
+        Grouped || TreeMode
             ? BodyItems().Where(i => i.Kind == BodyItemKind.Row).Select(i => i.RowKey)
             : FilteredRowKeys();
 

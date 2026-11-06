@@ -26,6 +26,8 @@ public partial class QuroGrid<TItem>
     /// <summary>A linked combo's parent changed: clear the child when its code left the row's list (same undo step).</summary>
     private void OnDataSetValueChanged(object? sender, DataSetValueChangedEventArgs e)
     {
+        if (TreeMode && (e.Field == TreeKeyField || e.Field == TreeParentField))
+            _ = InvokeAsync(StateHasChanged);   // the row moved in the tree (GS-104)
         foreach (var col in _columns)
         {
             if (col.ParentField is not { } parent || col.ReadOnly || !string.Equals(parent, e.Field, StringComparison.OrdinalIgnoreCase))

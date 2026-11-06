@@ -4,6 +4,7 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 소비자(QuroERP)는 버전을 올리기 전에 이 파일을 읽는다.
 
 ## Unreleased
+- Added: 트리 그리드 표시 — `TreeKeyField`·`TreeParentField`·`TreeColumn`, `ExpandTreeRow`·`ExpandAllTree`·`CollapseAllTree`, `role="treegrid"`, Ctrl+←→ (A-61, GS-104). 소비자 조치: 없음 (트리 파라미터를 주지 않으면 동작 변화 없음)
 - Added: `QuroDataSet<T>.QueryRowKeys(filter, sort, includeDeleted)` — 조건으로 행 키 목록을 돌려주는 조회 함수. 순서·상태를 바꾸지 않는다 (A-54, GS-103). 소비자 조치: 없음
 
 ## 0.5.0-alpha.9 — 2026-11-07

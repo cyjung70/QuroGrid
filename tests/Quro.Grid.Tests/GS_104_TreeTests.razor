@@ -1,0 +1,339 @@
+@inherits GridTestContext
+
+@code {
+    // GS-104: tree display (A-61). TreeKeyField + TreeParentField turn tree mode on. Rows show depth first, indented in TreeColumn,
+    // with a toggle on rows that have children. Bad data never throws: empty or unknown parents and rows on a parent cycle are roots.
+    // Expanded state belongs to the key value, so it survives Load. A filter keeps matching rows and their ancestors. Sort applies
+    // among siblings. Footer sums add rows passing the filter, collapsed ones included.
+
+    public sealed class Node
+    {
+        public string? Code { get; set; }
+        public string? Parent { get; set; }
+        public string? Name { get; set; }
+        public decimal Amount { get; set; }
+    }
+
+    private static readonly CultureInfo En = new("en-US", useUserOverride: false);
+
+    private int _styleCalls;
+
+    private static Node N(string code, string? parent, decimal amount = 0) =>
+        new() { Code = code, Parent = parent, Name = "n" + code, Amount = amount };
+
+    /// <summary>The list order is deliberately not the tree order.</summary>
+    private static QuroDataSet<Node> Nodes() =>
+        DataOf(N("A1", "A", 1), N("B", null, 10), N("A", null, 100), N("A11", "A1", 1000), N("B1", "B", 10000), N("A2", "A", 100000));
+
+    private static QuroDataSet<Node> DataOf(params Node[] nodes)
+    {
+        var ds = new QuroDataSet<Node>();
+        ds.Load(nodes);
+        return ds;
+    }
+
+    private IRenderedComponent<QuroGrid<Node>> RenderGrid(QuroDataSet<Node> ds, string? treeColumn = null, bool numbers = false,
+        DeletedRowDisplay deleted = DeletedRowDisplay.Hide) =>
+        Render<QuroGrid<Node>>(@<QuroGrid DataSet="ds" Culture="En" TreeKeyField="Code" TreeParentField="Parent" TreeColumn="@treeColumn"
+                                          ShowRowNumbers="numbers" DeletedRows="deleted" ShowFooter="true">
+                                   <QuroColumn Field="Name" HeaderKey="n.name" CellStyle="Tone" />
+                                   <QuroColumn Field="Code" HeaderKey="n.code" />
+                                   <QuroColumn Field="Amount" HeaderKey="n.amount" Type="CellType.Number" Format="N0" Aggregate="Aggregate.Sum" />
+                               </QuroGrid>);
+
+    private CellTone Tone(object item, object? value)
+    {
+        _styleCalls++;
+        return CellTone.None;
+    }
+
+    private static string[] Codes(IRenderedComponent<QuroGrid<Node>> cut) =>
+        cut.FindAll("[role=row][data-row] [data-field=Code]").Select(c => c.TextContent.Trim()).ToArray();
+
+    private static string[] Levels(IRenderedComponent<QuroGrid<Node>> cut) =>
+        cut.FindAll("[role=row][data-row]").Select(r => r.GetAttribute("aria-level") ?? "").ToArray();
+
+    private static AngleSharp.Dom.IElement RowOf(IRenderedComponent<QuroGrid<Node>> cut, string code) =>
+        cut.FindAll("[role=row][data-row]").Single(r => r.QuerySelector("[data-field=Code]")!.TextContent.Trim() == code);
+
+    private static int KeyOf(QuroDataSet<Node> ds, string code) => ds.RowKeys.Single(k => ds.GetItem(k).Code == code);
+
+    [Fact]
+    public void GS_104_RowsShowDepthFirst_WithLevelsAndTreegridRole()
+    {
+        var cut = RenderGrid(Nodes());
+
+        Assert.Equal(["B", "B1", "A", "A1", "A11", "A2"], Codes(cut));   // roots and siblings keep list order
+        Assert.Equal(["1", "2", "1", "2", "3", "2"], Levels(cut));
+        Assert.Equal("treegrid", cut.Find(".quro-grid").GetAttribute("role"));
+    }
+
+    [Fact]
+    public void GS_104_AriaExpanded_OnlyOnRowsWithChildren()
+    {
+        var cut = RenderGrid(Nodes());
+
+        Assert.Equal("true", RowOf(cut, "A").GetAttribute("aria-expanded"));
+        Assert.Equal("true", RowOf(cut, "A1").GetAttribute("aria-expanded"));
+        Assert.Null(RowOf(cut, "A11").GetAttribute("aria-expanded"));
+        Assert.Null(RowOf(cut, "A2").GetAttribute("aria-expanded"));
+    }
+
+    [Fact]
+    public void GS_104_OnlyOneFieldSet_IsNotATree()
+    {
+        var ds = Nodes();
+        var cut = Render<QuroGrid<Node>>(@<QuroGrid DataSet="ds" Culture="En" TreeKeyField="Code">
+                                             <QuroColumn Field="Code" HeaderKey="n.code" />
+                                         </QuroGrid>);
+
+        Assert.Equal("grid", cut.Find(".quro-grid").GetAttribute("role"));
+        Assert.Equal(["A1", "B", "A", "A11", "B1", "A2"], cut.FindAll("[data-row] [data-field=Code]").Select(c => c.TextContent.Trim()));
+        Assert.Empty(cut.FindAll("[data-row][aria-level]"));
+        Assert.Empty(cut.FindAll("[data-row][aria-expanded]"));
+        Assert.Empty(cut.FindAll(".quro-tree-cell"));
+        Assert.Empty(cut.FindAll(".quro-tree-toggle"));
+    }
+
+    [Fact]
+    public void GS_104_EmptyParent_UnknownParent_AndCycles_AreRoots_WithoutException()
+    {
+        var ds = DataOf(
+            N("E", ""),                 // empty parent
+            N("O", "missing"),          // parent is not in the data set
+            N("S", "S"),                // its own parent
+            N("X", "Y"), N("Y", "X"),   // a two-row cycle
+            N("Z", "Y"));               // hangs off the cycle: still Y's child
+
+        var cut = RenderGrid(ds);
+
+        Assert.Equal(["E", "O", "S", "X", "Y", "Z"], Codes(cut));
+        Assert.Equal(["1", "1", "1", "1", "1", "2"], Levels(cut));
+    }
+
+    [Fact]
+    public void GS_104_ToggleAndIndent_InTreeColumnOnly_DefaultsToFirstColumn()
+    {
+        var cut = RenderGrid(Nodes());
+
+        var leaf = RowOf(cut, "A11");
+        Assert.Contains("quro-tree-cell", leaf.QuerySelector("[data-field=Name]")!.ClassName);
+        Assert.Contains("--qg-tree-level:2", leaf.QuerySelector("[data-field=Name]")!.GetAttribute("style"));
+        Assert.DoesNotContain("quro-tree-cell", leaf.QuerySelector("[data-field=Code]")!.ClassName);
+        Assert.Null(leaf.QuerySelector(".quro-tree-toggle"));   // a leaf has none
+
+        Assert.NotNull(RowOf(cut, "A1").QuerySelector("[data-field=Name] .quro-tree-toggle"));
+        Assert.Null(RowOf(cut, "A1").QuerySelector("[data-field=Code] .quro-tree-toggle"));
+    }
+
+    [Fact]
+    public void GS_104_TreeColumn_ChoosesTheColumn()
+    {
+        var cut = RenderGrid(Nodes(), treeColumn: "Code");
+
+        Assert.Contains("quro-tree-cell", RowOf(cut, "A").QuerySelector("[data-field=Code]")!.ClassName);
+        Assert.DoesNotContain("quro-tree-cell", RowOf(cut, "A").QuerySelector("[data-field=Name]")!.ClassName);
+    }
+
+    [Fact]
+    public void GS_104_TreeCell_AddsNoTextToTheCell()
+    {
+        // quro-grid.js reads the cell's text for its editors and copy: the toggle draws its glyph from CSS
+        var cut = RenderGrid(Nodes());
+
+        Assert.Equal("nA", RowOf(cut, "A").QuerySelector("[data-field=Name]")!.TextContent.Trim());
+    }
+
+    [Fact]
+    public async Task GS_104_ExpandTreeRow_HidesAndShowsDescendants()
+    {
+        var ds = Nodes();
+        var cut = RenderGrid(ds);
+
+        Assert.True(await cut.InvokeAsync(() => cut.Instance.ExpandTreeRow(KeyOf(ds, "A"), false)));
+        Assert.Equal(["B", "B1", "A"], Codes(cut));
+        Assert.Equal("false", RowOf(cut, "A").GetAttribute("aria-expanded"));
+
+        Assert.True(await cut.InvokeAsync(() => cut.Instance.ExpandTreeRow(KeyOf(ds, "A"), true)));
+        Assert.Equal(["B", "B1", "A", "A1", "A11", "A2"], Codes(cut));
+    }
+
+    [Fact]
+    public async Task GS_104_CollapsedInnerRow_StaysCollapsed_WhenItsParentReopens()
+    {
+        var ds = Nodes();
+        var cut = RenderGrid(ds);
+
+        await cut.InvokeAsync(() => cut.Instance.ExpandTreeRow(KeyOf(ds, "A1"), false));
+        await cut.InvokeAsync(() => cut.Instance.ExpandTreeRow(KeyOf(ds, "A"), false));
+        await cut.InvokeAsync(() => cut.Instance.ExpandTreeRow(KeyOf(ds, "A"), true));
+
+        Assert.Equal(["B", "B1", "A", "A1", "A2"], Codes(cut));
+    }
+
+    [Fact]
+    public async Task GS_104_ExpandTreeRow_LeafOrUnknownRow_ReturnsFalse()
+    {
+        var ds = Nodes();
+        var cut = RenderGrid(ds);
+
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.ExpandTreeRow(KeyOf(ds, "A2"), false)));
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.ExpandTreeRow(-1, false)));
+        Assert.Equal(6, Codes(cut).Length);
+    }
+
+    [Fact]
+    public async Task GS_104_CollapseAllTree_ThenExpandAllTree()
+    {
+        var cut = RenderGrid(Nodes());
+
+        await cut.InvokeAsync(() => cut.Instance.CollapseAllTree());
+        Assert.Equal(["B", "A"], Codes(cut));
+
+        await cut.InvokeAsync(() => cut.Instance.ExpandAllTree());
+        Assert.Equal(["B", "B1", "A", "A1", "A11", "A2"], Codes(cut));
+    }
+
+    [Fact]
+    public async Task GS_104_ExpandedState_FollowsTheKeyValue_AcrossLoad()
+    {
+        var ds = Nodes();
+        var cut = RenderGrid(ds);
+        await cut.InvokeAsync(() => cut.Instance.ExpandTreeRow(KeyOf(ds, "A"), false));
+
+        await cut.InvokeAsync(() =>
+        {
+            ds.Load([N("A", null), N("A1", "A"), N("C", null), N("C1", "C")]);
+            cut.Instance.Refresh();
+        });
+
+        Assert.Equal(["A", "C", "C1"], Codes(cut));
+    }
+
+    [Fact]
+    public async Task GS_104_Toggle_RedrawsOnlyTheToggledRow()
+    {
+        var ds = Nodes();
+        var cut = RenderGrid(ds);
+        _styleCalls = 0;
+
+        // A is the last root, so no row below it moves. Only A itself changes (R4)
+        await cut.InvokeAsync(() => cut.Instance.ExpandTreeRow(KeyOf(ds, "A"), false));
+
+        Assert.Equal(1, _styleCalls);
+    }
+
+    [Fact]
+    public async Task GS_104_Filter_ShowsMatchesAndTheirAncestors()
+    {
+        var cut = RenderGrid(Nodes());
+
+        await cut.InvokeAsync(() => cut.Instance.SetFilters([new ColumnFilter("Code") { Contains = "A11" }]));
+
+        Assert.Equal(["A", "A1", "A11"], Codes(cut));
+        Assert.Equal(["1", "2", "3"], Levels(cut));
+    }
+
+    [Fact]
+    public async Task GS_104_Filter_ToggleOnlyWhereAChildIsShown()
+    {
+        var cut = RenderGrid(Nodes());
+
+        await cut.InvokeAsync(() => cut.Instance.SetFilters([new ColumnFilter("Code") { Contains = "A2" }]));
+
+        Assert.Equal(["A", "A2"], Codes(cut));   // A1 has children but neither it nor they match
+        Assert.Equal("true", RowOf(cut, "A").GetAttribute("aria-expanded"));
+        Assert.Null(RowOf(cut, "A2").GetAttribute("aria-expanded"));
+    }
+
+    [Fact]
+    public async Task GS_104_FooterSum_AddsRowsPassingTheFilter_CollapsedIncluded_AncestorsNot()
+    {
+        var ds = Nodes();
+        var cut = RenderGrid(ds);
+        string Sum() => cut.Find("[data-footer-field=Amount]").TextContent.Trim();
+
+        Assert.Equal("111,111", Sum());
+
+        await cut.InvokeAsync(() => cut.Instance.ExpandTreeRow(KeyOf(ds, "A"), false));
+        Assert.Equal("111,111", Sum());   // a collapsed row still counts
+
+        await cut.InvokeAsync(() => cut.Instance.ExpandAllTree());
+        await cut.InvokeAsync(() => cut.Instance.SetFilters([new ColumnFilter("Code") { Contains = "A11" }]));
+        Assert.Equal("1,000", Sum());     // ancestors A and A1 are shown but did not match
+    }
+
+    [Fact]
+    public async Task GS_104_Sort_OrdersSiblingsOnly()
+    {
+        var cut = RenderGrid(Nodes());
+
+        await cut.InvokeAsync(() => cut.Instance.SetSort([new SortColumn("Code", SortDirection.Descending)]));
+
+        Assert.Equal(["B", "B1", "A", "A2", "A1", "A11"], Codes(cut));
+        Assert.Equal(["1", "2", "1", "2", "2", "3"], Levels(cut));
+    }
+
+    [Fact]
+    public async Task GS_104_RowNumbers_CountVisibleRows()
+    {
+        var ds = Nodes();
+        var cut = RenderGrid(ds, numbers: true);
+
+        await cut.InvokeAsync(() => cut.Instance.ExpandTreeRow(KeyOf(ds, "B"), false));
+
+        Assert.Equal(["1", "2", "3", "4", "5"], cut.FindAll("[role=rowheader]").Select(c => c.TextContent.Trim()));
+    }
+
+    [Fact]
+    public void GS_104_ItemsProvider_WithTree_Throws()
+    {
+        var ds = new QuroDataSet<Node>();
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            Render<QuroGrid<Node>>(@<QuroGrid DataSet="ds" TreeKeyField="Code" TreeParentField="Parent"
+                                              ItemsProvider="_ => Task.FromResult(new GridItemsResult<Node>([], 0))">
+                                       <QuroColumn Field="Code" HeaderKey="n.code" />
+                                   </QuroGrid>));
+
+        Assert.Contains("ItemsProvider", error.Message);
+    }
+
+    [Fact]
+    public async Task GS_104_SetGroupBy_DoesNothing()
+    {
+        var cut = RenderGrid(Nodes());
+
+        await cut.InvokeAsync(() => cut.Instance.SetGroupBy(["Code"]));
+
+        Assert.Empty(cut.Instance.GroupColumns);
+        Assert.Empty(cut.FindAll(".quro-group-head-row"));
+        Assert.Equal(6, Codes(cut).Length);
+    }
+
+    [Fact]
+    public async Task GS_104_SetValue_OnTheParentField_RebuildsTheTree_AndUndoFollows()
+    {
+        var ds = Nodes();
+        var cut = RenderGrid(ds);
+
+        await cut.InvokeAsync(() => ds.SetValue(KeyOf(ds, "A2"), "Parent", "B"));
+        Assert.Equal(["B", "B1", "A2", "A", "A1", "A11"], Codes(cut));
+
+        await cut.InvokeAsync(() => ds.Undo());
+        Assert.Equal(["B", "B1", "A", "A1", "A11", "A2"], Codes(cut));
+    }
+
+    [Fact]
+    public async Task GS_104_HiddenDeletedParent_ChildrenBecomeRoots_ShownDeletedParentKeepsThem()
+    {
+        var ds = Nodes();
+        var hidden = RenderGrid(ds);
+        await hidden.InvokeAsync(() => { ds.DeleteRow(KeyOf(ds, "A1")); hidden.Instance.Refresh(); });
+        Assert.Equal(["B", "B1", "A", "A2", "A11"], Codes(hidden));   // A11 is a root now, in list order
+
+        var ds2 = Nodes();
+        var shown = RenderGrid(ds2, deleted: DeletedRowDisplay.Strikethrough);
+        await shown.InvokeAsync(() => { ds2.DeleteRow(KeyOf(ds2, "A1")); shown.Instance.Refresh(); });
+        Assert.Equal(["B", "B1", "A", "A1", "A11", "A2"], Codes(shown));
+    }
+}
