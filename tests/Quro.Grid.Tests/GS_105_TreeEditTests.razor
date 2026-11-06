@@ -1,0 +1,356 @@
+@inherits GridTestContext
+
+@code {
+    // GS-105: adding and deleting in a tree (A-61). AddChildRow sets the parent field, places the row after the parent's last
+    // descendant and shows it. AddRow below a row makes a sibling. Copied and imported rows go to the root level. Paste adds no
+    // rows. Deleting a parent deletes its descendants in one Undo step; cancelling any of them keeps that whole selected subtree.
+
+    public sealed class Node
+    {
+        public string? Code { get; set; }
+        public string? Parent { get; set; }
+        public string? Name { get; set; }
+    }
+
+    private static readonly CultureInfo En = new("en-US", useUserOverride: false);
+
+    private readonly List<string?> _deleting = [];
+    private readonly List<int> _deleted = [];
+    private readonly List<string?> _addedParents = [];
+    private string? _cancelCode;
+
+    private static Node N(string code, string? parent) => new() { Code = code, Parent = parent, Name = "n" + code };
+
+    /// <summary>Shown order: B B1 A A1 A11 A2.</summary>
+    private static QuroDataSet<Node> Nodes() =>
+        DataOf(N("A1", "A"), N("B", null), N("A", null), N("A11", "A1"), N("B1", "B"), N("A2", "A"));
+
+    private static QuroDataSet<Node> DataOf(params Node[] nodes)
+    {
+        var ds = new QuroDataSet<Node>();
+        ds.Load(nodes);
+        return ds;
+    }
+
+    private IRenderedComponent<QuroGrid<Node>> RenderGrid(QuroDataSet<Node> ds) =>
+        Render<QuroGrid<Node>>(@<QuroGrid DataSet="ds" Culture="En" TreeKeyField="Code" TreeParentField="Parent" AddRowsOnPaste="true"
+                                          OnRowAdded="(RowAddedArgs<Node> e) => _addedParents.Add(e.Item.Parent)"
+                                          OnRowDeleting="(RowDeletingArgs<Node> e) => Deleting(e)" OnRowDeleted="(RowDeletedArgs e) => _deleted.AddRange(e.RowKeys)">
+                                   <QuroColumn Field="Name" HeaderKey="n.name" />
+                                   <QuroColumn Field="Code" HeaderKey="n.code" />
+                               </QuroGrid>);
+
+    private void Deleting(RowDeletingArgs<Node> e)
+    {
+        _deleting.Add(e.Item.Code);
+        e.Cancel = _cancelCode is not null && e.Item.Code == _cancelCode;
+    }
+
+    private static string[] Codes(IRenderedComponent<QuroGrid<Node>> cut) =>
+        cut.FindAll("[role=row][data-row] [data-field=Code]").Select(c => c.TextContent.Trim()).ToArray();
+
+    private static string[] Levels(IRenderedComponent<QuroGrid<Node>> cut) =>
+        cut.FindAll("[role=row][data-row]").Select(r => r.GetAttribute("aria-level") ?? "").ToArray();
+
+    private static int KeyOf(QuroDataSet<Node> ds, string code) => ds.RowKeys.Single(k => ds.GetItem(k).Code == code);
+
+    [Fact]
+    public async Task GS_105_AddChildRow_SetsTheParent_AfterTheLastDescendant()
+    {
+        var ds = Nodes();
+        var cut = RenderGrid(ds);
+
+        var key = await cut.InvokeAsync(() => cut.Instance.AddChildRow(KeyOf(ds, "A")));
+
+        Assert.Equal("A", ds.GetItem(key!.Value).Parent);
+        Assert.Equal(RowState.Inserted, ds.GetState(key.Value));
+        Assert.Equal(["B", "B1", "A", "A1", "A11", "A2", ""], Codes(cut));
+        Assert.Equal(["1", "2", "1", "2", "3", "2", "2"], Levels(cut));
+        Assert.Equal(["A"], _addedParents);   // OnRowAdded already sees it
+    }
+
+    [Fact]
+    public async Task GS_105_AddChildRow_ComesAfterEverySibling_WhateverTheListOrder()
+    {
+        // X is A2's child but listed first: placing the new row right after X in the list would put it before A1
+        var ds = DataOf(N("X", "A2"), N("A1", "A"), N("A2", "A"), N("A", null));
+        var cut = RenderGrid(ds);
+
+        await cut.InvokeAsync(() => cut.Instance.AddChildRow(KeyOf(ds, "A")));
+
+        Assert.Equal(["A", "A1", "A2", "X", ""], Codes(cut));
+        Assert.Equal(["1", "2", "2", "3", "2"], Levels(cut));
+    }
+
+    [Fact]
+    public async Task GS_105_AddChildRow_LeafBecomesAParent()
+    {
+        var ds = Nodes();
+        var cut = RenderGrid(ds);
+
+        await cut.InvokeAsync(() => cut.Instance.AddChildRow(KeyOf(ds, "A2")));
+
+        Assert.Equal(["B", "B1", "A", "A1", "A11", "A2", ""], Codes(cut));
+        Assert.Equal("3", Levels(cut)[6]);
+        Assert.Equal("true", cut.FindAll("[role=row][data-row]")[5].GetAttribute("aria-expanded"));
+    }
+
+    [Fact]
+    public async Task GS_105_AddChildRow_ExpandsTheParentAndItsAncestors()
+    {
+        var ds = Nodes();
+        var cut = RenderGrid(ds);
+        await cut.InvokeAsync(() => cut.Instance.CollapseAllTree());
+        Assert.Equal(["B", "A"], Codes(cut));
+
+        await cut.InvokeAsync(() => cut.Instance.AddChildRow(KeyOf(ds, "A1")));
+
+        Assert.Equal(["B", "A", "A1", "A11", "", "A2"], Codes(cut));
+    }
+
+    [Fact]
+    public async Task GS_105_AddChildRow_ParentWithoutAKey_OrUnknownRow_AddsNothing()
+    {
+        var ds = Nodes();
+        var cut = RenderGrid(ds);
+        var keyless = await cut.InvokeAsync(() => cut.Instance.AddRow());
+        var count = ds.RowKeys.Count;
+
+        Assert.Null(await cut.InvokeAsync(() => cut.Instance.AddChildRow(keyless)));
+        Assert.Null(await cut.InvokeAsync(() => cut.Instance.AddChildRow(-999)));
+
+        Assert.Equal(count, ds.RowKeys.Count);
+    }
+
+    [Fact]
+    public async Task GS_105_AddChildRow_OnAPlainGrid_AddsNothing()
+    {
+        var ds = Nodes();
+        var cut = Render<QuroGrid<Node>>(@<QuroGrid DataSet="ds" Culture="En"><QuroColumn Field="Code" HeaderKey="n.code" /></QuroGrid>);
+
+        Assert.Null(await cut.InvokeAsync(() => cut.Instance.AddChildRow(ds.RowKeys[0])));
+
+        Assert.Equal(6, ds.RowKeys.Count);
+    }
+
+    [Fact]
+    public async Task GS_105_AddChildRow_StaysVisibleUnderAFilter_WithItsParent()
+    {
+        var ds = Nodes();
+        var cut = RenderGrid(ds);
+        await cut.InvokeAsync(() => cut.Instance.SetFilters([new ColumnFilter("Code") { Contains = "B1" }]));
+        Assert.Equal(["B", "B1"], Codes(cut));
+
+        await cut.InvokeAsync(() => cut.Instance.AddChildRow(KeyOf(ds, "B1")));
+
+        Assert.Equal(["B", "B1", ""], Codes(cut));
+        Assert.Equal(["1", "2", "3"], Levels(cut));
+    }
+
+    [Fact]
+    public async Task GS_105_AddChildRow_IsOneUndoStep()
+    {
+        var ds = Nodes();
+        var cut = RenderGrid(ds);
+        await cut.InvokeAsync(() => cut.Instance.AddChildRow(KeyOf(ds, "A")));
+
+        await cut.InvokeAsync(() => { ds.Undo(); cut.Instance.Refresh(); });
+
+        Assert.Equal(["B", "B1", "A", "A1", "A11", "A2"], Codes(cut));
+        Assert.False(ds.HasChanges);
+    }
+
+    [Fact]
+    public async Task GS_105_AddRowBelowARow_IsItsSibling_ShownAfterItsChildren()
+    {
+        var ds = Nodes();
+        var cut = RenderGrid(ds);
+
+        var key = await cut.InvokeAsync(() => cut.Instance.AddRow(KeyOf(ds, "A1")));
+
+        Assert.Equal("A", ds.GetItem(key).Parent);
+        Assert.Equal(["B", "B1", "A", "A1", "A11", "", "A2"], Codes(cut));
+        Assert.Equal("2", Levels(cut)[5]);
+    }
+
+    [Fact]
+    public async Task GS_105_AddRowBelowARoot_IsARoot()
+    {
+        var ds = Nodes();
+        var cut = RenderGrid(ds);
+
+        var key = await cut.InvokeAsync(() => cut.Instance.AddRow(KeyOf(ds, "B")));
+
+        Assert.Null(ds.GetItem(key).Parent);
+        Assert.Equal(["B", "B1", "", "A", "A1", "A11", "A2"], Codes(cut));
+    }
+
+    [Fact]
+    public async Task GS_105_AddRowWithoutAPosition_IsARootAtTheEnd()
+    {
+        var ds = Nodes();
+        var cut = RenderGrid(ds);
+
+        await cut.InvokeAsync(() => cut.Instance.AddRow());
+
+        Assert.Equal(["B", "B1", "A", "A1", "A11", "A2", ""], Codes(cut));
+        Assert.Equal("1", Levels(cut)[6]);
+    }
+
+    [Fact]
+    public async Task GS_105_CopyRows_AddsAtTheRootLevel()
+    {
+        var ds = Nodes();
+        var cut = RenderGrid(ds);
+
+        var copies = await cut.InvokeAsync(() => cut.Instance.CopyRows([KeyOf(ds, "A11")]));
+
+        Assert.Null(ds.GetItem(copies[0]).Parent);
+        Assert.Equal("nA11", ds.GetItem(copies[0]).Name);
+        Assert.Equal(["1", "2", "1", "2", "3", "2", "1"], Levels(cut));
+    }
+
+    [Fact]
+    public async Task GS_105_ImportRows_AddsAtTheRootLevel()
+    {
+        var ds = Nodes();
+        var cut = RenderGrid(ds);
+
+        var result = await cut.InvokeAsync(() => cut.Instance.ImportRows(["Name"], [["new"]]));
+
+        Assert.Null(ds.GetItem(result.AddedRowKeys[0]).Parent);
+        Assert.Equal("1", Levels(cut)[6]);
+    }
+
+    [Fact]
+    public async Task GS_105_Paste_AddsNoRows_ExtraRowsAreDropped()
+    {
+        var ds = Nodes();
+        var cut = RenderGrid(ds);
+
+        Assert.True(await cut.InvokeAsync(() => cut.Instance.Paste(KeyOf(ds, "A2"), "Name", [["p1"], ["p2"], ["p3"]])));
+
+        Assert.Equal(6, ds.RowKeys.Count);
+        Assert.Equal("p1", ds.GetItem(KeyOf(ds, "A2")).Name);
+    }
+
+    [Fact]
+    public async Task GS_105_Paste_FillsVisibleRowsOnly()
+    {
+        var ds = Nodes();
+        var cut = RenderGrid(ds);
+        await cut.InvokeAsync(() => cut.Instance.ExpandTreeRow(KeyOf(ds, "B"), false));
+
+        await cut.InvokeAsync(() => cut.Instance.Paste(KeyOf(ds, "B"), "Name", [["p1"], ["p2"]]));
+
+        Assert.Equal("nB1", ds.GetItem(KeyOf(ds, "B1")).Name);   // collapsed: skipped
+        Assert.Equal("p2", ds.GetItem(KeyOf(ds, "A")).Name);
+    }
+
+    [Fact]
+    public async Task GS_105_DeleteParent_DeletesDescendants_OneEventEach_ParentFirst()
+    {
+        var ds = Nodes();
+        var cut = RenderGrid(ds);
+
+        var count = await cut.InvokeAsync(() => cut.Instance.DeleteRows([KeyOf(ds, "A")]));
+
+        Assert.Equal(4, count);
+        Assert.Equal(["A", "A1", "A11", "A2"], _deleting);
+        Assert.Equal(4, _deleted.Count);
+        Assert.Equal(["B", "B1"], Codes(cut));
+    }
+
+    [Fact]
+    public async Task GS_105_DeleteParent_IncludesCollapsedAndFilteredOutDescendants()
+    {
+        var ds = Nodes();
+        var cut = RenderGrid(ds);
+        await cut.InvokeAsync(() => cut.Instance.ExpandTreeRow(KeyOf(ds, "A1"), false));
+        await cut.InvokeAsync(() => cut.Instance.SetFilters([new ColumnFilter("Code") { Contains = "A1" }]));   // A2 is filtered out
+
+        await cut.InvokeAsync(() => cut.Instance.DeleteRows([KeyOf(ds, "A")]));
+
+        foreach (var code in new[] { "A", "A1", "A11", "A2" })
+            Assert.Equal(RowState.Deleted, ds.GetState(KeyOf(ds, code)));
+    }
+
+    [Fact]
+    public async Task GS_105_DeleteParent_IsOneUndoStep()
+    {
+        var ds = Nodes();
+        var cut = RenderGrid(ds);
+        await cut.InvokeAsync(() => cut.Instance.DeleteRows([KeyOf(ds, "A")]));
+
+        await cut.InvokeAsync(() => { ds.Undo(); cut.Instance.Refresh(); });
+
+        Assert.Equal(["B", "B1", "A", "A1", "A11", "A2"], Codes(cut));
+        Assert.False(ds.HasChanges);
+    }
+
+    [Fact]
+    public async Task GS_105_CancellingAnyRow_KeepsTheWholeSubtree()
+    {
+        var ds = Nodes();
+        var cut = RenderGrid(ds);
+        _cancelCode = "A11";
+
+        var count = await cut.InvokeAsync(() => cut.Instance.DeleteRows([KeyOf(ds, "A")]));
+
+        Assert.Equal(0, count);
+        Assert.False(ds.HasChanges);
+        Assert.Empty(_deleted);
+        Assert.Equal(6, Codes(cut).Length);
+    }
+
+    [Fact]
+    public async Task GS_105_Cancelling_KeepsOnlyThatSelectedSubtree()
+    {
+        var ds = Nodes();
+        var cut = RenderGrid(ds);
+        _cancelCode = "A11";
+
+        var count = await cut.InvokeAsync(() => cut.Instance.DeleteRows([KeyOf(ds, "B"), KeyOf(ds, "A")]));
+
+        Assert.Equal(2, count);
+        Assert.Equal(["A", "A1", "A11", "A2"], Codes(cut));
+    }
+
+    [Fact]
+    public async Task GS_105_SelectingAParentAndItsChild_AsksOncePerRow()
+    {
+        var ds = Nodes();
+        var cut = RenderGrid(ds);
+
+        var count = await cut.InvokeAsync(() => cut.Instance.DeleteRows([KeyOf(ds, "A1"), KeyOf(ds, "A"), KeyOf(ds, "A11")]));
+
+        Assert.Equal(4, count);
+        Assert.Equal(["A", "A1", "A11", "A2"], _deleting);
+    }
+
+    [Fact]
+    public async Task GS_105_DeletingANewParent_RemovesItAndItsNewChild()
+    {
+        var ds = Nodes();
+        var cut = RenderGrid(ds);
+        var parent = await cut.InvokeAsync(() => cut.Instance.AddRow());
+        await cut.InvokeAsync(() => ds.SetValue(parent, "Code", "N"));
+        var child = await cut.InvokeAsync(() => cut.Instance.AddChildRow(parent));
+
+        await cut.InvokeAsync(() => cut.Instance.DeleteRows([parent]));
+
+        Assert.DoesNotContain(parent, ds.RowKeys);
+        Assert.DoesNotContain(child!.Value, ds.RowKeys);
+    }
+
+    [Fact]
+    public async Task GS_105_DeleteALeaf_DeletesOnlyIt()
+    {
+        var ds = Nodes();
+        var cut = RenderGrid(ds);
+
+        Assert.Equal(1, await cut.InvokeAsync(() => cut.Instance.DeleteRows([KeyOf(ds, "A2")])));
+
+        Assert.Equal(["B", "B1", "A", "A1", "A11"], Codes(cut));
+    }
+}

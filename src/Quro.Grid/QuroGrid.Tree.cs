@@ -67,7 +67,78 @@ public partial class QuroGrid<TItem>
         StateHasChanged();
     }
 
+    /// <summary>
+    /// Adds a child: sets the parent field, shows it after the parent's last descendant and expands the parent and its ancestors.
+    /// Null, with no row added, when the grid is not a tree or the parent is unknown, deleted or has no key value yet (GS-105).
+    /// </summary>
+    [JSInvokable]
+    public async Task<int?> AddChildRow(int parentRowKey)
+    {
+        if (!TreeMode || !DataSet.RowKeys.Contains(parentRowKey) || DataSet.GetState(parentRowKey) == RowState.Deleted)
+            return null;
+        var parentKey = DataSet.GetValue(parentRowKey, TreeKeyField!);
+        if (EmptyTreeValue(parentKey))
+            return null;
+
+        using var step = DataSet.BeginUndoStep();   // one user action = one undo step (A-33)
+        var rows = TreeRowKeys();
+        var parents = TreeParents(rows);
+        for (int? row = parentRowKey; row is { } at; row = parents.TryGetValue(at, out var up) ? up : null)
+            _treeCollapsed.Remove(DataSet.GetValue(at, TreeKeyField!) ?? "");
+
+        // after the last sibling in the list: the tree then shows the new row after that sibling's descendants too
+        var after = rows.Where(k => parents.TryGetValue(k, out var p) && p == parentRowKey).Select(k => (int?)k).LastOrDefault() ?? parentRowKey;
+        var key = await AddRowCore(after: after, tree: new TreePlacement(parentKey));
+        StateHasChanged();
+        return key;
+    }
+
+    /// <summary>The parent field value a new row gets (GS-105).</summary>
+    private readonly record struct TreePlacement(object? Parent);
+
+    /// <summary>A row added below another is its sibling. Without a position the app decides; an empty item is a root.</summary>
+    private TreePlacement? TreeSiblingOf(int? rowKey) =>
+        TreeMode && rowKey is { } row ? new TreePlacement(DataSet.GetValue(row, TreeParentField!)) : null;
+
+    /// <summary>
+    /// Each selected row with its descendants, parent first, including collapsed and filtered-out ones.
+    /// A selected row under another selected row belongs to that one's set.
+    /// </summary>
+    private List<IReadOnlyList<int>> TreeSubtrees(IReadOnlyList<int> rowKeys)
+    {
+        var rows = OrderedRowKeys().Where(k => DataSet.GetState(k) != RowState.Deleted).ToList();
+        var parents = TreeParents(rows);
+        var children = rows.Where(parents.ContainsKey).ToLookup(k => parents[k]);
+        var present = rows.ToHashSet();
+        var selected = rowKeys.Where(present.Contains).ToHashSet();
+
+        var sets = new List<IReadOnlyList<int>>();
+        foreach (var top in rowKeys.Distinct().Where(present.Contains))
+        {
+            var under = false;
+            for (var row = top; !under && parents.TryGetValue(row, out var parent); row = parent)
+                under = selected.Contains(parent);
+            if (under)
+                continue;
+
+            var set = new List<int>();
+            var stack = new Stack<int>([top]);
+            while (stack.TryPop(out var row))
+            {
+                set.Add(row);
+                foreach (var child in children[row].Reverse())
+                    stack.Push(child);
+            }
+            sets.Add(set);
+        }
+        return sets;
+    }
+
     private static bool EmptyTreeValue(object? value) => value is null or "";
+
+    /// <summary>The rows the tree is built from, in list order.</summary>
+    private List<int> TreeRowKeys() =>
+        OrderedRowKeys().Where(k => DeletedRows != DeletedRowDisplay.Hide || DataSet.GetState(k) != RowState.Deleted).ToList();
 
     /// <summary>
     /// Depth-first rows of the tree. Siblings keep the sorted list order. A row whose parent is empty, unknown, hidden or on a
@@ -75,7 +146,7 @@ public partial class QuroGrid<TItem>
     /// </summary>
     private List<BodyItem> BuildTree(bool all)
     {
-        var keys = OrderedRowKeys().Where(k => DeletedRows != DeletedRowDisplay.Hide || DataSet.GetState(k) != RowState.Deleted).ToList();
+        var keys = TreeRowKeys();
         var parents = TreeParents(keys);
 
         HashSet<int>? kept = null;
