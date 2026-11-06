@@ -234,7 +234,7 @@ function onMouseDown(s, e) {
         startHeaderDrag(s, header, e);
         return;
     }
-    if (e.target.closest('.quro-row-number')) {
+    if (e.target.closest('.quro-row-number, .quro-row-state')) {
         e.preventDefault();   // selects nothing and leaves the focus where it is, so an open editor stays open (GS-100)
         return;
     }

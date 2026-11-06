@@ -246,6 +246,6 @@
 
         var css = File.ReadAllText(Path.Combine(GS_080_ThemeTokenTests.Root(), "src", "Quro.Grid", "wwwroot", "quro-grid.css"));
         Assert.Matches(@"\.quro-row-number \{[^}]*width:\s*var\(--qg-row-number-width\)", css);
-        Assert.Matches(@"scroll-padding-left:\s*var\(--qg-row-number-width, 0px\)", css);
+        Assert.Matches(@"scroll-padding-left:\s*calc\(var\(--qg-row-number-width, 0px\)", css);
     }
 }

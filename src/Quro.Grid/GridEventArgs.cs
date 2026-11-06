@@ -192,6 +192,13 @@ public static class GridKeys
     /// <summary>연결 끊김 중: 입력 잠금 안내</summary>
     public const string ConnectionOffline = "quro.connection.offline";
 
+    /// <summary>State column tooltip and accessible name: a new row (GS-106).</summary>
+    public const string RowStateInserted = "quro.rowstate.inserted";
+    /// <summary>State column: an edited row (GS-106).</summary>
+    public const string RowStateUpdated = "quro.rowstate.updated";
+    /// <summary>State column: a deleted row (GS-106).</summary>
+    public const string RowStateDeleted = "quro.rowstate.deleted";
+
     /// <summary>Scroll button names (GS-101, screen readers).</summary>
     public const string ScrollUp = "quro.scroll.up";
     /// <summary>Scroll down button (GS-101).</summary>
