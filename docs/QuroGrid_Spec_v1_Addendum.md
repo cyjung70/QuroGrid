@@ -1,7 +1,7 @@
 # QuroGrid Spec v1 보완 문서 (Addendum A)
 
 - 대상: `docs/QuroGrid_FeatureMatrix_Spec_v1.pdf` (Spec v1 초안 Draft v0.2, 2026-10-28 — 4.9·5장 본문 개정)
-- 문서 상태: A.35 (2026-11-07) · 스테이블영 결정 사항 반영
+- 문서 상태: A.36 (2026-11-07) · 스테이블영 결정 사항 반영
 - 이 문서는 Spec v1의 일부입니다. **아래 항목은 Spec 본문보다 우선합니다.** 본문에 없는 내용은 "보완", 본문과 다른 내용은 "변경"으로 표시합니다.
 
 ---
@@ -82,6 +82,7 @@
 | A-70 | QuroERP 요청 R6, A-59 | 결정 | **행 읽기 전용은 그리드 파라미터 `RowReadOnly` (GS-099, 2026-11-07 스테이블영 결정).** ① 잠금은 앱 함수(`Func<object, bool>`, 인자 = 행 항목)이고 DataSet·행 상태를 바꾸지 않는다 ② 잠긴 행은 `ReadOnly` 열과 같다: 에디터·`CommitEdit`·Check 토글·목록·F4 거부, 붙여넣기는 `PasteKeys.ReadOnly`, Tab은 건너뜀. 포커스·범위 선택·복사·Button/Image 클릭·행 삭제(`OnRowDeleting`)는 그대로 ③ 셀 `aria-readonly`, 행 클래스 `quro-row-readonly`, 회색 토큰 `--quro-readonly-bg`. `CellStyle` Highlight와 오류·경고 표시가 이긴다 ④ 그리드는 그릴 때 함수를 부르고 잠금 값을 행 렌더 키에 넣는다(R4): 값 변경 없이 잠금만 바꾸면 앱이 `Refresh()`를 부르고 바뀐 행만 다시 그린다 ⑤ 서버 에디터가 열린 채 잠금이 오면 에디터는 남고 커밋이 거부된다(Esc로 닫음). `EditOnSelect` 에디터는 바로 닫힌다. TOON 키는 v0.3 | 2026-11-07 |
 | A-71 | QuroERP 요청 R7, Control Spec 3-7, A-50 | 결정 | **행 번호 열은 그리드 파라미터 `ShowRowNumbers` (GS-100, 2026-11-07 스테이블영 결정).** ① `ShowRowNumbers`(기본 false)와 선택 `RowNumberHeaderKey`. `QuroColumn`도 DataSet 필드도 아니고 행 상태를 바꾸지 않는다 ② 번호는 화면 순서 1..N: 정렬·필터·그룹 뒤, 그룹 머리·소계 행은 세지 않음, 서버 페이징은 절대 위치. 숨긴 삭제 표시 행은 빠지고, 보이면 번호 유지(결정 5(a)) ③ 왼쪽 고정, 포커스 없음, 복사·붙여넣기·내보내기·정렬·필터·리사이즈 대상 아님. 클릭해도 선택·포커스가 바뀌지 않아 열린 에디터가 유지된다 ④ 폭은 전체 행 수의 자릿수(최소 2)로 그리드 루트 변수 `--qg-row-number-width` 하나에 둔다: 자릿수가 늘어도 행을 다시 그리지 않는다(R4) ⑤ 같은 변경에서 `.quro-row`를 셀 전체 폭으로 했다(그리드가 열보다 좁으면 고정 열이 밀려 나가던 기존 문제) ⑥ A-50 백로그의 행 번호 부분만 완료. 행 상태 표시(신규·수정·삭제)는 남음. TOON 키는 v0.3 | 2026-11-07 |
 | A-72 | 스테이블영 설계 변경 (2026-11-07), Control Spec 3-2, TOON v0.2 `align` | 변경 | **셀 기본 정렬을 타입으로 정한다 (GS-102).** ① 열 `Type`이 먼저: `Number`·`Currency` 오른쪽, `Check`·`Combo`·`Button`·`Image` 가운데. 일반 `Text`·`Label`은 DataSet 필드의 C# 형식이 숫자면 오른쪽, 아니면 왼쪽. `Date`·`Popup`·`Mask`는 왼쪽. `Compute` 열은 필드가 없어 `Type`만 본다 ② 본문·합계·소계 셀과 에디터가 따른다. 헤더는 왼쪽 유지. Combo 목록·달력은 왼쪽 ③ `QuroColumn.Align`(`ColumnAlign?`)이 기본을 덮어쓰고, 파서가 읽기만 하던 TOON `align`이 이제 적용된다 ④ 기존 화면의 모양이 바뀌지만 끄는 옵션은 두지 않는다. 세로 정렬(Control Spec 3-2)은 범위 밖 | 2026-11-07 |
+| A-73 | 스테이블영 설계 변경 (2026-11-07) | 결정 | **그리드 `Width`와 스크롤 버튼 `ScrollButtons` (GS-101).** ① `Width`는 `Height`와 같은 CSS 값. 없으면 지금처럼 열에 맞추고 부모 폭까지 ② `ScrollButtons`(기본 false): 스크롤할 곳이 남은 방향에만 ▲▼◀▶ 버튼. 기본 스크롤바는 그대로 둔다 ③ 한 번 누르면 한 행 또는 한 열(고정 열 뒤 기준), 누르고 있으면 반복(400ms 뒤 80ms마다). 브라우저에서만 동작(R2), 포커스 받지 않음, 열린 에디터 유지 ④ 버튼은 `role=grid` 밖의 프레임 `.quro-grid-frame`에 둔다. 버튼이 없으면 프레임은 `display: contents`. 켜면 크기는 프레임에 간다 ⑤ `.quro-grid`를 `box-sizing: border-box`로 했다(`Width`·`max-width`가 테두리를 포함하도록) ⑥ 리소스 키 `quro.scroll.*`. TOON 키는 v0.3 | 2026-11-07 |
 
 ## 2. 이벤트 API 보완 (4.10)
 

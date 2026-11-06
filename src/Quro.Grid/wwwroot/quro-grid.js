@@ -33,7 +33,7 @@ export function init(root, dotnet, options) {
     s.onMouseMove = e => onMouseMove(s, e);
     s.onMouseUp = () => { s.dragging = false; };
     s.onCopy = e => onCopy(s, e);
-    s.onScroll = () => { placePicker(s); placeFilter(s); };
+    s.onScroll = () => { placePicker(s); placeFilter(s); updateScrollButtons(s); };
     s.onDocMouseDown = e => onDocMouseDown(s, e);
     s.onReconnect = e => onReconnectState(s, e.detail?.state);
     s.onLinkClick = e => onLinkClick(s, e);
@@ -57,6 +57,7 @@ export function init(root, dotnet, options) {
     // 미저장 변경이 있을 때 링크 이동 확인 (A-20). 향상된 탐색(enhanced navigation)은 서버의 NavigationLock을 거치지 않는다.
     document.addEventListener('click', s.onLinkClick, true);
     grids.set(root, s);
+    initScrollButtons(s);
 
     // 이전 회로에서 미저장 변경을 남긴 채 연결이 끊겼다면, 다시 연 이 화면에서 알린다 (GS-048, A-21)
     if (takeLostFlag()) root.setAttribute('data-lost', '');
@@ -80,6 +81,7 @@ export function dispose(root) {
     document.removeEventListener('components-reconnect-state-changed', s.onReconnect, true);
     document.removeEventListener('click', s.onLinkClick, true);
     clearTimeout(s.notifyTimer);
+    disposeScrollButtons(s);
     s.editing?.observer?.disconnect();
     s.style.remove();
     s.resizeStyle?.remove();
@@ -1358,6 +1360,89 @@ function same(a, b) {
 
 function editable(cell) {
     return !!cell && cell.getAttribute('aria-readonly') !== 'true';
+}
+
+// ── Scroll buttons (ScrollButtons, GS-101) ──
+// The frame around the grid holds the buttons. Everything stays in the browser: no server call (R2). The handlers are on the
+// frame, one for all buttons (R5). A resize observer keeps them right when rows or columns come and go, or the window changes.
+
+const SCROLL_REPEAT_DELAY = 400;
+const SCROLL_REPEAT_EVERY = 80;
+
+function initScrollButtons(s) {
+    const frame = s.root.parentElement;
+    if (!frame?.classList.contains('quro-grid-frame')) return;
+    s.onScrollPress = e => {
+        const button = e.target.closest?.('.quro-scroll-button');
+        if (button) startScrollRepeat(s, button.dataset.scroll);
+    };
+    s.onScrollMouse = e => { if (e.target.closest?.('.quro-scroll-button')) e.preventDefault(); };   // the focus stays, so an open editor stays open
+    s.onScrollRelease = () => stopScrollRepeat(s);
+    frame.addEventListener('pointerdown', s.onScrollPress);
+    frame.addEventListener('mousedown', s.onScrollMouse);
+    document.addEventListener('pointerup', s.onScrollRelease);
+    document.addEventListener('pointercancel', s.onScrollRelease);
+    s.sizeObserver = new ResizeObserver(() => updateScrollButtons(s));
+    // the frame: the option turned on. The body and the header row: rows and columns changed the size of the content
+    [frame, s.root, s.root.querySelector('.quro-body'), s.root.querySelector('.quro-head > .quro-row:last-child')]
+        .forEach(el => { if (el) s.sizeObserver.observe(el); });
+    updateScrollButtons(s);
+}
+
+function disposeScrollButtons(s) {
+    if (!s.sizeObserver) return;
+    stopScrollRepeat(s);
+    s.sizeObserver.disconnect();
+    const frame = s.root.parentElement;
+    frame?.removeEventListener('pointerdown', s.onScrollPress);
+    frame?.removeEventListener('mousedown', s.onScrollMouse);
+    document.removeEventListener('pointerup', s.onScrollRelease);
+    document.removeEventListener('pointercancel', s.onScrollRelease);
+}
+
+/** Shows a button where the grid can scroll further, and keeps the buttons clear of the native scrollbars. */
+function updateScrollButtons(s) {
+    const frame = s.root.parentElement;
+    if (!frame?.dataset.scrollButtons) return;
+    const r = s.root;
+    const can = {
+        up: r.scrollTop > 0,
+        down: r.scrollTop < r.scrollHeight - r.clientHeight - 1,
+        left: r.scrollLeft > 0,
+        right: r.scrollLeft < r.scrollWidth - r.clientWidth - 1,
+    };
+    frame.querySelectorAll(':scope > .quro-scroll-button').forEach(b => b.toggleAttribute('data-visible', can[b.dataset.scroll]));
+    frame.style.setProperty('--qg-scrollbar-y', `${r.offsetWidth - r.clientWidth}px`);
+    frame.style.setProperty('--qg-scrollbar-x', `${r.offsetHeight - r.clientHeight}px`);
+}
+
+function startScrollRepeat(s, dir) {
+    stopScrollRepeat(s);
+    scrollStep(s, dir);
+    s.scrollDelay = setTimeout(() => {
+        s.scrollRepeat = setInterval(() => scrollStep(s, dir), SCROLL_REPEAT_EVERY);
+    }, SCROLL_REPEAT_DELAY);
+}
+
+function stopScrollRepeat(s) {
+    clearTimeout(s.scrollDelay);
+    clearInterval(s.scrollRepeat);
+}
+
+/** One row, or to the next column edge after the frozen cells. Past the last edge: to the end. */
+function scrollStep(s, dir) {
+    const r = s.root;
+    if (dir === 'up' || dir === 'down') {
+        const height = r.querySelector('.quro-body [role=row]')?.offsetHeight || 28;
+        r.scrollTop += dir === 'down' ? height : -height;
+        return;
+    }
+    const row = r.querySelector('.quro-head > .quro-row:last-child');
+    const frozen = [...row.children].filter(c => c.classList.contains('quro-frozen'));
+    const edge = r.getBoundingClientRect().left + r.clientLeft + frozen.reduce((sum, c) => sum + c.getBoundingClientRect().width, 0);
+    const lefts = [...row.children].filter(c => !c.classList.contains('quro-frozen')).map(c => c.getBoundingClientRect().left - edge);
+    const delta = dir === 'right' ? lefts.find(x => x > 1) : lefts.findLast(x => x < -1);
+    r.scrollLeft += delta ?? (dir === 'right' ? r.scrollWidth : -r.scrollWidth);
 }
 
 // ── Select editor (EditOnSelect, GS-098, A-58) ──

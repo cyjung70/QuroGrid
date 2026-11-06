@@ -5,6 +5,8 @@
  * 그리드 안에서는 풀어 둔 --qg-*만 쓴다. 색 기본값은 아래 정의에만 둔다.
  * 선택·오류·경고 배경은 강조색을 배경에 섞어 만들어 밝은·다크 모드 모두 글자가 읽힌다.
  */
+/* The frame too: the scroll buttons sit in it, outside the grid (GS-101) */
+.quro-grid-frame,
 .quro-grid {
     --qg-bg: var(--quro-bg, #fff);
     --qg-text: var(--quro-text, #1d2330);
@@ -26,8 +28,11 @@
     --qg-label: var(--quro-label, #5b6475);   /* Label cell text, same token as QuroLabel */
     --qg-readonly-bg: var(--quro-readonly-bg, color-mix(in srgb, var(--qg-check-line) 14%, var(--qg-bg)));   /* locked row (RowReadOnly) */
     --qg-row-height: var(--quro-row-height, 28px);   /* layout value the grid sets from RowHeight (not a color) */
+}
 
+.quro-grid {
     display: inline-block;
+    box-sizing: border-box;
     overflow: auto;
     max-width: 100%;
     scroll-padding-left: var(--qg-row-number-width, 0px);   /* keyboard scrolling stops clear of the sticky number column */
@@ -35,6 +40,71 @@
     background: var(--qg-bg);
     color: var(--qg-text);
 }
+
+/* Frame around the grid (GS-101). Without scroll buttons it has no box of its own */
+.quro-grid-frame {
+    display: contents;
+}
+
+.quro-grid-frame[data-scroll-buttons] {
+    display: inline-block;
+    position: relative;
+    max-width: 100%;
+    vertical-align: top;
+}
+
+.quro-grid-frame[data-scroll-buttons] > .quro-grid {
+    display: block;
+}
+
+/* Scroll buttons (GS-101): quro-grid.js sets data-visible where the grid can scroll further, and the scrollbar sizes on the frame */
+.quro-scroll-button {
+    display: none;
+    position: absolute;
+    z-index: 3;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid var(--qg-border);
+    border-radius: 3px;
+    background: var(--qg-head-bg);
+    color: var(--qg-text);
+    font-size: 10px;
+    line-height: 20px;
+    text-align: center;
+    opacity: 0.85;
+    cursor: pointer;
+}
+
+.quro-scroll-button[data-visible] {
+    display: block;
+}
+
+.quro-scroll-button:hover {
+    opacity: 1;
+}
+
+.quro-scroll-button[data-scroll="up"],
+.quro-scroll-button[data-scroll="down"] {
+    right: calc(var(--qg-scrollbar-y, 0px) + 3px);
+    top: 50%;
+}
+
+.quro-scroll-button[data-scroll="up"] { transform: translateY(-24px); }
+.quro-scroll-button[data-scroll="down"] { transform: translateY(2px); }
+.quro-scroll-button[data-scroll="up"]::before { content: "\25B2"; }
+.quro-scroll-button[data-scroll="down"]::before { content: "\25BC"; }
+
+.quro-scroll-button[data-scroll="left"],
+.quro-scroll-button[data-scroll="right"] {
+    bottom: calc(var(--qg-scrollbar-x, 0px) + 3px);
+    left: 50%;
+}
+
+.quro-scroll-button[data-scroll="left"] { transform: translateX(-24px); }
+.quro-scroll-button[data-scroll="right"] { transform: translateX(2px); }
+.quro-scroll-button[data-scroll="left"]::before { content: "\25C0"; }
+.quro-scroll-button[data-scroll="right"]::before { content: "\25B6"; }
 
 .quro-row {
     display: flex;

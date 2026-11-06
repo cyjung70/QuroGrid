@@ -1,0 +1,90 @@
+@inherits GridTestContext
+
+@code {
+    // GS-101: grid Width and ScrollButtons. Width takes a CSS value like Height. With ScrollButtons on, a frame around the grid
+    // holds four buttons outside role=grid; quro-grid.js shows them and scrolls in the browser (R1, R2: no server call).
+
+    public sealed class Line
+    {
+        public string? Name { get; set; }
+    }
+
+    private static QuroDataSet<Line> Lines()
+    {
+        var ds = new QuroDataSet<Line>();
+        ds.Load([new Line { Name = "Apple" }]);
+        return ds;
+    }
+
+    private IRenderedComponent<QuroGrid<Line>> RenderGrid(string? width = null, string? height = null, bool buttons = false) =>
+        Render<QuroGrid<Line>>(@<QuroGrid DataSet="Lines()" Width="@width" Height="@height" ScrollButtons="buttons">
+                                   <QuroColumn Field="Name" HeaderKey="n" />
+                               </QuroGrid>);
+
+    /// <summary>GS-101: off by default: no size, no buttons, and the frame takes no box of its own</summary>
+    [Fact]
+    public void GS_101_Default()
+    {
+        var cut = RenderGrid();
+
+        Assert.Null(new QuroGrid<Line>().Width);
+        Assert.False(new QuroGrid<Line>().ScrollButtons);
+        Assert.Null(cut.Find("[role=grid]").GetAttribute("style"));
+        Assert.Empty(cut.FindAll(".quro-scroll-button"));
+        Assert.Null(cut.Find(".quro-grid-frame").GetAttribute("data-scroll-buttons"));
+        Assert.Null(cut.Find(".quro-grid-frame").GetAttribute("style"));
+    }
+
+    /// <summary>GS-101: Width and Height go on the grid as given</summary>
+    [Fact]
+    public void GS_101_Size_OnGrid()
+    {
+        var style = RenderGrid(width: "800px", height: "480px").Find("[role=grid]").GetAttribute("style")!;
+
+        Assert.Contains("width:800px", style);
+        Assert.Contains("height:480px", style);
+        Assert.Equal("width:50%", RenderGrid(width: "50%").Find("[role=grid]").GetAttribute("style"));
+    }
+
+    /// <summary>GS-101: with buttons the frame takes the size, so percentages keep their meaning, and the grid fills it</summary>
+    [Fact]
+    public void GS_101_Size_OnFrame_WithButtons()
+    {
+        var cut = RenderGrid(width: "800px", height: "50%", buttons: true);
+
+        Assert.Equal("true", cut.Find(".quro-grid-frame").GetAttribute("data-scroll-buttons"));
+        Assert.Equal("width:800px;height:50%", cut.Find(".quro-grid-frame").GetAttribute("style"));
+        var style = cut.Find("[role=grid]").GetAttribute("style")!;
+        Assert.Contains("height:100%", style);
+        Assert.DoesNotContain("800px", style);
+    }
+
+    /// <summary>GS-101: four unfocusable buttons with localized names, outside role=grid; hidden until the browser shows them</summary>
+    [Fact]
+    public void GS_101_Buttons_Markup()
+    {
+        var cut = RenderGrid(height: "100px", buttons: true);
+
+        var buttons = cut.FindAll(".quro-grid-frame > .quro-scroll-button");
+        Assert.Equal(["up", "down", "left", "right"], buttons.Select(b => b.GetAttribute("data-scroll")));
+        Assert.Equal([GridKeys.ScrollUp, GridKeys.ScrollDown, GridKeys.ScrollLeft, GridKeys.ScrollRight], buttons.Select(b => b.GetAttribute("aria-label")));
+        Assert.All(buttons, b =>
+        {
+            Assert.Equal("-1", b.GetAttribute("tabindex"));
+            Assert.Equal("button", b.GetAttribute("type"));
+            Assert.Null(b.GetAttribute("data-visible"));
+        });
+        Assert.Empty(cut.FindAll("[role=grid] .quro-scroll-button"));
+    }
+
+    /// <summary>GS-101: the colors come from the grid's tokens and hidden is the default</summary>
+    [Fact]
+    public void GS_101_Css()
+    {
+        var css = File.ReadAllText(Path.Combine(GS_080_ThemeTokenTests.Root(), "src", "Quro.Grid", "wwwroot", "quro-grid.css"));
+
+        Assert.Matches(@"\.quro-grid-frame \{[^}]*display:\s*contents", css);
+        Assert.Matches(@"\.quro-scroll-button \{[^}]*display:\s*none", css);
+        Assert.Matches(@"\.quro-scroll-button\[data-visible\] \{[^}]*display:\s*block", css);
+    }
+}
