@@ -194,6 +194,15 @@ public partial class QuroGrid<TItem> where TItem : class
     /// <summary>그리드 높이 (CSS 값, 예: 480px). 주면 그리드 안에서 스크롤한다 (페이징 화면 권장).</summary>
     [Parameter] public string? Height { get; set; }
 
+    /// <summary>Grid width (CSS value, e.g. 800px or 100%; GS-101). Unset, the grid fits its columns up to the width of its parent.</summary>
+    [Parameter] public string? Width { get; set; }
+
+    /// <summary>
+    /// Shows scroll buttons where the grid can scroll further (GS-101, default off). One press moves one row or column and
+    /// holding repeats. They run in the browser without a server call, take no focus and leave an open editor open.
+    /// </summary>
+    [Parameter] public bool ScrollButtons { get; set; }
+
     /// <summary>다시 조회한다 (저장 후 등). 페이징 중이면 변경 없는 적재 행을 놓고 처음부터 다시 부른다.</summary>
     public Task ReloadAsync()
     {
@@ -1207,9 +1216,15 @@ public partial class QuroGrid<TItem> where TItem : class
     {
         get
         {
-            var layout = Paging || Height is not null
-                ? $"{(Height is null ? "" : $"height:{Height};")}--quro-row-height:{RowHeight}px"
-                : null;
+            // with scroll buttons the frame takes the size, so a percentage still refers to the parent, and the grid fills the frame
+            var size = (ScrollButtons, Width, Height) switch
+            {
+                (true, _, null) => "",
+                (true, _, _) => "height:100%;",
+                _ => (Height is null ? "" : $"height:{Height};") + (Width is null ? "" : $"width:{Width};"),
+            };
+            var row = Paging || Height is not null ? $"--quro-row-height:{RowHeight}px" : "";
+            var layout = size + row is { Length: > 0 } both ? both.TrimEnd(';') : null;
             if (!ShowRowNumbers)
                 return layout;
             // one variable on the root: a longer row count changes the width without redrawing any row (R4). Rows that exist,
@@ -1220,6 +1235,12 @@ public partial class QuroGrid<TItem> where TItem : class
             return layout is null ? width : $"{layout};{width}";
         }
     }
+
+    /// <summary>Size of the frame around the grid, which holds the scroll buttons (GS-101).</summary>
+    internal string? FrameStyle =>
+        !ScrollButtons || (Width is null && Height is null)
+            ? null
+            : string.Join(';', new[] { Width is null ? null : $"width:{Width}", Height is null ? null : $"height:{Height}" }.Where(p => p is not null));
 
     /// <summary>aria-colindex of a column: the number column is the first when shown (GS-100).</summary>
     internal int ColIndex(int index) => index + (ShowRowNumbers ? 2 : 1);

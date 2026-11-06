@@ -192,6 +192,15 @@ public static class GridKeys
     /// <summary>연결 끊김 중: 입력 잠금 안내</summary>
     public const string ConnectionOffline = "quro.connection.offline";
 
+    /// <summary>Scroll button names (GS-101, screen readers).</summary>
+    public const string ScrollUp = "quro.scroll.up";
+    /// <summary>Scroll down button (GS-101).</summary>
+    public const string ScrollDown = "quro.scroll.down";
+    /// <summary>Scroll left button (GS-101).</summary>
+    public const string ScrollLeft = "quro.scroll.left";
+    /// <summary>Scroll right button (GS-101).</summary>
+    public const string ScrollRight = "quro.scroll.right";
+
     /// <summary>연결 끊김 중 미저장 변경이 있을 때 덧붙이는 경고</summary>
     public const string ConnectionUnsaved = "quro.connection.unsaved";
 

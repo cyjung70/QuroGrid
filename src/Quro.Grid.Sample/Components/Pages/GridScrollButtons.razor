@@ -1,0 +1,44 @@
+@page "/scroll-buttons"
+@rendermode InteractiveServer
+@using System.Globalization
+@using Quro.Grid
+@using Quro.Grid.Data
+@using Quro.Grid.Sample.Data
+
+<PageTitle>@L["sample.scroll.title"]</PageTitle>
+
+<h1>@L["sample.scroll.title"]</h1>
+
+@* Width and ScrollButtons (GS-101). ?buttons=false, ?rows=2, ?size=false and ?frozen=1 change the setup *@
+<QuroGrid @ref="_grid" TItem="SampleProduct" DataSet="_products" Localizer="L" Culture="En"
+          Width="@(Size ? "300px" : null)" Height="@(Size ? "150px" : null)" ScrollButtons="Buttons" FrozenColumns="Frozen">
+    <QuroColumn Field="Name" HeaderKey="sample.cells.name" Width="120" />
+    <QuroColumn Field="Qty" HeaderKey="sample.editselect.qty" Type="CellType.Number" Format="N0" Width="120" />
+    <QuroColumn Field="Kind" HeaderKey="sample.editselect.kind" Width="120" />
+    <QuroColumn Field="Note" HeaderKey="sample.rownum.note" Width="120" />
+</QuroGrid>
+
+<p>
+    <button type="button" data-testid="add-rows" @onclick="AddRows">@L["sample.rownum.add"]</button>
+</p>
+
+@code {
+    private static readonly SampleLocalizer L = new();
+    private static readonly CultureInfo En = new("en-US", useUserOverride: false);
+    private readonly QuroDataSet<SampleProduct> _products = new();
+    private QuroGrid<SampleProduct>? _grid;
+
+    [SupplyParameterFromQuery(Name = "buttons")] public bool? ButtonsQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "size")] public bool? SizeQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "rows")] public int? Rows { get; set; }
+    [SupplyParameterFromQuery(Name = "frozen")] public int Frozen { get; set; }
+
+    private bool Buttons => ButtonsQuery ?? true;
+    private bool Size => SizeQuery ?? true;
+
+    protected override void OnInitialized() =>
+        _products.Load(Enumerable.Range(1, Rows ?? 30).Select(n => new SampleProduct { Id = n, Name = $"N{n}", Qty = n }));
+
+    private Task AddRows() =>
+        _grid!.ImportRows(["Name"], Enumerable.Range(1, 100).Select(n => new[] { $"A{n}" }).ToList());
+}

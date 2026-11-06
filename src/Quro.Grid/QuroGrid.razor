@@ -29,6 +29,8 @@
 @* 컬럼 정의가 등록된 뒤에 그린다. 셀 단위 이벤트 핸들러를 두지 않는다 (R5): 클릭·키는 quro-grid.js가 좌표로 해석한다. *@
 <Deferred>
     @{ var body = Paging ? null : BodyItems(); var bodyRows = BodyRowCount(body); var headerRows = HeaderRows; var rowNumber = 0; }
+    @* The frame holds the scroll buttons outside role=grid (GS-101). Without them it is display: contents and has no box *@
+    <div class="quro-grid-frame" style="@FrameStyle" data-scroll-buttons="@(ScrollButtons ? "true" : null)">
     <div @ref="_root" class="@(Paging ? "quro-grid quro-paged" : "quro-grid")" style="@RootStyle"
          role="grid" tabindex="0" aria-colcount="@(Columns.Count + (ShowRowNumbers ? 1 : 0))"
          aria-rowcount="@(headerRows + bodyRows + (ShowFooter ? 1 : 0))" data-header-rows="@headerRows"
@@ -205,5 +207,14 @@
                 </div>
             </div>
         }
+    </div>
+    @if (ScrollButtons)
+    {
+        @* quro-grid.js shows them (data-visible) and scrolls; no handler per button, no server call (R2, R5) *@
+        <button type="button" class="quro-scroll-button" data-scroll="up" tabindex="-1" aria-label="@Text(GridKeys.ScrollUp)"></button>
+        <button type="button" class="quro-scroll-button" data-scroll="down" tabindex="-1" aria-label="@Text(GridKeys.ScrollDown)"></button>
+        <button type="button" class="quro-scroll-button" data-scroll="left" tabindex="-1" aria-label="@Text(GridKeys.ScrollLeft)"></button>
+        <button type="button" class="quro-scroll-button" data-scroll="right" tabindex="-1" aria-label="@Text(GridKeys.ScrollRight)"></button>
+    }
     </div>
 </Deferred>
