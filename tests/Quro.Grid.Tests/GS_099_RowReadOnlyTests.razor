@@ -1,0 +1,179 @@
+@inherits GridTestContext
+
+@code {
+    // GS-099: RowReadOnly (QuroERP request R6) — the app's function locks whole rows. A locked row behaves like a ReadOnly
+    // column: every cell has aria-readonly, nothing edits it, paste skips it. The row itself still takes focus, copy,
+    // Button clicks and (through OnRowDeleting) deletion. The lock is not row state: it never marks the row changed.
+
+    public sealed class Line
+    {
+        public string? Name { get; set; }
+        public decimal Qty { get; set; }
+        public string? Kind { get; set; }
+        public bool Done { get; set; }
+        public bool Locked { get; set; }
+    }
+
+    private static readonly CultureInfo En = new("en-US", useUserOverride: false);
+    private static readonly ComboOption[] Kinds = [new("A", "Alpha"), new("B", "Beta")];
+    private static readonly Func<object, bool> ByLocked = item => ((Line)item).Locked;
+
+    private readonly List<string?> _buttonRows = [];
+    private int _toneCalls;
+
+    /// <summary>Row 2 of 3 is locked.</summary>
+    private static QuroDataSet<Line> Lines()
+    {
+        var ds = new QuroDataSet<Line>();
+        ds.Load(
+        [
+            new Line { Name = "Apple", Qty = 1, Kind = "A" },
+            new Line { Name = "Pear", Qty = 2, Kind = "A", Locked = true },
+            new Line { Name = "Plum", Qty = 3, Kind = "B" },
+        ]);
+        return ds;
+    }
+
+    private IRenderedComponent<QuroGrid<Line>> RenderGrid(QuroDataSet<Line> ds, Func<object, bool>? rowReadOnly = null, bool editOnSelect = false) =>
+        Render<QuroGrid<Line>>(@<QuroGrid DataSet="ds" Culture="En" RowReadOnly="rowReadOnly" EditOnSelect="editOnSelect"
+                                          OnCellButtonClick="(CellButtonClickArgs<Line> e) => _buttonRows.Add(e.Item.Name)">
+                                   <QuroColumn Field="Name" HeaderKey="line.name" CellStyle="Tone" />
+                                   <QuroColumn Field="Qty" HeaderKey="line.qty" Type="CellType.Number" Format="N0" />
+                                   <QuroColumn Field="Kind" HeaderKey="line.kind" Type="CellType.Combo" Options="Kinds" />
+                                   <QuroColumn Field="Done" HeaderKey="line.done" Type="CellType.Check" />
+                                   <QuroColumn Field="Go" HeaderKey="line.go" Type="CellType.Button" TextKey="line.go" />
+                               </QuroGrid>);
+
+    private CellTone Tone(object item, object? value)
+    {
+        _toneCalls++;
+        return CellTone.None;
+    }
+
+    private static AngleSharp.Dom.IElement Row(IRenderedComponent<QuroGrid<Line>> cut, int rowKey) =>
+        cut.Find($"[role=row][data-row='{rowKey}']");
+
+    private static AngleSharp.Dom.IElement Cell(IRenderedComponent<QuroGrid<Line>> cut, int rowKey, string field) =>
+        cut.Find($"[role=row][data-row='{rowKey}'] [data-field={field}]");
+
+    /// <summary>GS-099: no lock without the function</summary>
+    [Fact]
+    public void GS_099_Default_NoLock()
+    {
+        var ds = Lines();
+        var cut = RenderGrid(ds);
+
+        Assert.Null(new QuroGrid<Line>().RowReadOnly);
+        Assert.Empty(cut.FindAll(".quro-row-readonly"));
+        Assert.Null(Cell(cut, ds.RowKeys[1], "Name").GetAttribute("aria-readonly"));
+    }
+
+    /// <summary>GS-099: every cell of a locked row is aria-readonly and the row has the class; other rows don't</summary>
+    [Fact]
+    public void GS_099_LockedRow_AriaReadOnly_RowClass()
+    {
+        var ds = Lines();
+        var cut = RenderGrid(ds, ByLocked);
+
+        Assert.Contains("quro-row-readonly", Row(cut, ds.RowKeys[1]).ClassList);
+        Assert.All(new[] { "Name", "Qty", "Kind", "Done", "Go" },
+            f => Assert.Equal("true", Cell(cut, ds.RowKeys[1], f).GetAttribute("aria-readonly")));
+
+        Assert.DoesNotContain("quro-row-readonly", Row(cut, ds.RowKeys[0]).ClassList);
+        Assert.Null(Cell(cut, ds.RowKeys[0], "Name").GetAttribute("aria-readonly"));
+    }
+
+    /// <summary>GS-099: no way to edit a locked row: editor, commit, list, check, and the EditOnSelect edit text</summary>
+    [Fact]
+    public async Task GS_099_LockedRow_RefusesEditing()
+    {
+        var ds = Lines();
+        var cut = RenderGrid(ds, ByLocked);
+        var locked = ds.RowKeys[1];
+
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.BeginEdit(locked, "Name")));
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.OpenPicker(locked, "Kind", null)));
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.CommitEdit(locked, "Name", "Quince")));
+        Assert.False(await cut.InvokeAsync(() => cut.Instance.ToggleCheck(locked, "Done")));
+
+        Assert.Equal("Pear", ds.GetValue(locked, "Name"));
+        Assert.Equal(false, ds.GetValue(locked, "Done"));
+        Assert.False(ds.HasChanges);
+
+        Assert.True(await cut.InvokeAsync(() => cut.Instance.CommitEdit(ds.RowKeys[0], "Name", "Quince")));   // other rows edit
+        Assert.Null(RenderGrid(Lines(), ByLocked, editOnSelect: true)
+            .Find("[role=row][data-row='2'] [data-field=Qty]").GetAttribute("data-edit"));
+    }
+
+    /// <summary>GS-099: paste skips the locked row's cells with PasteKeys.ReadOnly; the rows around it take the values</summary>
+    [Fact]
+    public async Task GS_099_Paste_SkipsLockedRow()
+    {
+        PastedArgs? pasted = null;
+        var ds = Lines();
+        var cut = Render<QuroGrid<Line>>(@<QuroGrid DataSet="ds" Culture="En" RowReadOnly="ByLocked" OnPasted="(PastedArgs e) => pasted = e">
+                                            <QuroColumn Field="Name" HeaderKey="line.name" />
+                                        </QuroGrid>);
+
+        await cut.InvokeAsync(() => cut.Instance.Paste(ds.RowKeys[0], "Name", [["X"], ["Y"], ["Z"]]));
+
+        Assert.Equal("X", ds.GetValue(ds.RowKeys[0], "Name"));
+        Assert.Equal("Pear", ds.GetValue(ds.RowKeys[1], "Name"));
+        Assert.Equal("Z", ds.GetValue(ds.RowKeys[2], "Name"));
+        Assert.Equal(new PasteSkip(ds.RowKeys[1], "Name", PasteKeys.ReadOnly), Assert.Single(pasted!.Skipped));
+    }
+
+    /// <summary>GS-099: the lock is about values: Button clicks still fire and the row can still be deleted</summary>
+    [Fact]
+    public async Task GS_099_LockedRow_ButtonAndDeleteStillWork()
+    {
+        var ds = Lines();
+        var cut = RenderGrid(ds, ByLocked);
+        var locked = ds.RowKeys[1];
+
+        Assert.True(await cut.InvokeAsync(() => cut.Instance.ClickButton(locked, "Go")));
+        Assert.Equal(["Pear"], _buttonRows);
+
+        Assert.Equal(1, await cut.InvokeAsync(() => cut.Instance.DeleteRows([locked])));
+        Assert.Equal(RowState.Deleted, ds.GetState(locked));
+    }
+
+    /// <summary>GS-099: Refresh shows a lock that changed without a value change; only that row redraws, no row state changes (R4)</summary>
+    [Fact]
+    public async Task GS_099_Refresh_RedrawsOnlyChangedRow()
+    {
+        var ds = Lines();
+        var cut = RenderGrid(ds, ByLocked);
+        var first = ds.RowKeys[0];
+        Assert.Null(Cell(cut, first, "Name").GetAttribute("aria-readonly"));
+
+        _toneCalls = 0;
+        ds.GetItem(first).Locked = true;
+        await cut.InvokeAsync(cut.Instance.Refresh);
+
+        Assert.Equal("true", Cell(cut, first, "Name").GetAttribute("aria-readonly"));
+        Assert.Contains("quro-row-readonly", Row(cut, first).ClassList);
+        Assert.Equal(1, _toneCalls);                       // one row's Name cell, not all three
+        Assert.False(ds.HasChanges);
+
+        ds.GetItem(first).Locked = false;
+        await cut.InvokeAsync(cut.Instance.Refresh);
+        Assert.Null(Cell(cut, first, "Name").GetAttribute("aria-readonly"));
+        Assert.DoesNotContain("quro-row-readonly", Row(cut, first).ClassList);
+    }
+
+    /// <summary>GS-099: grey from the --quro-readonly-bg token, over frozen cells but under tones and marks</summary>
+    [Fact]
+    public void GS_099_Css_ReadOnlyToken()
+    {
+        var css = File.ReadAllText(Path.Combine(GS_080_ThemeTokenTests.Root(), "src", "Quro.Grid", "wwwroot", "quro-grid.css"));
+
+        Assert.Matches(@"--qg-readonly-bg:\s*var\(--quro-readonly-bg,", css);
+        Assert.Matches(@":where\(\.quro-row-readonly\) \.quro-cell \{[^}]*background:\s*var\(--qg-readonly-bg\)", css);
+
+        var rule = css.IndexOf(":where(.quro-row-readonly)", StringComparison.Ordinal);
+        Assert.True(css.IndexOf(".quro-frozen {", StringComparison.Ordinal) < rule);        // same specificity: wins over frozen
+        Assert.True(rule < css.IndexOf(".quro-tone-highlight {", StringComparison.Ordinal));
+        Assert.True(rule < css.IndexOf(".quro-mark-error {", StringComparison.Ordinal));
+    }
+}

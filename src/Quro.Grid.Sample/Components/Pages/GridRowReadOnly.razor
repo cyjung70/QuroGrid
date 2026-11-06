@@ -1,0 +1,59 @@
+@page "/row-readonly"
+@rendermode InteractiveServer
+@using System.Globalization
+@using Quro.Grid
+@using Quro.Grid.Data
+@using Quro.Grid.Sample.Data
+
+<PageTitle>@L["sample.rowlock.title"]</PageTitle>
+
+<h1>@L["sample.rowlock.title"]</h1>
+
+@* RowReadOnly (GS-099): the app's function locks whole rows. ?select=true turns EditOnSelect on *@
+<QuroGrid @ref="_grid" TItem="SampleProduct" DataSet="_products" Localizer="L" Culture="En" EditOnSelect="Select"
+          RowReadOnly="IsLocked" OnCellButtonClick="OnGo">
+    <QuroColumn Field="Id" HeaderKey="sample.editselect.id" Type="CellType.Label" Width="60" />
+    <QuroColumn Field="Name" HeaderKey="sample.cells.name" Width="160" />
+    <QuroColumn Field="Qty" HeaderKey="sample.editselect.qty" Type="CellType.Number" Format="N0" Width="100" />
+    <QuroColumn Field="Active" HeaderKey="sample.rowlock.active" Type="CellType.Check" Width="70" />
+    <QuroColumn Field="Go" HeaderKey="sample.rowlock.go" Type="CellType.Button" TextKey="sample.rowlock.go" Width="80" />
+</QuroGrid>
+
+<p>
+    <button type="button" data-testid="lock-first" @onclick="ToggleFirst">@L["sample.rowlock.toggle"]</button>
+    <span data-testid="has-changes">@_products.HasChanges</span> ·
+    <span data-testid="go-row">@_goRow</span>
+</p>
+
+@code {
+    private static readonly SampleLocalizer L = new();
+    private static readonly CultureInfo En = new("en-US", useUserOverride: false);
+    private readonly QuroDataSet<SampleProduct> _products = new();
+    private readonly HashSet<int> _locked = [2];
+    private QuroGrid<SampleProduct>? _grid;
+    private string? _goRow;
+
+    [SupplyParameterFromQuery(Name = "select")] public bool Select { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _products.Load(
+        [
+            new SampleProduct { Id = 1, Name = "Apple", Qty = 10m },
+            new SampleProduct { Id = 2, Name = "Pear", Qty = 20m },
+            new SampleProduct { Id = 3, Name = "Plum", Qty = 30m },
+        ]);
+        _products.ValueChanged += (_, _) => InvokeAsync(StateHasChanged);
+    }
+
+    private bool IsLocked(object item) => _locked.Contains(((SampleProduct)item).Id);
+
+    private void OnGo(CellButtonClickArgs<SampleProduct> e) => _goRow = e.Item.Name;
+
+    private void ToggleFirst()
+    {
+        if (!_locked.Remove(1))
+            _locked.Add(1);
+        _grid?.Refresh();
+    }
+}

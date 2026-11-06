@@ -3,7 +3,7 @@
 @{
     var deleted = Grid.DataSet.GetState(RowKey) == RowState.Deleted;
 }
-<div class="@(deleted ? "quro-row quro-deleted" : "quro-row")" role="row" data-row="@RowKey" aria-rowindex="@(RowIndex + Grid.HeaderRows + 1)">
+<div class="@("quro-row" + (deleted ? " quro-deleted" : "") + (Locked ? " quro-row-readonly" : ""))" role="row" data-row="@RowKey" aria-rowindex="@(RowIndex + Grid.HeaderRows + 1)">
     @for (var i = 0; i < Grid.Columns.Count; i++)
     {
         var col = Grid.Columns[i];
@@ -68,20 +68,22 @@
 </div>
 
 @code {
-    private (int Revision, int Epoch, int RowIndex, string? EditingField, bool PickerOpen)? _rendered;
+    private (int Revision, int Epoch, int RowIndex, bool Locked, string? EditingField, bool PickerOpen)? _rendered;
 
     [Parameter, EditorRequired] public QuroGrid<TItem> Grid { get; set; } = default!;
     [Parameter, EditorRequired] public int RowKey { get; set; }
     [Parameter] public int RowIndex { get; set; }
     [Parameter] public int Revision { get; set; }
     [Parameter] public int Epoch { get; set; }
+    /// <summary>The app's RowReadOnly function locks this row (GS-099). A lock can change without a value change, so it is in the render key.</summary>
+    [Parameter] public bool Locked { get; set; }
     [Parameter] public string? EditingField { get; set; }
     [Parameter] public bool PickerOpen { get; set; }
 
     /// <summary>행 단위 렌더 (R4): 행 리비전·편집 셀·선택 목록·위치·그리드 epoch가 바뀐 행만 다시 그린다.</summary>
     protected override bool ShouldRender()
     {
-        var now = (Revision, Epoch, RowIndex, EditingField, PickerOpen);
+        var now = (Revision, Epoch, RowIndex, Locked, EditingField, PickerOpen);
         if (_rendered == now)
             return false;
         _rendered = now;
@@ -89,7 +91,7 @@
     }
 
     // 첫 렌더는 ShouldRender를 거치지 않으므로 여기서 기록한다.
-    protected override void OnInitialized() => _rendered = (Revision, Epoch, RowIndex, EditingField, PickerOpen);
+    protected override void OnInitialized() => _rendered = (Revision, Epoch, RowIndex, Locked, EditingField, PickerOpen);
 
     private static string MarkClass(string cls, CellMark? mark) => mark?.Level switch
     {

@@ -123,7 +123,7 @@
                             Context="key">
                     <ItemContent>
                         <QuroGridRow @key="key" TItem="TItem" Grid="this" RowKey="key" RowIndex="RowIndexOf(key)"
-                                     Revision="DataSet.GetRevision(key)" Epoch="_epoch"
+                                     Revision="DataSet.GetRevision(key)" Epoch="_epoch" Locked="RowLocked(key)"
                                      EditingField="@(_editing?.RowKey == key ? _editing.Value.Field : null)"
                                      PickerOpen="IsPickerOpen(key)" />
                     </ItemContent>
@@ -140,7 +140,7 @@
                     {
                         var key = item.RowKey;
                         <QuroGridRow @key="key" TItem="TItem" Grid="this" RowKey="key" RowIndex="item.Index"
-                                     Revision="DataSet.GetRevision(key)" Epoch="_epoch"
+                                     Revision="DataSet.GetRevision(key)" Epoch="_epoch" Locked="RowLocked(key)"
                                      EditingField="@(_editing?.RowKey == key ? _editing.Value.Field : null)"
                                      PickerOpen="IsPickerOpen(key)" />
                     }

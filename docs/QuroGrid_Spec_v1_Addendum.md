@@ -1,7 +1,7 @@
 # QuroGrid Spec v1 보완 문서 (Addendum A)
 
 - 대상: `docs/QuroGrid_FeatureMatrix_Spec_v1.pdf` (Spec v1 초안 Draft v0.2, 2026-10-28 — 4.9·5장 본문 개정)
-- 문서 상태: A.32 (2026-11-01) · 스테이블영 결정 사항 반영
+- 문서 상태: A.33 (2026-11-07) · 스테이블영 결정 사항 반영
 - 이 문서는 Spec v1의 일부입니다. **아래 항목은 Spec 본문보다 우선합니다.** 본문에 없는 내용은 "보완", 본문과 다른 내용은 "변경"으로 표시합니다.
 
 ---
@@ -79,6 +79,7 @@
 | A-67 | 4.2, 4.6, A-17·A-38, CLAUDE.md 4장 | 변경 | **MudBlazor 제거 (2026-10-31 스테이블영 결정 1~5)**: ① QuroGrid 저장소(패키지·샘플·테스트)에서 MudBlazor를 모두 뺀다. `Quro.Grid` 패키지는 MudBlazor를 참조하지 않는다. QuroERP 자체 사용은 QuroERP가 정한다 ② 그리드 셀 달력은 quro-grid.js가 브라우저에서 그린다(`Intl`, 문화권 달 이름·요일·주 시작 요일). 달 넘김은 서버 호출 없음(R2), 날짜를 고르면 `PickDate`(yyyy-MM-dd) 1회. Combo 목록은 그리드가 `role=listbox` 목록으로 그리고 항목 클릭은 JS가 받아 `PickOption` 1회(R5) ③ CSS의 `--mud-palette-*` 대체값을 지운다. 색은 `--quro-*` 토큰 → 기본값. 다크 모드는 앱이 다크 값의 토큰을 둔다(GS-081) ④ BREAKING(의존성): 0.5.0-alpha.1. `Quro.Grid`를 통해 MudBlazor를 받던 앱은 자체 `MudBlazor` 참조를 추가 ⑤ GS-090: `src`·`tests`에 MudBlazor 참조가 없음을 테스트로 지킨다 | 2026-10-31 |
 | A-68 | 4.6, A-17·A-67 | 보완 | **셀 선택 목록 키보드 (GS-091, 2026-10-31 스테이블영 결정 2, QuroERP 요청)**: 달력·Combo 목록이 열려 있으면 화살표는 강조 이동 — 달력 ←→ 하루·↑↓ 한 주(달을 넘으면 그 달을 그림), 목록 ↑↓(끝에서 멈춤). Enter는 강조 항목을 고르고 바로 확정(이동 없음). 강조는 현재 값(달력은 값이 없으면 오늘)에서 시작. 강조 이동은 브라우저만(R2), 고를 때 서버 1회. Esc는 편집 취소, 글자·Alt·Ctrl·Shift 조합은 에디터가 받는다 | 2026-10-31 |
 | A-69 | Control Spec 11, A-53·A-63·A-66 | 결정 | **QuroUI 마스크 박스 (2026-10-31 스테이블영 결정 1~5, 권고안 승인)**: ① 공개 API `QuroMaskBox<TItem>`(`DataSet`·`Field`·`Mask`·`PlaceholderKey`·`Localizer`·`AutoSelect`·`ReadOnly`), 문자열 열만 ② 마스크 문자 `0` 숫자·`A` 모든 언어의 글자(`QuroCharType.Alpha`와 같음)·`*` 글자나 숫자·`\` 다음 문자 고정·그 밖은 고정 문자 ③ 저장 값은 고정 문자를 뺀 입력 문자만(a) ④ 마스크 끝까지 채워야 확정, 덜 채우거나 맞지 않으면 마지막 값으로(날짜 선택기와 같음), 빈 칸은 null. 길이가 달라지는 값은 앱이 마스크를 고르거나 텍스트 박스 ⑤ `QuroStaticText.Mask`로 저장 값을 고정 문자와 함께 표시(맞지 않으면 그대로). 입력 중 고정 문자 넣기·맞지 않는 문자 버리기·커서 유지는 quro-ui.js(R2) | 2026-10-31 |
+| A-70 | QuroERP 요청 R6, A-59 | 결정 | **행 읽기 전용은 그리드 파라미터 `RowReadOnly` (GS-099, 2026-11-07 스테이블영 결정).** ① 잠금은 앱 함수(`Func<object, bool>`, 인자 = 행 항목)이고 DataSet·행 상태를 바꾸지 않는다 ② 잠긴 행은 `ReadOnly` 열과 같다: 에디터·`CommitEdit`·Check 토글·목록·F4 거부, 붙여넣기는 `PasteKeys.ReadOnly`, Tab은 건너뜀. 포커스·범위 선택·복사·Button/Image 클릭·행 삭제(`OnRowDeleting`)는 그대로 ③ 셀 `aria-readonly`, 행 클래스 `quro-row-readonly`, 회색 토큰 `--quro-readonly-bg`. `CellStyle` Highlight와 오류·경고 표시가 이긴다 ④ 그리드는 그릴 때 함수를 부르고 잠금 값을 행 렌더 키에 넣는다(R4): 값 변경 없이 잠금만 바꾸면 앱이 `Refresh()`를 부르고 바뀐 행만 다시 그린다 ⑤ 서버 에디터가 열린 채 잠금이 오면 에디터는 남고 커밋이 거부된다(Esc로 닫음). `EditOnSelect` 에디터는 바로 닫힌다. TOON 키는 v0.3 | 2026-11-07 |
 
 ## 2. 이벤트 API 보완 (4.10)
 

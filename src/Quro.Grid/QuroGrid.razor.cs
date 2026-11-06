@@ -115,6 +115,14 @@ public partial class QuroGrid<TItem> where TItem : class
     /// </summary>
     [Parameter] public bool EditOnSelect { get; set; }
 
+    /// <summary>
+    /// Locks whole rows (GS-099; argument = row item, true = locked). A locked row behaves like a ReadOnly column: cells are
+    /// aria-readonly and grey, nothing edits them and paste skips them with <see cref="PasteKeys.ReadOnly"/>. Focus, copy,
+    /// Button and Image clicks and row deletion (through <see cref="OnRowDeleting"/>) still work. The grid asks when it
+    /// draws: after changing a lock without changing a value, call <see cref="Refresh"/>.
+    /// </summary>
+    [Parameter] public Func<object, bool>? RowReadOnly { get; set; }
+
     /// <summary>붙여넣기 행이 모자라면 자동 추가 (Spec 4.7, Addendum A-03: 기본 켬).</summary>
     [Parameter] public bool AddRowsOnPaste { get; set; } = true;
 
@@ -390,7 +398,7 @@ public partial class QuroGrid<TItem> where TItem : class
     {
         using var step = DataSet.BeginUndoStep();   // 사용자 동작 하나 = Undo 한 단계 (앱의 이벤트 처리 포함, A-33)
         var col = Column(field);
-        if (col.ReadOnly || col.Type is CellType.Image or CellType.Label || col.Compute is not null || NewRowLocked(rowKey, col))
+        if (col.ReadOnly || col.Type is CellType.Image or CellType.Label || col.Compute is not null || NewRowLocked(rowKey, col) || RowLocked(rowKey))
             return false;
 
         if (col.Type == CellType.Popup && col.Lookup is not null && !string.IsNullOrEmpty(text))
@@ -549,14 +557,17 @@ public partial class QuroGrid<TItem> where TItem : class
 
     private bool Editable(int rowKey, QuroColumn col) =>
         !col.ReadOnly && col.Type is not (CellType.Button or CellType.Image or CellType.Label) && col.Compute is null && DataSet.GetState(rowKey) != RowState.Deleted
-        && !NewRowLocked(rowKey, col);
+        && !NewRowLocked(rowKey, col) && !RowLocked(rowKey);
+
+    /// <summary>The app's <see cref="RowReadOnly"/> function locks this row (GS-099).</summary>
+    internal bool RowLocked(int rowKey) => RowReadOnly is { } locked && locked(DataSet.GetItem(rowKey));
 
     /// <summary>A <see cref="QuroColumn.NewRowOnly"/> column on a row that is not an added row (G-01).</summary>
     private bool NewRowLocked(int rowKey, QuroColumn col) => col.NewRowOnly && DataSet.GetState(rowKey) != RowState.Inserted;
 
-    /// <summary>aria-readonly of a cell: read-only column, Button, Compute column, or edit-new column on a saved row.</summary>
+    /// <summary>aria-readonly of a cell: read-only column, Button, Compute column, edit-new column on a saved row, or locked row.</summary>
     internal bool CellReadOnly(int rowKey, QuroColumn col) =>
-        col.ReadOnly || col.Type is CellType.Button or CellType.Image or CellType.Label || col.Compute is not null || NewRowLocked(rowKey, col);
+        col.ReadOnly || col.Type is CellType.Button or CellType.Image or CellType.Label || col.Compute is not null || NewRowLocked(rowKey, col) || RowLocked(rowKey);
 
     private void EndEditing()
     {
