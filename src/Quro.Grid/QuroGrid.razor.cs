@@ -646,7 +646,7 @@ public partial class QuroGrid<TItem> where TItem : class
     public async Task<int> AddRow(int? afterRowKey = null)
     {
         using var step = DataSet.BeginUndoStep();   // 사용자 동작 하나 = Undo 한 단계 (앱의 이벤트 처리 포함, A-33)
-        var key = await AddRowCore(after: afterRowKey);
+        var key = await AddRowCore(after: afterRowKey, tree: TreeSiblingOf(afterRowKey));
         StateHasChanged();
         return key;
     }
@@ -664,7 +664,7 @@ public partial class QuroGrid<TItem> where TItem : class
         try
         {
             foreach (var source in OrderedRowKeys().Where(rowKeys.Contains).ToList())
-                copies.Add(await AddRowCore(DataSet.CopyOf(source), source, after: source));
+                copies.Add(await AddRowCore(DataSet.CopyOf(source), source, after: source, tree: new TreePlacement(null)));
         }
         finally
         {
@@ -708,7 +708,7 @@ public partial class QuroGrid<TItem> where TItem : class
     private async Task<IReadOnlyList<int>> SelectedRowKeys() =>
         _module is null ? [] : await _module.InvokeAsync<int[]>("selectedRowKeys", _root);
 
-    private async Task<int> AddRowCore(TItem? item = null, int? source = null, int? after = null, bool blank = false)
+    private async Task<int> AddRowCore(TItem? item = null, int? source = null, int? after = null, bool blank = false, TreePlacement? tree = null)
     {
         item ??= Activator.CreateInstance<TItem>();
         await OnRowAdding.InvokeAsync(new RowAddingArgs<TItem>(item, source));
@@ -718,6 +718,8 @@ public partial class QuroGrid<TItem> where TItem : class
         OrderedRowKeys();   // 화면 순서를 맞춘 뒤 넣는다
         var key = blank ? DataSet.AddBlankRow(item) : DataSet.AddRow(item, afterRowKey: after);
         PlaceInOrder(key, after);
+        if (TreeMode && tree is { } place)
+            DataSet.SetValue(key, TreeParentField!, place.Parent);   // before OnRowAdded, in the same undo step (GS-105)
         if (Grouped && after is { } a && _groupOf.TryGetValue(a, out var group))
             _groupOf[key] = group;   // 행 아래 추가·복사한 행은 그 행의 그룹에 (GS-075)
         RefreshRows();
@@ -757,20 +759,28 @@ public partial class QuroGrid<TItem> where TItem : class
         _batch++;
         try
         {
-            foreach (var key in rowKeys)
+            // a plain row is its own set. In a tree a selected row brings its descendants, and they are kept or deleted together (GS-105)
+            foreach (var set in TreeMode ? TreeSubtrees(rowKeys) : rowKeys.Select(k => (IReadOnlyList<int>)[k]))
             {
-                if (DataSet.GetState(key) == RowState.Deleted)
+                var rows = set.Where(k => DataSet.GetState(k) != RowState.Deleted).ToList();
+                var cancelled = false;
+                foreach (var key in rows)
+                {
+                    var args = new RowDeletingArgs<TItem>(key, DataSet.GetItem(key));
+                    await OnRowDeleting.InvokeAsync(args);
+                    if (cancelled = args.Cancel)
+                        break;
+                }
+                if (cancelled)
                     continue;
 
-                var args = new RowDeletingArgs<TItem>(key, DataSet.GetItem(key));
-                await OnRowDeleting.InvokeAsync(args);
-                if (args.Cancel)
-                    continue;
-
-                DataSet.DeleteRow(key);
-                if (_editing?.RowKey == key)
-                    _editing = null;
-                deleted.Add(key);
+                foreach (var key in rows)
+                {
+                    DataSet.DeleteRow(key);
+                    if (_editing?.RowKey == key)
+                        _editing = null;
+                    deleted.Add(key);
+                }
             }
         }
         finally
@@ -821,7 +831,7 @@ public partial class QuroGrid<TItem> where TItem : class
                 int rowKey;
                 if (firstRow + r < rows.Count)
                     rowKey = rows[firstRow + r];
-                else if (AddRowsOnPaste)
+                else if (AddRowsOnPaste && !TreeMode)   // a pasted row has no place in a tree (GS-105)
                     added.Add(rowKey = await AddRowCore());
                 else
                     break;

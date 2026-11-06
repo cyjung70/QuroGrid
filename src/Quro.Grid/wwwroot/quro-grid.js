@@ -558,7 +558,8 @@ async function handleKey(s, k) {
             return;
         case 'Insert':
             if (isClean(s)) closeSelectEditor(s);
-            if (!s.editing) await addRow(s, s.active.row);   // 활성 행 바로 아래 (A-15)
+            // Ctrl+Insert in a tree adds a child (GS-105), otherwise right below the active row (A-15)
+            if (!s.editing) await addRow(s, s.active.row, k.ctrl && isTree(s));
             return;
         case 'RowDelete':
             // 선택 범위의 행을 한 번에 (R3). 남은 행으로의 이동은 서버 렌더 뒤 ensureActive가 한다.
@@ -1071,8 +1072,9 @@ async function moveEnter(s) {
 }
 
 /** 새 행을 추가하고(서버) 그 행의 첫 편집 가능 셀로. afterRow가 null이면 목록 끝. */
-async function addRow(s, afterRow) {
-    const key = await s.dotnet.invokeMethodAsync('AddRow', afterRow);
+async function addRow(s, afterRow, child = false) {
+    const key = await s.dotnet.invokeMethodAsync(child ? 'AddChildRow' : 'AddRow', afterRow);
+    if (key === null) return;   // the parent has no key value yet
     if (s.options.paging) s.root.scrollTop = 0;   // 페이징 중 추가 행은 맨 위 (A-24)
     const row = await waitFor(() => s.root.querySelector(`.quro-body [role=row][data-row="${key}"]`));
     if (!row) return;
