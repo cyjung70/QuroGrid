@@ -1,0 +1,162 @@
+@inherits GridTestContext
+@using Quro.Grid.Definition
+
+@code {
+    // GS-102: default cell alignment. Numbers right, text left, Check·Combo·Button·Image centered. The column Type decides first;
+    // a plain Text or Label column looks at the C# type of its DataSet field; a Compute column has no field and follows Type only.
+    // QuroColumn.Align (and TOON align) overrides the default. Headers keep their left alignment (decision 6).
+
+    public sealed class Line
+    {
+        public string? Name { get; set; }
+        public decimal Qty { get; set; }
+        public int? Count { get; set; }
+        public DateOnly? Due { get; set; }
+        public string? Kind { get; set; }
+        public bool Done { get; set; }
+        public string? Code { get; set; }
+        public string? Photo { get; set; }
+    }
+
+    private const string Right = "quro-align-right";
+    private const string Center = "quro-align-center";
+
+    private static readonly CultureInfo En = new("en-US", useUserOverride: false);
+    private static readonly ComboOption[] Kinds = [new("A", "Alpha")];
+
+    private static QuroDataSet<Line> Lines()
+    {
+        var ds = new QuroDataSet<Line>();
+        ds.Load(
+        [
+            new Line { Name = "Apple", Qty = 1, Count = 2, Kind = "A", Code = "C1", Due = new DateOnly(2026, 11, 7) },
+            new Line { Name = "Pear", Qty = 3, Count = 4, Kind = "A", Code = "C2" },
+        ]);
+        return ds;
+    }
+
+    private IRenderedComponent<QuroGrid<Line>> RenderTypes() =>
+        Render<QuroGrid<Line>>(@<QuroGrid DataSet="Lines()" Culture="En" ShowFooter="true">
+                                   <QuroColumn Field="Name" HeaderKey="n" />
+                                   <QuroColumn Field="Qty" HeaderKey="q" Type="CellType.Number" Aggregate="Aggregate.Sum" />
+                                   <QuroColumn Field="Count" HeaderKey="c" />
+                                   <QuroColumn Field="Due" HeaderKey="d" Type="CellType.Date" />
+                                   <QuroColumn Field="Kind" HeaderKey="k" Type="CellType.Combo" Options="Kinds" />
+                                   <QuroColumn Field="Done" HeaderKey="o" Type="CellType.Check" />
+                                   <QuroColumn Field="Code" HeaderKey="p" Type="CellType.Popup" />
+                                   <QuroColumn Field="Photo" HeaderKey="i" Type="CellType.Image" />
+                                   <QuroColumn Field="Go" HeaderKey="g" Type="CellType.Button" TextKey="g" />
+                               </QuroGrid>);
+
+    private static string[] Classes(AngleSharp.Dom.IElement el) => el.ClassList.ToArray();
+
+    private static AngleSharp.Dom.IElement Cell(IRenderedComponent<QuroGrid<Line>> cut, string field) =>
+        cut.Find($"[role=gridcell][data-field={field}]");
+
+    /// <summary>GS-102: right for numbers, center for Check·Combo·Button·Image, no class (left) for the rest</summary>
+    [Theory]
+    [InlineData("Name", null)]
+    [InlineData("Qty", Right)]
+    [InlineData("Count", Right)]     // Text column over int?
+    [InlineData("Due", null)]
+    [InlineData("Code", null)]
+    [InlineData("Kind", Center)]
+    [InlineData("Done", Center)]
+    [InlineData("Photo", Center)]
+    [InlineData("Go", Center)]
+    public void GS_102_DefaultByType(string field, string? expected)
+    {
+        var classes = Classes(Cell(RenderTypes(), field));
+
+        Assert.Equal(expected == Right, classes.Contains(Right));
+        Assert.Equal(expected == Center, classes.Contains(Center));
+    }
+
+    /// <summary>GS-102: Currency is a number; a Text column over a string stays left; a Label over a number is right</summary>
+    [Fact]
+    public void GS_102_CurrencyAndLabel()
+    {
+        var cut = Render<QuroGrid<Line>>(@<QuroGrid DataSet="Lines()" Culture="En" CurrencyDigits="_ => 2">
+                                            <QuroColumn Field="Qty" HeaderKey="q" Type="CellType.Currency" CurrencyField="Code" />
+                                            <QuroColumn Field="Count" HeaderKey="c" Type="CellType.Label" />
+                                            <QuroColumn Field="Name" HeaderKey="n" Type="CellType.Label" />
+                                        </QuroGrid>);
+
+        Assert.Contains(Right, Classes(Cell(cut, "Qty")));
+        Assert.Contains(Right, Classes(Cell(cut, "Count")));
+        Assert.DoesNotContain(Right, Classes(Cell(cut, "Name")));
+    }
+
+    /// <summary>GS-102: a Compute column has no field type: it follows Type only, and its Field need not exist</summary>
+    [Fact]
+    public void GS_102_Compute_FollowsTypeOnly()
+    {
+        Func<object, object?> twice = item => ((Line)item).Qty * 2;
+        var cut = Render<QuroGrid<Line>>(@<QuroGrid DataSet="Lines()" Culture="En">
+                                            <QuroColumn Field="Double" HeaderKey="d" Type="CellType.Number" Compute="twice" />
+                                            <QuroColumn Field="Count" HeaderKey="c" Compute="item => ((Line)item).Count" />
+                                        </QuroGrid>);
+
+        Assert.Contains(Right, Classes(Cell(cut, "Double")));
+        Assert.DoesNotContain(Right, Classes(Cell(cut, "Count")));
+    }
+
+    /// <summary>GS-102: footer and subtotal follow the column; headers stay as they are</summary>
+    [Fact]
+    public async Task GS_102_FooterSubtotal_Follow_HeaderDoesNot()
+    {
+        var cut = RenderTypes();
+
+        Assert.Contains(Right, Classes(cut.Find("[data-footer-field=Qty]")));
+        Assert.DoesNotContain(Right, Classes(cut.Find("[role=columnheader][data-field=Qty]")));
+
+        await cut.InvokeAsync(() => cut.Instance.SetGroupBy(["Kind"]));
+        Assert.Contains(Right, Classes(cut.Find("[data-subtotal-field=Qty]")));
+    }
+
+    /// <summary>GS-102: QuroColumn.Align overrides the default in every direction</summary>
+    [Fact]
+    public void GS_102_AlignParameter_Overrides()
+    {
+        var cut = Render<QuroGrid<Line>>(@<QuroGrid DataSet="Lines()" Culture="En">
+                                            <QuroColumn Field="Qty" HeaderKey="q" Type="CellType.Number" Align="ColumnAlign.Left" />
+                                            <QuroColumn Field="Name" HeaderKey="n" Align="ColumnAlign.Right" />
+                                            <QuroColumn Field="Kind" HeaderKey="k" Type="CellType.Combo" Options="Kinds" Align="ColumnAlign.Left" />
+                                            <QuroColumn Field="Code" HeaderKey="c" Align="ColumnAlign.Center" />
+                                        </QuroGrid>);
+
+        Assert.DoesNotContain(Right, Classes(Cell(cut, "Qty")));
+        Assert.Contains(Right, Classes(Cell(cut, "Name")));
+        Assert.DoesNotContain(Center, Classes(Cell(cut, "Kind")));
+        Assert.Contains(Center, Classes(Cell(cut, "Code")));
+        Assert.Null(new QuroColumn().Align);
+    }
+
+    /// <summary>GS-102: the definition's align reaches the column; without it the type default applies</summary>
+    [Fact]
+    public void GS_102_Definition_AlignReachesColumn()
+    {
+        var ds = GoldenScreen.OneLine();
+        var def = GoldenScreen.Lines();
+        var overridden = def with { Columns = def.Columns.Select(c => c.Id == "qty" ? c with { Align = ColumnAlign.Center } : c).ToList() };
+
+        var plain = Render<QuroGrid<SoLine>>(@<QuroGrid DataSet="ds" Definition="def" Culture="En" Localizer="new FakeLocalizer()" />);
+        Assert.Contains(Right, plain.Find("[role=gridcell][data-field=qty]").ClassList);
+
+        var cut = Render<QuroGrid<SoLine>>(@<QuroGrid DataSet="ds" Definition="overridden" Culture="En" Localizer="new FakeLocalizer()" />);
+        Assert.Contains(Center, cut.Find("[role=gridcell][data-field=qty]").ClassList);
+        Assert.DoesNotContain(Right, cut.Find("[role=gridcell][data-field=qty]").ClassList);
+    }
+
+    /// <summary>GS-102: the rules exist, editors inherit their cell, and the list inside a centered Combo cell stays left</summary>
+    [Fact]
+    public void GS_102_Css()
+    {
+        var css = File.ReadAllText(Path.Combine(GS_080_ThemeTokenTests.Root(), "src", "Quro.Grid", "wwwroot", "quro-grid.css"));
+
+        Assert.Matches(@"\.quro-align-right \{[^}]*text-align:\s*right", css);
+        Assert.Matches(@"\.quro-align-center \{[^}]*text-align:\s*center", css);
+        Assert.Matches(@"\.quro-editor \{[^}]*text-align:\s*inherit", css);
+        Assert.Matches(@"\.quro-picker \{[^}]*text-align:\s*left", css);
+    }
+}
