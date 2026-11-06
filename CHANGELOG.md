@@ -4,6 +4,8 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 소비자(QuroERP)는 버전을 올리기 전에 이 파일을 읽는다.
 
 ## Unreleased
+
+## 0.5.0-alpha.8 — 2026-11-07
 - Added: `QuroGrid.RowReadOnly` (`Func<object, bool>`) — 앱 함수로 행 전체를 잠근다. 셀 `aria-readonly`, 회색(`quro-row-readonly`, 토큰 `--quro-readonly-bg`), 편집·붙여넣기 거부. 포커스·복사·Button/Image 클릭·행 삭제는 그대로 (A-70, GS-099). 소비자 조치: 없음
 - Added: `QuroGrid.EditOnSelect` (기본 false) — 편집 가능한 셀에 서면 브라우저 에디터가 바로 열린다(서버 호출 없음, R2). 글자 전체 선택·입력하면 덮어씀·화살표는 셀 이탈·F2는 커서 모드·Esc는 되돌림, 셀을 떠날 때 글자가 바뀐 경우에만 `CommitEdit` 1회 (A-58, GS-098). 소비자 조치: 없음
 
