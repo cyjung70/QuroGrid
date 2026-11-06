@@ -131,6 +131,13 @@ public partial class QuroGrid<TItem> where TItem : class
     /// </summary>
     [Parameter] public bool ShowRowNumbers { get; set; }
 
+    /// <summary>
+    /// Shows a frozen column on the left with one symbol per new, edited or deleted row (GS-106, default off), after the number
+    /// column when both are on. Display only: it takes no focus and stays out of copy, paste and export. A deleted row only
+    /// shows when <see cref="DeletedRows"/> shows it.
+    /// </summary>
+    [Parameter] public bool ShowRowState { get; set; }
+
     /// <summary>Resource key of the number column's header (GS-100). Empty header when not set.</summary>
     [Parameter] public string? RowNumberHeaderKey { get; set; }
 
@@ -270,7 +277,7 @@ public partial class QuroGrid<TItem> where TItem : class
             throw new InvalidOperationException("A tree grid needs all rows loaded: TreeKeyField and TreeParentField cannot be used with ItemsProvider (A-61).");
         BindDataSet();
         ApplyDefinition();
-        object layout = (DataSet, Localizer, Culture, FrozenColumns, CurrencyDigits, DeletedRows, EditOnSelect, ShowRowNumbers, TreeKeyField, TreeParentField, TreeColumn);
+        object layout = (DataSet, Localizer, Culture, FrozenColumns, CurrencyDigits, DeletedRows, EditOnSelect, ShowRowNumbers, ShowRowState, TreeKeyField, TreeParentField, TreeColumn);
         if (!Equals(layout, _layoutParameters))
         {
             _layoutParameters = layout;
@@ -1237,6 +1244,8 @@ public partial class QuroGrid<TItem> where TItem : class
             };
             var row = Paging || Height is not null ? $"--quro-row-height:{RowHeight}px" : "";
             var layout = size + row is { Length: > 0 } both ? both.TrimEnd(';') : null;
+            if (ShowRowState)
+                layout = layout is null ? RowStateWidth : $"{layout};{RowStateWidth}";
             if (!ShowRowNumbers)
                 return layout;
             // one variable on the root: a longer row count changes the width without redrawing any row (R4). Rows that exist,
@@ -1254,11 +1263,40 @@ public partial class QuroGrid<TItem> where TItem : class
             ? null
             : string.Join(';', new[] { Width is null ? null : $"width:{Width}", Height is null ? null : $"height:{Height}" }.Where(p => p is not null));
 
-    /// <summary>aria-colindex of a column: the number column is the first when shown (GS-100).</summary>
-    internal int ColIndex(int index) => index + (ShowRowNumbers ? 2 : 1);
+    private const string RowStateWidth = "--qg-row-state-width:24px";
 
-    /// <summary>left of a frozen cell: frozen columns start after the number column (GS-100).</summary>
-    private string FrozenLeft(int left) => ShowRowNumbers ? $"left:calc(var(--qg-row-number-width) + {left}px)" : $"left:{left}px";
+    /// <summary>aria-colindex of a column: the number and state columns come first when shown (GS-100, GS-106).</summary>
+    internal int ColIndex(int index) => index + 1 + (ShowRowNumbers ? 1 : 0) + (ShowRowState ? 1 : 0);
+
+    /// <summary>aria-colindex of the state column: after the number column (GS-106).</summary>
+    internal int RowStateColIndex => ShowRowNumbers ? 2 : 1;
+
+    /// <summary>The state cell's data-state, which picks the symbol in CSS. Null for an unchanged row (GS-106).</summary>
+    internal string? RowStateName(RowState state) => state switch
+    {
+        RowState.Inserted => "inserted",
+        RowState.Updated => "updated",
+        RowState.Deleted => "deleted",
+        _ => null,
+    };
+
+    /// <summary>The state cell's tooltip and accessible name. Null for an unchanged row (GS-106).</summary>
+    internal string? RowStateText(RowState state) => state switch
+    {
+        RowState.Inserted => Text(GridKeys.RowStateInserted),
+        RowState.Updated => Text(GridKeys.RowStateUpdated),
+        RowState.Deleted => Text(GridKeys.RowStateDeleted),
+        _ => null,
+    };
+
+    /// <summary>left of a frozen cell: frozen columns start after the number and state columns (GS-100, GS-106).</summary>
+    private string FrozenLeft(int left) => (ShowRowNumbers, ShowRowState) switch
+    {
+        (true, true) => $"left:calc(var(--qg-row-number-width) + var(--qg-row-state-width) + {left}px)",
+        (true, false) => $"left:calc(var(--qg-row-number-width) + {left}px)",
+        (false, true) => $"left:calc(var(--qg-row-state-width) + {left}px)",
+        _ => $"left:{left}px",
+    };
 
     // ── 컬럼 리사이즈 (GS-053, Addendum A-23): 드래그는 JS가, 끝날 때 1회 호출 (R1) ──
 

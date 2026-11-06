@@ -23,6 +23,9 @@
     --qg-shadow: var(--quro-shadow, rgb(0 0 0 / 16%));
     --qg-tone-danger: var(--quro-tone-danger, var(--qg-error-line));
     --qg-tone-success: var(--quro-tone-success, #079455);
+    --qg-row-state-inserted: var(--quro-row-state-inserted, var(--qg-tone-success));
+    --qg-row-state-updated: var(--quro-row-state-updated, var(--qg-active));
+    --qg-row-state-deleted: var(--quro-row-state-deleted, var(--qg-error-line));
     --qg-tone-muted: var(--quro-tone-muted, var(--qg-check-line));
     --qg-tone-highlight: var(--quro-tone-highlight, color-mix(in srgb, var(--qg-warning-line) 18%, var(--qg-bg)));
     --qg-label: var(--quro-label, #5b6475);   /* Label cell text, same token as QuroLabel */
@@ -35,7 +38,7 @@
     box-sizing: border-box;
     overflow: auto;
     max-width: 100%;
-    scroll-padding-left: var(--qg-row-number-width, 0px);   /* keyboard scrolling stops clear of the sticky number column */
+    scroll-padding-left: calc(var(--qg-row-number-width, 0px) + var(--qg-row-state-width, 0px));   /* keyboard scrolling stops clear of the sticky number and state columns */
     border: 1px solid var(--qg-border);
     background: var(--qg-bg);
     color: var(--qg-text);
@@ -172,6 +175,22 @@
     font-variant-numeric: tabular-nums;
 }
 
+/* Row state column (ShowRowState, GS-106). The symbol is CSS only: the cell holds no text */
+.quro-row-state {
+    left: var(--qg-row-number-width, 0px);
+    width: var(--qg-row-state-width);
+    padding: 2px 0;
+    background: var(--qg-head-bg);
+    text-align: center;
+}
+
+.quro-row-state[data-state=inserted] { color: var(--qg-row-state-inserted); }
+.quro-row-state[data-state=updated] { color: var(--qg-row-state-updated); }
+.quro-row-state[data-state=deleted] { color: var(--qg-row-state-deleted); }
+.quro-row-state[data-state=inserted]::before { content: "+"; }
+.quro-row-state[data-state=updated]::before { content: "\25CF"; }
+.quro-row-state[data-state=deleted]::before { content: "\2212"; }
+
 /* CellStyle tones (A-59). Before the marks so an error or warning background wins over Highlight */
 /* Label cell (A-56): static text, read-only like Text; only the look differs.
    Kept before the tone rules with the same specificity, so CellStyle tones win */
@@ -196,6 +215,18 @@
 .quro-deleted .quro-cell {
     text-decoration: line-through;
     opacity: 0.6;
+}
+
+/* a frozen cell must stay opaque or the cells scrolled under it show through: it fades by color instead */
+.quro-deleted .quro-frozen:not(.quro-row-state) {
+    opacity: 1;
+    color: color-mix(in srgb, var(--qg-text) 60%, var(--qg-bg));
+}
+
+/* the row fades, its state mark does not (GS-106) */
+.quro-deleted .quro-row-state {
+    text-decoration: none;
+    opacity: 1;
 }
 
 /* 서버측 페이징 (A-24): 가상 스크롤은 행 높이가 일정해야 한다. 합계 행은 아래에 붙여 둔다 */

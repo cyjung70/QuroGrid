@@ -10,6 +10,13 @@
         @* display only (GS-100): no data-field, so quro-grid.js never selects, copies or moves onto it *@
         <div class="quro-cell quro-row-number quro-frozen" role="rowheader" aria-colindex="1">@Number</div>
     }
+    @if (Grid.ShowRowState)
+    {
+        @* display only (GS-106): no data-field, so quro-grid.js never selects, copies or moves onto it. The symbol comes from CSS *@
+        var state = Grid.DataSet.GetState(RowKey);
+        <div class="quro-cell quro-row-state quro-frozen" role="gridcell" aria-colindex="@Grid.RowStateColIndex"
+             data-state="@Grid.RowStateName(state)" title="@Grid.RowStateText(state)" aria-label="@Grid.RowStateText(state)"></div>
+    }
     @for (var i = 0; i < Grid.Columns.Count; i++)
     {
         var col = Grid.Columns[i];

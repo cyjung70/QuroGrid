@@ -1,0 +1,294 @@
+@inherits GridTestContext
+
+@code {
+    // GS-106: ShowRowState (A-74, Control Spec 3-7) — a display-only column with one symbol per row for new, edited and deleted rows.
+    // It is not a column or a DataSet field, takes no focus and stays out of copy, paste and export. The symbol comes from CSS through
+    // data-state; the text for the tooltip and screen readers comes from the app's localizer.
+
+    public sealed class Line
+    {
+        public int Id { get; set; }
+        public string? Name { get; set; }
+        public string? Unit { get; set; }
+    }
+
+    private static readonly CultureInfo En = new("en-US", useUserOverride: false);
+    private int _toneCalls;
+
+    private static QuroDataSet<Line> Three()
+    {
+        var ds = new QuroDataSet<Line>();
+        ds.Load([new Line { Id = 1, Name = "Cherry", Unit = "EA" }, new Line { Id = 2, Name = "Apple", Unit = "EA" }, new Line { Id = 3, Name = "Banana", Unit = "BOX" }]);
+        return ds;
+    }
+
+    private IRenderedComponent<QuroGrid<Line>> RenderGrid(QuroDataSet<Line> ds, bool show = true, bool numbers = false, int frozen = 0, bool footer = false,
+        DeletedRowDisplay deleted = DeletedRowDisplay.Hide) =>
+        Render<QuroGrid<Line>>(@<QuroGrid DataSet="ds" Culture="En" ShowRowState="show" ShowRowNumbers="numbers" FrozenColumns="frozen"
+                                          ShowFooter="footer" DeletedRows="deleted">
+                                   <QuroColumn Field="Name" HeaderKey="line.name" Width="100" CellStyle="Tone" />
+                                   <QuroColumn Field="Unit" HeaderKey="line.unit" Width="60" />
+                               </QuroGrid>);
+
+    private CellTone Tone(object item, object? value)
+    {
+        _toneCalls++;
+        return CellTone.None;
+    }
+
+    private static AngleSharp.Dom.IElement StateOf(IRenderedComponent<QuroGrid<Line>> cut, int rowKey) =>
+        cut.Find($"[role=row][data-row='{rowKey}'] .quro-row-state");
+
+    [Fact]
+    public void GS_106_Default_Off()
+    {
+        var ds = Three();
+        var cut = Render<QuroGrid<Line>>(@<QuroGrid DataSet="ds" Culture="En"><QuroColumn Field="Name" HeaderKey="line.name" /></QuroGrid>);
+
+        Assert.Empty(cut.FindAll(".quro-row-state"));
+        Assert.Equal("1", cut.Find("[role=gridcell][data-field=Name]").GetAttribute("aria-colindex"));
+        Assert.Equal("1", cut.Find("[role=grid]").GetAttribute("aria-colcount"));
+        Assert.DoesNotContain("--qg-row-state-width", cut.Find("[role=grid]").GetAttribute("style") ?? "");
+    }
+
+    [Fact]
+    public void GS_106_Toggle_RedrawsTheRows()
+    {
+        var ds = Three();
+        var cut = RenderGrid(ds, show: false);
+        Assert.Empty(cut.FindAll(".quro-row-state"));
+
+        cut.Render(p => p.Add(g => g.ShowRowState, true));
+
+        Assert.Equal(3, cut.FindAll("[data-row] .quro-row-state").Count);
+        Assert.Contains("--qg-row-state-width:24px", cut.Find("[role=grid]").GetAttribute("style"));
+    }
+
+    [Fact]
+    public void GS_106_UnchangedRow_IsBlank()
+    {
+        var ds = Three();
+        var cut = RenderGrid(ds);
+
+        var cell = StateOf(cut, ds.RowKeys[0]);
+        Assert.Null(cell.GetAttribute("data-state"));
+        Assert.Null(cell.GetAttribute("title"));
+        Assert.Null(cell.GetAttribute("aria-label"));
+        Assert.Equal("", cell.TextContent.Trim());
+    }
+
+    [Fact]
+    public async Task GS_106_NewRow_IsMarked()
+    {
+        var ds = Three();
+        var cut = RenderGrid(ds);
+
+        var key = await cut.InvokeAsync(() => cut.Instance.AddRow());
+
+        Assert.Equal("inserted", StateOf(cut, key).GetAttribute("data-state"));
+        Assert.Equal(GridKeys.RowStateInserted, StateOf(cut, key).GetAttribute("title"));
+        Assert.Equal(GridKeys.RowStateInserted, StateOf(cut, key).GetAttribute("aria-label"));
+    }
+
+    [Fact]
+    public async Task GS_106_EditedRow_IsMarked_AndClearsWhenTheValueGoesBack()
+    {
+        var ds = Three();
+        var cut = RenderGrid(ds);
+        var key = ds.RowKeys[0];
+
+        await cut.InvokeAsync(() => cut.Instance.CommitEdit(key, "Name", "Quince"));
+        Assert.Equal("updated", StateOf(cut, key).GetAttribute("data-state"));
+        Assert.Equal(GridKeys.RowStateUpdated, StateOf(cut, key).GetAttribute("title"));
+
+        await cut.InvokeAsync(() => cut.Instance.CommitEdit(key, "Name", "Cherry"));
+        Assert.Null(StateOf(cut, key).GetAttribute("data-state"));
+    }
+
+    [Fact]
+    public async Task GS_106_DeletedRow_IsMarked_WhenShown()
+    {
+        var ds = Three();
+        var cut = RenderGrid(ds, deleted: DeletedRowDisplay.Strikethrough);
+        var key = ds.RowKeys[1];
+
+        await cut.InvokeAsync(() => cut.Instance.DeleteRows([key]));
+
+        Assert.Equal("deleted", StateOf(cut, key).GetAttribute("data-state"));
+        Assert.Equal(GridKeys.RowStateDeleted, StateOf(cut, key).GetAttribute("title"));
+    }
+
+    [Fact]
+    public async Task GS_106_HiddenDeletedRow_HasNoCell()
+    {
+        var ds = Three();
+        var cut = RenderGrid(ds);
+
+        await cut.InvokeAsync(() => cut.Instance.DeleteRows([ds.RowKeys[1]]));
+
+        Assert.Equal(2, cut.FindAll("[role=row][data-row] .quro-row-state").Count);
+    }
+
+    [Fact]
+    public async Task GS_106_Undo_RevertRow_RejectChanges_AndAcceptChanges_ClearTheMark()
+    {
+        var ds = Three();
+        var cut = RenderGrid(ds);
+        var key = ds.RowKeys[0];
+        async Task Edit() => await cut.InvokeAsync(() => cut.Instance.CommitEdit(key, "Name", "Quince"));
+        async Task Do(Action action) => await cut.InvokeAsync(() => { action(); cut.Instance.Refresh(); });
+
+        await Edit();
+        await Do(() => ds.Undo());
+        Assert.Null(StateOf(cut, key).GetAttribute("data-state"));
+
+        await Edit();
+        await Do(() => ds.RevertRow(key));
+        Assert.Null(StateOf(cut, key).GetAttribute("data-state"));
+
+        await Edit();
+        await Do(ds.RejectChanges);
+        Assert.Null(StateOf(cut, key).GetAttribute("data-state"));
+
+        await Edit();
+        await Do(ds.AcceptChanges);
+        Assert.Null(StateOf(cut, key).GetAttribute("data-state"));
+    }
+
+    [Fact]
+    public async Task GS_106_OnlyChangedRowsRedraw()
+    {
+        var ds = Three();
+        var cut = RenderGrid(ds);
+        _toneCalls = 0;
+
+        await cut.InvokeAsync(() => cut.Instance.CommitEdit(ds.RowKeys[0], "Unit", "BOX"));
+
+        Assert.Equal(1, _toneCalls);   // R4
+    }
+
+    [Fact]
+    public void GS_106_WithoutNumbers_StateIsTheFirstColumn()
+    {
+        var ds = Three();
+        var cut = RenderGrid(ds);
+
+        Assert.Equal("1", StateOf(cut, ds.RowKeys[0]).GetAttribute("aria-colindex"));
+        Assert.Equal("2", cut.Find("[role=gridcell][data-field=Name]").GetAttribute("aria-colindex"));
+        Assert.Equal("3", cut.Find("[role=grid]").GetAttribute("aria-colcount"));
+    }
+
+    [Fact]
+    public void GS_106_WithNumbers_NumberFirstThenState()
+    {
+        var ds = Three();
+        var cut = RenderGrid(ds, numbers: true);
+
+        var row = cut.Find($"[role=row][data-row='{ds.RowKeys[0]}']");
+        Assert.Contains("quro-row-number", row.Children[0].ClassName);
+        Assert.Contains("quro-row-state", row.Children[1].ClassName);
+        Assert.Equal("1", row.Children[0].GetAttribute("aria-colindex"));
+        Assert.Equal("2", row.Children[1].GetAttribute("aria-colindex"));
+        Assert.Equal("3", row.Children[2].GetAttribute("aria-colindex"));
+        Assert.Equal("4", cut.Find("[role=grid]").GetAttribute("aria-colcount"));
+    }
+
+    [Fact]
+    public void GS_106_FrozenColumns_StartAfterTheGutter()
+    {
+        var state = RenderGrid(Three(), frozen: 1);
+        Assert.Contains("left:calc(var(--qg-row-state-width) + 0px)", state.Find("[role=gridcell][data-field=Name]").GetAttribute("style"));
+
+        var both = RenderGrid(Three(), numbers: true, frozen: 2);
+        Assert.Contains("left:calc(var(--qg-row-number-width) + var(--qg-row-state-width) + 100px)", both.Find("[role=gridcell][data-field=Unit]").GetAttribute("style"));
+    }
+
+    [Fact]
+    public void GS_106_HeaderAndFooter_KeepTheColumnsAligned_NoText()
+    {
+        var cut = RenderGrid(Three(), footer: true);
+
+        var header = cut.Find(".quro-head .quro-row-state");
+        Assert.Equal("columnheader", header.GetAttribute("role"));
+        Assert.Equal("", header.TextContent.Trim());
+        Assert.Null(header.GetAttribute("data-field"));
+        Assert.Single(cut.FindAll(".quro-foot .quro-row-state"));
+    }
+
+    [Fact]
+    public async Task GS_106_GroupRows_LeaveItBlank()
+    {
+        var ds = Three();
+        var cut = RenderGrid(ds);
+
+        await cut.InvokeAsync(() => cut.Instance.SetGroupBy(["Unit"]));
+
+        var heads = cut.FindAll(".quro-group-head-row .quro-row-state");
+        Assert.Equal(2, heads.Count);
+        Assert.All(heads, c => Assert.Null(c.GetAttribute("data-state")));
+    }
+
+    [Fact]
+    public void GS_106_CellHasNoDataField_SoSelectionAndCopySkipIt()
+    {
+        var ds = Three();
+        var cut = RenderGrid(ds);
+
+        var cell = StateOf(cut, ds.RowKeys[0]);
+        Assert.Null(cell.GetAttribute("data-field"));
+        Assert.Null(cell.GetAttribute("data-copy"));
+    }
+
+    [Fact]
+    public void GS_106_ExportColumns_AreUnchanged()
+    {
+        var on = RenderGrid(Three()).Instance.GetExportRequest();
+        var off = RenderGrid(Three(), show: false).Instance.GetExportRequest();
+
+        Assert.Equal(off.Columns.Select(c => c.Field), on.Columns.Select(c => c.Field));
+    }
+
+    [Fact]
+    public async Task GS_106_Paging_MarksLoadedRows()
+    {
+        var all = Enumerable.Range(1, 150).Select(n => new Line { Id = n, Name = $"N{n}" }).ToArray();
+        var ds = new QuroDataSet<Line>(l => l.Id);
+        Func<GridItemsRequest, Task<GridItemsResult<Line>>> provide = r =>
+            Task.FromResult(new GridItemsResult<Line>(all.Skip(r.StartIndex).Take(r.Count).Select(l => new Line { Id = l.Id, Name = l.Name }).ToList(), all.Length));
+        var cut = Render<QuroGrid<Line>>(@<QuroGrid DataSet="ds" ItemsProvider="provide" PageSize="100" Culture="En" ShowRowState="true">
+                                            <QuroColumn Field="Name" HeaderKey="line.name" />
+                                        </QuroGrid>);
+        cut.WaitForAssertion(() => Assert.True(cut.FindAll("[data-row] .quro-row-state").Count >= 100));
+
+        var key = await cut.InvokeAsync(() => cut.Instance.AddRow());
+
+        cut.WaitForAssertion(() => Assert.Equal("inserted", StateOf(cut, key).GetAttribute("data-state")));
+    }
+
+    [Fact]
+    public async Task GS_106_Tree_MarksRows()
+    {
+        var ds = new QuroDataSet<Line>();
+        ds.Load([new Line { Id = 1, Name = "Root" }, new Line { Id = 2, Name = "Leaf", Unit = "1" }]);
+        var cut = Render<QuroGrid<Line>>(@<QuroGrid DataSet="ds" Culture="En" ShowRowState="true" TreeKeyField="Name" TreeParentField="Unit">
+                                            <QuroColumn Field="Name" HeaderKey="line.name" />
+                                        </QuroGrid>);
+
+        await cut.InvokeAsync(() => cut.Instance.CommitEdit(ds.RowKeys[1], "Name", "Changed"));
+
+        Assert.Equal("updated", StateOf(cut, ds.RowKeys[1]).GetAttribute("data-state"));
+    }
+
+    [Fact]
+    public void GS_106_Css_DefinesTheSymbolsAndTokens()
+    {
+        var css = File.ReadAllText(Path.Combine(GS_080_ThemeTokenTests.Root(), "src", "Quro.Grid", "wwwroot", "quro-grid.css"));
+
+        Assert.Contains("--qg-row-state-inserted: var(--quro-row-state-inserted,", css);
+        Assert.Contains("--qg-row-state-updated: var(--quro-row-state-updated,", css);
+        Assert.Contains("--qg-row-state-deleted: var(--quro-row-state-deleted,", css);
+        Assert.Contains("[data-state=inserted]::before", css);
+        Assert.Contains("[data-state=updated]::before", css);
+        Assert.Contains("[data-state=deleted]::before", css);
+    }
+}

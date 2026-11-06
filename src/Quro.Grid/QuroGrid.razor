@@ -32,7 +32,7 @@
     @* The frame holds the scroll buttons outside role=grid (GS-101). Without them it is display: contents and has no box *@
     <div class="quro-grid-frame" style="@FrameStyle" data-scroll-buttons="@(ScrollButtons ? "true" : null)">
     <div @ref="_root" class="@(Paging ? "quro-grid quro-paged" : "quro-grid")" style="@RootStyle"
-         role="@(TreeMode ? "treegrid" : "grid")" tabindex="0" aria-colcount="@(Columns.Count + (ShowRowNumbers ? 1 : 0))"
+         role="@(TreeMode ? "treegrid" : "grid")" tabindex="0" aria-colcount="@(Columns.Count + (ShowRowNumbers ? 1 : 0) + (ShowRowState ? 1 : 0))"
          aria-rowcount="@(headerRows + bodyRows + (ShowFooter ? 1 : 0))" data-header-rows="@headerRows"
          data-dirty="@(DataSet.HasChanges ? "true" : null)" data-clipboard="@(Clipboard ? null : "off")"
          data-edit-on-select="@(EditOnSelect ? "true" : null)"
@@ -52,6 +52,10 @@
                     {
                         <div class="quro-cell quro-row-number quro-frozen" role="columnheader" aria-colindex="1"></div>
                     }
+                    @if (ShowRowState)
+                    {
+                        <div class="quro-cell quro-row-state quro-frozen" role="columnheader" aria-colindex="@RowStateColIndex"></div>
+                    }
                     @foreach (var g in GroupCells(level))
                     {
                         if (g.Group is null)
@@ -70,6 +74,10 @@
                 @if (ShowRowNumbers)
                 {
                     <div class="quro-cell quro-header quro-row-number quro-frozen" role="columnheader" aria-colindex="1">@(RowNumberHeaderKey is null ? null : Text(RowNumberHeaderKey))</div>
+                }
+                @if (ShowRowState)
+                {
+                    <div class="quro-cell quro-header quro-row-state quro-frozen" role="columnheader" aria-colindex="@RowStateColIndex"></div>
                 }
                 @for (var i = 0; i < Columns.Count; i++)
                 {
@@ -167,6 +175,10 @@
                             {
                                 <div class="quro-cell quro-row-number quro-frozen" role="gridcell" aria-colindex="1"></div>
                             }
+                            @if (ShowRowState)
+                            {
+                                <div class="quro-cell quro-row-state quro-frozen" role="gridcell" aria-colindex="@RowStateColIndex"></div>
+                            }
                             <div class="quro-cell quro-group-head-cell" role="gridcell" aria-colindex="@ColIndex(0)" aria-colspan="@Columns.Count"
                                  style="width:@(Columns.Sum(WidthOf))px"><span class="quro-group-head-text" style="padding-left:@(item.Level * 16)px">@item.Text</span></div>
                         </div>
@@ -178,6 +190,10 @@
                             @if (ShowRowNumbers)
                             {
                                 <div class="quro-cell quro-subtotal quro-row-number quro-frozen" role="gridcell" aria-colindex="1"></div>
+                            }
+                            @if (ShowRowState)
+                            {
+                                <div class="quro-cell quro-subtotal quro-row-state quro-frozen" role="gridcell" aria-colindex="@RowStateColIndex"></div>
                             }
                             @for (var i = 0; i < Columns.Count; i++)
                             {
@@ -198,6 +214,10 @@
                     @if (ShowRowNumbers)
                     {
                         <div class="quro-cell quro-footer quro-row-number quro-frozen" role="gridcell" aria-colindex="1"></div>
+                    }
+                    @if (ShowRowState)
+                    {
+                        <div class="quro-cell quro-footer quro-row-state quro-frozen" role="gridcell" aria-colindex="@RowStateColIndex"></div>
                     }
                     @for (var i = 0; i < Columns.Count; i++)
                     {

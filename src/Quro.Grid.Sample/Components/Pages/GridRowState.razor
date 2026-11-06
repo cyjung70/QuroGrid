@@ -1,0 +1,44 @@
+@page "/row-state"
+@rendermode InteractiveServer
+@using System.Globalization
+@using Quro.Grid
+@using Quro.Grid.Data
+@using Quro.Grid.Sample.Data
+
+<PageTitle>@L["sample.rowstate.title"]</PageTitle>
+
+<h1>@L["sample.rowstate.title"]</h1>
+
+@* ShowRowState (GS-106): one symbol per new, edited or deleted row. Narrow on purpose so it scrolls sideways *@
+<div style="width:300px">
+    <QuroGrid TItem="SampleProduct" DataSet="_products" Localizer="L" Culture="En" ShowRowState="true" ShowRowNumbers="Numbers"
+              DeletedRows="DeletedRowDisplay.Strikethrough" FrozenColumns="Frozen">
+        <QuroColumn Field="Name" HeaderKey="sample.cells.name" Width="120" />
+        <QuroColumn Field="Qty" HeaderKey="sample.editselect.qty" Type="CellType.Number" Format="N0" Width="120" />
+        <QuroColumn Field="Kind" HeaderKey="sample.editselect.kind" Width="120" />
+        <QuroColumn Field="Note" HeaderKey="sample.rownum.note" Width="120" />
+    </QuroGrid>
+</div>
+
+<p>
+    <button type="button" data-testid="accept" @onclick="_products.AcceptChanges">@L["sample.rowstate.accept"]</button>
+</p>
+
+@code {
+    private static readonly SampleLocalizer L = new();
+    private static readonly CultureInfo En = new("en-US", useUserOverride: false);
+    private readonly QuroDataSet<SampleProduct> _products = new();
+
+    [SupplyParameterFromQuery(Name = "numbers")] public bool Numbers { get; set; }
+    [SupplyParameterFromQuery(Name = "frozen")] public int Frozen { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _products.Load(
+        [
+            new SampleProduct { Id = 1, Name = "Cherry", Qty = 10m },
+            new SampleProduct { Id = 2, Name = "Apple", Qty = 20m },
+            new SampleProduct { Id = 3, Name = "Banana", Qty = 30m },
+        ]);
+    }
+}
