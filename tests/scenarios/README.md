@@ -517,3 +517,11 @@ GS-105 — **완료** (2026-11-07 스테이블영 결정 7·8 권장안).
 | GS-106 | `ShowRowState` | Given 옵션을 켰을 때 / When 행을 추가·수정·삭제하면 / Then 왼쪽 고정 열에 `+`·`●`·`−`, 변경 없음은 빈칸. 툴팁·접근성 이름은 리소스 키. 값 복귀·Undo·`RevertRow`·`RejectChanges`·`AcceptChanges`로 지워짐. 숨긴 삭제 행은 셀 없음. 번호 다음 열, `aria-colindex` 이동, 고정 열은 그 뒤에서 시작. 포커스·복사·내보내기 제외, 클릭해도 열린 에디터 유지. 머리·합계·그룹 행은 빈칸, 페이징·트리에서도 동작. 바뀐 행만 다시 그림 | bUnit·Playwright | A-74, Control Spec 3-7 |
 
 GS-106 — **완료** (2026-11-07 스테이블영 결정 1~9 권장안).
+
+### 6-15 REST 조회·비우기 (A-75)
+
+| ID | 시나리오 | 기대 결과 | 계층 | 근거 |
+|---|---|---|---|---|
+| GS-107 | `LoadAsync`·`Clear` | Given 앱이 URL을 넘길 때 / When 조회하면 / Then GET으로 JSON 배열을 받아 `Load`처럼 교체(변경분·Undo 버림, `Loaded` 1회). 빈 배열은 `Loaded` 0행. 2xx 아님 `Failed`, 잘못된 JSON `Invalid`, 둘 다 아무것도 바뀌지 않음. 네트워크 오류·취소는 예외, 바뀌지 않음. 겹치면 나중 호출이 이기고 이전 응답은 `Superseded`(나중 호출이 실패해도, `Load`·`Clear`가 끼어도). `Clear`는 `Load([])`와 같고 그 뒤에도 쓸 수 있음 | xUnit | A-75, Control Spec 2-5 |
+
+GS-107 — **완료** (2026-11-07 스테이블영 결정 1~9 권장안).
