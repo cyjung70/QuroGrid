@@ -1,7 +1,7 @@
 # QuroGrid Spec v1 보완 문서 (Addendum A)
 
 - 대상: `docs/QuroGrid_FeatureMatrix_Spec_v1.pdf` (Spec v1 초안 Draft v0.2, 2026-10-28 — 4.9·5장 본문 개정)
-- 문서 상태: A.39 (2026-11-07) · 스테이블영 결정 사항 반영
+- 문서 상태: A.40 (2026-11-07) · 스테이블영 결정 사항 반영
 - 이 문서는 Spec v1의 일부입니다. **아래 항목은 Spec 본문보다 우선합니다.** 본문에 없는 내용은 "보완", 본문과 다른 내용은 "변경"으로 표시합니다.
 
 ---
@@ -84,6 +84,7 @@
 | A-72 | 스테이블영 설계 변경 (2026-11-07), Control Spec 3-2, TOON v0.2 `align` | 변경 | **셀 기본 정렬을 타입으로 정한다 (GS-102).** ① 열 `Type`이 먼저: `Number`·`Currency` 오른쪽, `Check`·`Combo`·`Button`·`Image` 가운데. 일반 `Text`·`Label`은 DataSet 필드의 C# 형식이 숫자면 오른쪽, 아니면 왼쪽. `Date`·`Popup`·`Mask`는 왼쪽. `Compute` 열은 필드가 없어 `Type`만 본다 ② 본문·합계·소계 셀과 에디터가 따른다. 헤더는 왼쪽 유지. Combo 목록·달력은 왼쪽 ③ `QuroColumn.Align`(`ColumnAlign?`)이 기본을 덮어쓰고, 파서가 읽기만 하던 TOON `align`이 이제 적용된다 ④ 기존 화면의 모양이 바뀌지만 끄는 옵션은 두지 않는다. 세로 정렬(Control Spec 3-2)은 범위 밖 | 2026-11-07 |
 | A-73 | 스테이블영 설계 변경 (2026-11-07) | 결정 | **그리드 `Width`와 스크롤 버튼 `ScrollButtons` (GS-101).** ① `Width`는 `Height`와 같은 CSS 값. 없으면 지금처럼 열에 맞추고 부모 폭까지 ② `ScrollButtons`(기본 false): 스크롤할 곳이 남은 방향에만 ▲▼◀▶ 버튼. 기본 스크롤바는 그대로 둔다 ③ 한 번 누르면 한 행 또는 한 열(고정 열 뒤 기준), 누르고 있으면 반복(400ms 뒤 80ms마다). 브라우저에서만 동작(R2), 포커스 받지 않음, 열린 에디터 유지 ④ 버튼은 `role=grid` 밖의 프레임 `.quro-grid-frame`에 둔다. 버튼이 없으면 프레임은 `display: contents`. 켜면 크기는 프레임에 간다 ⑤ `.quro-grid`를 `box-sizing: border-box`로 했다(`Width`·`max-width`가 테두리를 포함하도록) ⑥ 리소스 키 `quro.scroll.*`. TOON 키는 v0.3 | 2026-11-07 |
 | A-74 | Control Spec 3-7, A-50 | 결정 | **행 상태 열은 그리드 파라미터 `ShowRowState` (GS-106, 2026-11-07 스테이블영 결정 1~9 권장안).** ① 기본 false. 표시 방식 열거형을 두지 않는다 ② 왼쪽 고정 좁은 별도 열(색 막대·번호 열 안 표시가 아님) ③ 신규 `+`, 수정 `●`, 삭제 `−`, 변경 없음은 빈칸. 기호는 CSS, 색은 토큰 `--quro-row-state-inserted`·`-updated`·`-deleted` ④ 툴팁·접근성 이름은 `GridKeys` 리소스 키 ⑤ 행 번호와 함께면 번호 다음 ⑥ 행 번호와 같은 규칙: 포커스 없음, 복사·붙여넣기·내보내기·정렬·필터 제외, 헤더 글자 없음, 그룹 머리·소계 빈칸, 페이징은 적재된 행만 ⑦ 삭제 기호는 `DeletedRows`가 보여 줄 때만, 기본값은 바꾸지 않는다 ⑧ 셀 단위 수정 표시는 넣지 않는다 ⑨ TOON 키는 v0.3으로 미룸 | 2026-11-07 |
+| A-75 | Control Spec 2-5, A-50 | 결정 | **DataSet `LoadAsync(http, url)`·`Clear()` (GS-107, 2026-11-07 스테이블영 결정 1~9 권장안).** ① GET, 최상위 JSON 행 배열만. 감싼 형식은 앱이 가져와 `Load` ② `Task<LoadResult>`(`Status`·`StatusCode`·`RowCount`). 2xx 아님 `Failed`, 배열 아님 `Invalid`, 네트워크 오류·취소는 `SaveAsync`처럼 예외 ③ 실패하면 행·변경분·Undo 유지, 응답을 다 읽은 뒤에만 교체 ④ 성공하면 `Load`처럼 변경분을 버리고 확인은 앱이 `HasChanges`로 ⑤ 겹치면 가장 나중 호출이 이기고 이전 응답은 `Superseded` (`Load`·`Clear`도 이전 응답을 무효로 함) ⑥ JSON은 웹 기본값, 옵션 파라미터 없음 ⑦ `Clear()` = `Load([])`, 새 이벤트 없음 ⑧ `QuroDataSet<T>`에만, `IQuroDataSet`에 두지 않음 ⑨ 페이징 그리드는 `ReloadAsync()` (A-24), `IsLoading` 없음 | 2026-11-07 |
 
 ## 2. 이벤트 API 보완 (4.10)
 

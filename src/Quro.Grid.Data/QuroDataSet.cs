@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Net;
 using System.Reflection;
 using System.Text;
+using System.Text.Json;
 
 namespace Quro.Grid.Data;
 
@@ -101,9 +102,55 @@ public sealed class QuroDataSet<T> : IQuroDataSet where T : class
         });
     }
 
+    private static readonly JsonSerializerOptions LoadJson = new(JsonSerializerDefaults.Web);
+
+    /// <summary>Counts Load calls and LoadAsync starts: a response whose call is no longer the latest is dropped (A-75).</summary>
+    private int _loadCall;
+
+    /// <summary>
+    /// GETs a top-level JSON array of rows and replaces the rows like <see cref="Load"/>, including any unsaved changes: check
+    /// <see cref="HasChanges"/> first (A-75). The rows change only after the whole response was read. An error response returns
+    /// <see cref="LoadStatus.Failed"/>, other content <see cref="LoadStatus.Invalid"/>, and a response overtaken by a newer LoadAsync,
+    /// Load or Clear <see cref="LoadStatus.Superseded"/>; none of them change anything. Network errors and cancellation throw.
+    /// On a paged grid use the grid's ReloadAsync instead.
+    /// </summary>
+    public async Task<LoadResult> LoadAsync(HttpClient http, string requestUri, CancellationToken cancellationToken = default)
+    {
+        var call = ++_loadCall;
+        // no ConfigureAwait(false): Load raises events on the calling circuit's synchronization context
+        using var response = await http.GetAsync(requestUri, cancellationToken);
+        if (call != _loadCall)
+            return new LoadResult(LoadStatus.Superseded, response.StatusCode);
+        if (!response.IsSuccessStatusCode)
+            return new LoadResult(LoadStatus.Failed, response.StatusCode);
+
+        List<T?>? rows;
+        try
+        {
+            await using var body = await response.Content.ReadAsStreamAsync(cancellationToken);
+            rows = await JsonSerializer.DeserializeAsync<List<T?>>(body, LoadJson, cancellationToken);
+        }
+        catch (JsonException)
+        {
+            return new LoadResult(call == _loadCall ? LoadStatus.Invalid : LoadStatus.Superseded, response.StatusCode);
+        }
+
+        if (call != _loadCall)
+            return new LoadResult(LoadStatus.Superseded, response.StatusCode);
+        if (rows is null || rows.Contains(null))
+            return new LoadResult(LoadStatus.Invalid, response.StatusCode);
+
+        Load(rows!);
+        return new LoadResult(LoadStatus.Loaded, response.StatusCode, rows.Count);
+    }
+
+    /// <summary>Removes all rows, including unsaved changes. The same as Load with no rows: the current row and Undo clear and Loaded is raised (A-75).</summary>
+    public void Clear() => Load([]);
+
     /// <summary>조회 결과를 적재한다. 모든 행은 Normal.</summary>
     public void Load(IEnumerable<T> rows)
     {
+        _loadCall++;
         _rows.Clear();
         _byKey.Clear();
         _keyById.Clear();
