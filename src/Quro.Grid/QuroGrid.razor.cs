@@ -123,6 +123,16 @@ public partial class QuroGrid<TItem> where TItem : class
     /// </summary>
     [Parameter] public Func<object, bool>? RowReadOnly { get; set; }
 
+    /// <summary>
+    /// Shows a frozen number column on the left (GS-100, default off): 1..N in screen order, after sort, filter and grouping
+    /// (group rows are not counted); the absolute position on a paged grid. Display only: it is not a column or a DataSet
+    /// field, takes no focus and stays out of copy, paste and export. A deleted row that is shown keeps its number.
+    /// </summary>
+    [Parameter] public bool ShowRowNumbers { get; set; }
+
+    /// <summary>Resource key of the number column's header (GS-100). Empty header when not set.</summary>
+    [Parameter] public string? RowNumberHeaderKey { get; set; }
+
     /// <summary>붙여넣기 행이 모자라면 자동 추가 (Spec 4.7, Addendum A-03: 기본 켬).</summary>
     [Parameter] public bool AddRowsOnPaste { get; set; } = true;
 
@@ -248,7 +258,7 @@ public partial class QuroGrid<TItem> where TItem : class
     {
         BindDataSet();
         ApplyDefinition();
-        object layout = (DataSet, Localizer, Culture, FrozenColumns, CurrencyDigits, DeletedRows, EditOnSelect);
+        object layout = (DataSet, Localizer, Culture, FrozenColumns, CurrencyDigits, DeletedRows, EditOnSelect, ShowRowNumbers);
         if (!Equals(layout, _layoutParameters))
         {
             _layoutParameters = layout;
@@ -1192,10 +1202,29 @@ public partial class QuroGrid<TItem> where TItem : class
     private static decimal Number(object? value) =>
         value is null ? 0m : Convert.ToDecimal(value, CultureInfo.InvariantCulture);
 
-    internal string? RootStyle =>
-        Paging || Height is not null
-            ? $"{(Height is null ? "" : $"height:{Height};")}--quro-row-height:{RowHeight}px"
-            : null;
+    internal string? RootStyle
+    {
+        get
+        {
+            var layout = Paging || Height is not null
+                ? $"{(Height is null ? "" : $"height:{Height};")}--quro-row-height:{RowHeight}px"
+                : null;
+            if (!ShowRowNumbers)
+                return layout;
+            // one variable on the root: a longer row count changes the width without redrawing any row (R4). Rows that exist,
+            // not rows shown, so the column doesn't jump when a filter or a collapsed group hides some
+            var count = Paging ? InsertedRowKeys().Count + (_total ?? 0) : DataSet.RowKeys.Count;
+            var digits = Math.Max(2, count.ToString(CultureInfo.InvariantCulture).Length);
+            var width = $"--qg-row-number-width:calc({digits} * 0.65em + 14px)";
+            return layout is null ? width : $"{layout};{width}";
+        }
+    }
+
+    /// <summary>aria-colindex of a column: the number column is the first when shown (GS-100).</summary>
+    internal int ColIndex(int index) => index + (ShowRowNumbers ? 2 : 1);
+
+    /// <summary>left of a frozen cell: frozen columns start after the number column (GS-100).</summary>
+    private string FrozenLeft(int left) => ShowRowNumbers ? $"left:calc(var(--qg-row-number-width) + {left}px)" : $"left:{left}px";
 
     // ── 컬럼 리사이즈 (GS-053, Addendum A-23): 드래그는 JS가, 끝날 때 1회 호출 (R1) ──
 
@@ -1800,7 +1829,7 @@ public partial class QuroGrid<TItem> where TItem : class
             var kind = group is null ? "quro-cell quro-group-empty" : "quro-cell quro-group-header";
             cells.Add(new GroupCell(group, i, count,
                 frozen ? kind + " quro-frozen" : kind,
-                frozen ? $"width:{width}px;left:{left}px" : $"width:{width}px"));
+                frozen ? $"width:{width}px;{FrozenLeft(left)}" : $"width:{width}px"));
             left += width;
             i += count;
         }
@@ -1963,7 +1992,7 @@ public partial class QuroGrid<TItem> where TItem : class
         if (index >= _frozenShown)
             return width;
         var left = columns.Take(index).Sum(WidthOf);
-        return $"{width};left:{left}px";
+        return $"{width};{FrozenLeft(left)}";
     }
 
     internal string DisplayText(int rowKey, QuroColumn col)

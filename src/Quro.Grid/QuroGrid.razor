@@ -28,9 +28,9 @@
 
 @* 컬럼 정의가 등록된 뒤에 그린다. 셀 단위 이벤트 핸들러를 두지 않는다 (R5): 클릭·키는 quro-grid.js가 좌표로 해석한다. *@
 <Deferred>
-    @{ var body = Paging ? null : BodyItems(); var bodyRows = BodyRowCount(body); var headerRows = HeaderRows; }
+    @{ var body = Paging ? null : BodyItems(); var bodyRows = BodyRowCount(body); var headerRows = HeaderRows; var rowNumber = 0; }
     <div @ref="_root" class="@(Paging ? "quro-grid quro-paged" : "quro-grid")" style="@RootStyle"
-         role="grid" tabindex="0" aria-colcount="@Columns.Count"
+         role="grid" tabindex="0" aria-colcount="@(Columns.Count + (ShowRowNumbers ? 1 : 0))"
          aria-rowcount="@(headerRows + bodyRows + (ShowFooter ? 1 : 0))" data-header-rows="@headerRows"
          data-dirty="@(DataSet.HasChanges ? "true" : null)" data-clipboard="@(Clipboard ? null : "off")"
          data-edit-on-select="@(EditOnSelect ? "true" : null)"
@@ -46,28 +46,36 @@
             {
                 @* 다단 헤더 (GS-070): 그룹 칸은 묶인 컬럼 너비의 합. 클릭·드래그는 받지 않는다 (data-field 없음) *@
                 <div class="quro-row quro-group-row" role="row" aria-rowindex="@(level + 1)">
+                    @if (ShowRowNumbers)
+                    {
+                        <div class="quro-cell quro-row-number quro-frozen" role="columnheader" aria-colindex="1"></div>
+                    }
                     @foreach (var g in GroupCells(level))
                     {
                         if (g.Group is null)
                         {
-                            <div class="@g.Class" style="@g.Style" role="columnheader" aria-colindex="@(g.First + 1)"></div>
+                            <div class="@g.Class" style="@g.Style" role="columnheader" aria-colindex="@ColIndex(g.First)"></div>
                         }
                         else
                         {
-                            <div class="@g.Class" style="@g.Style" role="columnheader" aria-colindex="@(g.First + 1)"
+                            <div class="@g.Class" style="@g.Style" role="columnheader" aria-colindex="@ColIndex(g.First)"
                                  aria-colspan="@g.Count">@Text(g.Group.HeaderKey)</div>
                         }
                     }
                 </div>
             }
             <div class="quro-row" role="row" aria-rowindex="@headerRows">
+                @if (ShowRowNumbers)
+                {
+                    <div class="quro-cell quro-header quro-row-number quro-frozen" role="columnheader" aria-colindex="1">@(RowNumberHeaderKey is null ? null : Text(RowNumberHeaderKey))</div>
+                }
                 @for (var i = 0; i < Columns.Count; i++)
                 {
                     var col = Columns[i];
                     var sort = SortOf(col);
                     @* 헤더 클릭(정렬)·경계 드래그(리사이즈)·필터 버튼은 quro-grid.js가 받는다 (R5, A-22·A-23·A-31) *@
                     <div class="@CellClass(i, "quro-header")" style="@CellStyle(i)" role="columnheader"
-                         aria-colindex="@(i + 1)" data-field="@col.Field" aria-sort="@AriaSort(sort)"
+                         aria-colindex="@ColIndex(i)" data-field="@col.Field" aria-sort="@AriaSort(sort)"
                          data-filtered="@(FilterOf(col) is null ? null : "true")">@Text(col.HeaderKey)@if (sort is not null)
                          {<span class="quro-sort" aria-hidden="true" data-dir="@(sort.Direction == SortDirection.Ascending ? "asc" : "desc")" data-order="@SortOrder(col)"></span>}@if (col.CanFilter)
                          {<span class="quro-filter-button" role="button" aria-label="@Text(GridKeys.FilterOpen)"></span>}<span class="quro-resize" aria-hidden="true"></span></div>
@@ -124,6 +132,7 @@
                     <ItemContent>
                         <QuroGridRow @key="key" TItem="TItem" Grid="this" RowKey="key" RowIndex="RowIndexOf(key)"
                                      Revision="DataSet.GetRevision(key)" Epoch="_epoch" Locked="RowLocked(key)"
+                                     Number="@(ShowRowNumbers ? RowIndexOf(key) + 1 : 0)"
                                      EditingField="@(_editing?.RowKey == key ? _editing.Value.Field : null)"
                                      PickerOpen="IsPickerOpen(key)" />
                     </ItemContent>
@@ -139,8 +148,10 @@
                     if (item.Kind == BodyItemKind.Row)
                     {
                         var key = item.RowKey;
+                        rowNumber++;
                         <QuroGridRow @key="key" TItem="TItem" Grid="this" RowKey="key" RowIndex="item.Index"
                                      Revision="DataSet.GetRevision(key)" Epoch="_epoch" Locked="RowLocked(key)"
+                                     Number="@(ShowRowNumbers ? rowNumber : 0)"
                                      EditingField="@(_editing?.RowKey == key ? _editing.Value.Field : null)"
                                      PickerOpen="IsPickerOpen(key)" />
                     }
@@ -149,7 +160,11 @@
                         <div @key="@("h" + item.GroupId)" class="quro-row quro-group-head-row" role="row"
                              aria-rowindex="@(item.Index + headerRows + 1)" aria-expanded="@(item.Expanded ? "true" : "false")"
                              data-group="@item.GroupId" data-group-level="@item.Level">
-                            <div class="quro-cell quro-group-head-cell" role="gridcell" aria-colindex="1" aria-colspan="@Columns.Count"
+                            @if (ShowRowNumbers)
+                            {
+                                <div class="quro-cell quro-row-number quro-frozen" role="gridcell" aria-colindex="1"></div>
+                            }
+                            <div class="quro-cell quro-group-head-cell" role="gridcell" aria-colindex="@ColIndex(0)" aria-colspan="@Columns.Count"
                                  style="width:@(Columns.Sum(WidthOf))px"><span class="quro-group-head-text" style="padding-left:@(item.Level * 16)px">@item.Text</span></div>
                         </div>
                     }
@@ -157,11 +172,15 @@
                     {
                         <div @key="@("s" + item.GroupId)" class="quro-row quro-subtotal-row" role="row"
                              aria-rowindex="@(item.Index + headerRows + 1)" data-group-level="@item.Level">
+                            @if (ShowRowNumbers)
+                            {
+                                <div class="quro-cell quro-subtotal quro-row-number quro-frozen" role="gridcell" aria-colindex="1"></div>
+                            }
                             @for (var i = 0; i < Columns.Count; i++)
                             {
                                 var col = Columns[i];
                                 <div class="@CellClass(i, "quro-subtotal")" style="@CellStyle(i)" role="gridcell"
-                                     aria-colindex="@(i + 1)" data-subtotal-field="@col.Field">@SubtotalText(col, item.Rows!)</div>
+                                     aria-colindex="@ColIndex(i)" data-subtotal-field="@col.Field">@SubtotalText(col, item.Rows!)</div>
                             }
                         </div>
                     }
@@ -173,11 +192,15 @@
         {
             <div class="quro-foot" role="rowgroup">
                 <div class="quro-row quro-footer-row" role="row" aria-rowindex="@(headerRows + bodyRows + 1)">
+                    @if (ShowRowNumbers)
+                    {
+                        <div class="quro-cell quro-footer quro-row-number quro-frozen" role="gridcell" aria-colindex="1"></div>
+                    }
                     @for (var i = 0; i < Columns.Count; i++)
                     {
                         var col = Columns[i];
                         <div class="@CellClass(i, "quro-footer")" style="@CellStyle(i)" role="gridcell"
-                             aria-colindex="@(i + 1)" data-footer-field="@col.Field">@FooterText(col)</div>
+                             aria-colindex="@ColIndex(i)" data-footer-field="@col.Field">@FooterText(col)</div>
                     }
                 </div>
             </div>
