@@ -16,6 +16,7 @@ paths:
 | `Deleted` | 저장 시 DELETE. 화면 처리는 그리드 옵션, 기본 숨김 (O-02) |
 
 - 필수 API: `GetState`, `GetOriginal`, `SetValue`, `AddRow`, `AddRows`(일괄, R3), `DeleteRow`, `RevertRow`, `Validate`, `GetChanges`, `AcceptChanges`, `RejectChanges`
+- 조회 `QueryRowKeys(filter, sort, includeDeleted)` (A-54): 읽기 전용. 순서·상태·현재 행·Undo를 바꾸지 않고 이벤트 없음. 그리드 정렬·필터와 별개
 - 저장 payload: `{ inserted[], updated[], deleted[] }`. 수정·삭제 행은 `version` 포함
 - `SaveAsync(http, url)`: 2xx → `AcceptChanges`, 409 → `Conflict`, 그 밖 → `Failed` (변경분 유지). 성공 후 재조회는 앱이 한다
 - URL·엔드포인트 이름은 앱(QuroERP)이 넘긴다. 이 프로젝트에 하드코딩하지 않는다

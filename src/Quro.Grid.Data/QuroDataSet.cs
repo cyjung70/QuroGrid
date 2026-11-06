@@ -177,6 +177,22 @@ public sealed class QuroDataSet<T> : IQuroDataSet where T : class
     /// <summary>현재 목록에 있는 행 키 (표시 순서). Deleted 행도 포함한다 (화면 처리는 O-02).</summary>
     public IReadOnlyList<int> RowKeys => _rows.Select(r => r.Key).ToList();
 
+    /// <summary>
+    /// Row keys by filter and sort conditions (GS-103, A-54). A read: row order, row state, the current row and Undo stay as they
+    /// are, and no event is raised. Without <paramref name="sort"/> the keys are in <see cref="RowKeys"/> order; the sort is stable.
+    /// Only rows in this data set are searched: on a paged screen, the loaded and changed rows, not the whole server result.
+    /// </summary>
+    /// <param name="filter">Keeps the rows it returns true for. Null keeps all.</param>
+    /// <param name="sort">Order of the returned keys. Null keeps list order.</param>
+    /// <param name="includeDeleted">Also returns rows marked deleted. They are left out by default.</param>
+    public IReadOnlyList<int> QueryRowKeys(Func<T, bool>? filter = null, Comparison<T>? sort = null, bool includeDeleted = false)
+    {
+        var rows = _rows.AsEnumerable().Where(r => (includeDeleted || r.State != RowState.Deleted) && (filter is null || filter(r.Item)));
+        if (sort is not null)
+            rows = rows.OrderBy(r => r.Item, Comparer<T>.Create(sort));
+        return rows.Select(r => r.Key).ToList();
+    }
+
     /// <summary>Current value of a field in a row.</summary>
     public object? GetValue(int rowKey, string field) => Field(field).GetValue(Find(rowKey).Item);
 

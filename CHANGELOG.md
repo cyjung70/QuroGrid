@@ -4,6 +4,7 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 소비자(QuroERP)는 버전을 올리기 전에 이 파일을 읽는다.
 
 ## Unreleased
+- Added: `QuroDataSet<T>.QueryRowKeys(filter, sort, includeDeleted)` — 조건으로 행 키 목록을 돌려주는 조회 함수. 순서·상태를 바꾸지 않는다 (A-54, GS-103). 소비자 조치: 없음
 
 ## 0.5.0-alpha.9 — 2026-11-07
 - Added: `QuroGrid.Width`와 `QuroGrid.ScrollButtons` (기본 false) — 스크롤할 곳이 남은 방향에 ▲▼◀▶ 버튼. 한 번에 한 행·한 열, 누르면 반복, 서버 호출 없음 (A-73, GS-101). 소비자 조치: 켠다면 리소스 키 `quro.scroll.up`·`down`·`left`·`right` 추가
