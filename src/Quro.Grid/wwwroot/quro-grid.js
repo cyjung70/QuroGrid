@@ -238,6 +238,17 @@ function onMouseDown(s, e) {
         e.preventDefault();   // selects nothing and leaves the focus where it is, so an open editor stays open (GS-100)
         return;
     }
+    const treeToggle = e.target.closest('.quro-body .quro-tree-toggle');
+    if (treeToggle) {
+        e.preventDefault();   // moves to that cell, then flips the row (GS-104)
+        const at = position(treeToggle.closest('[role=gridcell]'));
+        enqueue(s, async () => {
+            if (s.editing && !(await commit(s))) return;
+            activate(s, at.row, at.field);
+            await expandTreeRow(s, at.row);
+        });
+        return;
+    }
     const cell = e.target.closest('.quro-body [role=gridcell][data-field]');
     if (!cell) return;
     if (editOnSelect(s)) e.preventDefault();   // the select editor takes the focus, not the grid (A-58)
@@ -580,8 +591,12 @@ async function handleKey(s, k) {
             if (next && isGroupHead(next)) return enterGroup(s, next);
             return moveBy(s, 1, 0, k.shift);
         }
-        case 'ArrowLeft': return (await leaveSelectEditor(s)) && moveBy(s, 0, -1, k.shift);
-        case 'ArrowRight': return (await leaveSelectEditor(s)) && moveBy(s, 0, 1, k.shift);
+        case 'ArrowLeft':
+            if (k.ctrl && isTree(s)) return expandTreeRow(s, s.active.row, false);
+            return (await leaveSelectEditor(s)) && moveBy(s, 0, -1, k.shift);
+        case 'ArrowRight':
+            if (k.ctrl && isTree(s)) return expandTreeRow(s, s.active.row, true);
+            return (await leaveSelectEditor(s)) && moveBy(s, 0, 1, k.shift);
     }
 }
 
@@ -692,6 +707,21 @@ function placeFilter(s) {
 }
 
 // ── 그룹 머리 행 키보드 (GS-074, A-42): ↑↓ 이동(소계 행은 건너뜀), Space·Enter 펼침·접기, ← 접기, → 펼치기 ──
+
+// ── Tree (GS-104): the toggle or Ctrl+←→ on any cell of the row. One server call each
+
+function isTree(s) {
+    return s.root.getAttribute('role') === 'treegrid';
+}
+
+/** expand undefined flips the row. A row without children has no aria-expanded and does nothing. */
+async function expandTreeRow(s, row, expand) {
+    const state = rowEl(s, row)?.getAttribute('aria-expanded');
+    if (state === null || state === undefined) return;
+    const open = state === 'true';
+    if (open === (expand ?? !open)) return;
+    await s.dotnet.invokeMethodAsync('ExpandTreeRow', row, !open);
+}
 
 function isGroupHead(el) {
     return el.classList.contains('quro-group-head-row');
@@ -1292,7 +1322,7 @@ function rowEl(s, key) {
 
 /** 화면 위치 (0부터). 서버가 aria-rowindex = 위치 + 헤더 행 수 + 1로 그린다 (다단 헤더면 헤더가 여러 행, GS-070). */
 function rowIndexOf(el) {
-    return el ? Number(el.getAttribute('aria-rowindex')) - headerRows(el.closest('[role=grid]')) - 1 : -1;
+    return el ? Number(el.getAttribute('aria-rowindex')) - headerRows(el.closest('.quro-grid')) - 1 : -1;
 }
 
 function headerRows(root) {

@@ -1,0 +1,53 @@
+@page "/tree"
+@rendermode InteractiveServer
+@using System.Globalization
+@using Quro.Grid
+@using Quro.Grid.Data
+@using Quro.Grid.Sample.Data
+
+<PageTitle>@L["sample.tree.title"]</PageTitle>
+
+<h1>@L["sample.tree.title"]</h1>
+
+@* Tree grid (GS-104). The list order is not the tree order. ?select=true turns EditOnSelect on *@
+<QuroGrid @ref="_grid" TItem="TreeRow" DataSet="_rows" Localizer="L" Culture="En" ShowFooter="true" EditOnSelect="Select"
+          TreeKeyField="Code" TreeParentField="Parent">
+    <QuroColumn Field="Name" HeaderKey="sample.tree.name" Width="220" />
+    <QuroColumn Field="Code" HeaderKey="sample.tree.code" Width="100" />
+    <QuroColumn Field="Amount" HeaderKey="sample.tree.amount" Type="CellType.Number" Format="N0" Width="120" Aggregate="Aggregate.Sum" />
+</QuroGrid>
+
+<p>
+    <button type="button" data-testid="expand-all" @onclick="() => _grid!.ExpandAllTree()">@L["sample.tree.expand"]</button>
+    <button type="button" data-testid="collapse-all" @onclick="() => _grid!.CollapseAllTree()">@L["sample.tree.collapse"]</button>
+</p>
+
+@code {
+    public sealed class TreeRow
+    {
+        public string? Code { get; set; }
+        public string? Parent { get; set; }
+        public string? Name { get; set; }
+        public decimal Amount { get; set; }
+    }
+
+    private static readonly SampleLocalizer L = new();
+    private static readonly CultureInfo En = new("en-US", useUserOverride: false);
+    private readonly QuroDataSet<TreeRow> _rows = new();
+    private QuroGrid<TreeRow>? _grid;
+
+    [SupplyParameterFromQuery(Name = "select")] public bool Select { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _rows.Load(
+        [
+            new TreeRow { Code = "A1", Parent = "A", Name = "Tools", Amount = 1 },
+            new TreeRow { Code = "B", Name = "Services", Amount = 10 },
+            new TreeRow { Code = "A", Name = "Goods", Amount = 100 },
+            new TreeRow { Code = "A11", Parent = "A1", Name = "Hammer", Amount = 1000 },
+            new TreeRow { Code = "B1", Parent = "B", Name = "Repair", Amount = 10000 },
+            new TreeRow { Code = "A2", Parent = "A", Name = "Paint", Amount = 100000 },
+        ]);
+    }
+}

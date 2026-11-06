@@ -3,7 +3,8 @@
 @{
     var deleted = Grid.DataSet.GetState(RowKey) == RowState.Deleted;
 }
-<div class="@("quro-row" + (deleted ? " quro-deleted" : "") + (Locked ? " quro-row-readonly" : ""))" role="row" data-row="@RowKey" aria-rowindex="@(RowIndex + Grid.HeaderRows + 1)">
+<div class="@("quro-row" + (deleted ? " quro-deleted" : "") + (Locked ? " quro-row-readonly" : ""))" role="row" data-row="@RowKey" aria-rowindex="@(RowIndex + Grid.HeaderRows + 1)"
+     aria-level="@(Level > 0 ? Level : null)" aria-expanded="@(Expanded is { } open ? (open ? "true" : "false") : null)">
     @if (Grid.ShowRowNumbers)
     {
         @* display only (GS-100): no data-field, so quro-grid.js never selects, copies or moves onto it *@
@@ -13,12 +14,19 @@
     {
         var col = Grid.Columns[i];
         var mark = Grid.Mark(RowKey, col);
-        <div class="@(MarkClass(Grid.CellClass(i, "quro-body-cell"), mark) + Grid.ToneClass(RowKey, col) + Grid.AlignClass(col))" style="@Grid.CellStyle(i)" role="gridcell"
+        var treeCell = Level > 0 && Grid.IsTreeCell(col);
+        <div class="@(MarkClass(Grid.CellClass(i, "quro-body-cell"), mark) + Grid.ToneClass(RowKey, col) + Grid.AlignClass(col) + (treeCell ? " quro-tree-cell" : ""))"
+             style="@(Grid.CellStyle(i) + (treeCell ? $";--qg-tree-level:{Level - 1}" : ""))" role="gridcell"
              aria-colindex="@Grid.ColIndex(i)" data-field="@col.Field" data-type="@Grid.TypeAttribute(col)"
              data-copy="@Grid.CopyText(RowKey, col)" data-edit="@Grid.EditAttribute(RowKey, col)" data-mask="@(Grid.EditOnSelect ? col.Mask : null)"
              aria-readonly="@(Grid.CellReadOnly(RowKey, col) ? "true" : null)"
              aria-invalid="@(mark?.Level == CellMarkLevel.Error ? "true" : null)"
              title="@(mark is null ? null : Grid.Text(mark.MessageKey))">
+            @if (treeCell && Expanded is not null && EditingField != col.Field)
+            {
+                @* the glyph comes from CSS: quro-grid.js reads the cell text for editors and copy (GS-104). The click is received on the grid (R5) *@
+                <span class="quro-tree-toggle" aria-hidden="true"></span>
+            }
             @if (EditingField == col.Field)
             {
                 @* 키 입력은 브라우저에서만 처리한다 (R2). 값은 quro-grid.js가 셀 이탈 시 CommitEdit로 1회 보낸다. *@
@@ -73,7 +81,7 @@
 </div>
 
 @code {
-    private (int Revision, int Epoch, int RowIndex, int Number, bool Locked, string? EditingField, bool PickerOpen)? _rendered;
+    private (int Revision, int Epoch, int RowIndex, int Number, bool Locked, string? EditingField, bool PickerOpen, int Level, bool? Expanded)? _rendered;
 
     [Parameter, EditorRequired] public QuroGrid<TItem> Grid { get; set; } = default!;
     [Parameter, EditorRequired] public int RowKey { get; set; }
@@ -84,13 +92,17 @@
     [Parameter] public bool Locked { get; set; }
     /// <summary>Row number (GS-100); 0 when the option is off. Grouping can change it while the row keeps other inputs, so it is in the render key.</summary>
     [Parameter] public int Number { get; set; }
+    /// <summary>Tree level, 1 at the root (GS-104); 0 when the grid is not a tree.</summary>
+    [Parameter] public int Level { get; set; }
+    /// <summary>Whether the row's children show (GS-104); null when it has none.</summary>
+    [Parameter] public bool? Expanded { get; set; }
     [Parameter] public string? EditingField { get; set; }
     [Parameter] public bool PickerOpen { get; set; }
 
     /// <summary>행 단위 렌더 (R4): 행 리비전·편집 셀·선택 목록·위치·그리드 epoch가 바뀐 행만 다시 그린다.</summary>
     protected override bool ShouldRender()
     {
-        var now = (Revision, Epoch, RowIndex, Number, Locked, EditingField, PickerOpen);
+        var now = (Revision, Epoch, RowIndex, Number, Locked, EditingField, PickerOpen, Level, Expanded);
         if (_rendered == now)
             return false;
         _rendered = now;
@@ -98,7 +110,7 @@
     }
 
     // 첫 렌더는 ShouldRender를 거치지 않으므로 여기서 기록한다.
-    protected override void OnInitialized() => _rendered = (Revision, Epoch, RowIndex, Number, Locked, EditingField, PickerOpen);
+    protected override void OnInitialized() => _rendered = (Revision, Epoch, RowIndex, Number, Locked, EditingField, PickerOpen, Level, Expanded);
 
     private static string MarkClass(string cls, CellMark? mark) => mark?.Level switch
     {

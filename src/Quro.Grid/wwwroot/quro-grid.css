@@ -568,6 +568,42 @@
     content: "\25B8";
 }
 
+/* Tree (GS-104): the indent is padding, so the editors and the toggle share one measure. The toggle draws no text into the cell */
+.quro-tree-cell {
+    --qg-tree-pad: calc(6px + 1.2em * (var(--qg-tree-level, 0) + 1));
+    padding-left: var(--qg-tree-pad);
+}
+
+.quro-tree-cell:not(.quro-frozen) {
+    position: relative;
+}
+
+.quro-tree-toggle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(var(--qg-tree-pad) - 1.2em);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.2em;
+    cursor: pointer;
+    user-select: none;
+}
+
+.quro-tree-toggle::before {
+    content: "\25B8";
+}
+
+[aria-expanded=true] > .quro-tree-cell > .quro-tree-toggle::before {
+    content: "\25BE";
+}
+
+.quro-tree-cell > .quro-select-editor {
+    left: var(--qg-tree-pad);
+    width: calc(100% - var(--qg-tree-pad));
+}
+
 .quro-subtotal {
     background: color-mix(in srgb, var(--qg-head-bg) 50%, var(--qg-bg));
     font-weight: 600;
