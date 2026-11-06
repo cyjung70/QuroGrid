@@ -4,6 +4,8 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 소비자(QuroERP)는 버전을 올리기 전에 이 파일을 읽는다.
 
 ## Unreleased
+- Added: `QuroGrid.ShowRowNumbers`·`RowNumberHeaderKey` — 표시 전용 행 번호 열. 화면 순서 1..N, 추가·삭제·정렬·필터·그룹·Undo 뒤 갱신, 행 상태 변경 없음, 포커스·복사·내보내기 제외 (A-71, GS-100). 소비자 조치: 없음
+- Fixed: 그리드가 열 전체보다 좁을 때 멀리 스크롤하면 고정 열이 함께 밀려 나가던 문제. `.quro-row`가 이제 셀 전체 폭이다 (GS-100). 소비자 조치: 없음
 
 ## 0.5.0-alpha.8 — 2026-11-07
 - Added: `QuroGrid.RowReadOnly` (`Func<object, bool>`) — 앱 함수로 행 전체를 잠근다. 셀 `aria-readonly`, 회색(`quro-row-readonly`, 토큰 `--quro-readonly-bg`), 편집·붙여넣기 거부. 포커스·복사·Button/Image 클릭·행 삭제는 그대로 (A-70, GS-099). 소비자 조치: 없음

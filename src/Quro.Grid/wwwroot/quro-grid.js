@@ -232,6 +232,10 @@ function onMouseDown(s, e) {
         startHeaderDrag(s, header, e);
         return;
     }
+    if (e.target.closest('.quro-row-number')) {
+        e.preventDefault();   // selects nothing and leaves the focus where it is, so an open editor stays open (GS-100)
+        return;
+    }
     const cell = e.target.closest('.quro-body [role=gridcell][data-field]');
     if (!cell) return;
     if (editOnSelect(s)) e.preventDefault();   // the select editor takes the focus, not the grid (A-58)

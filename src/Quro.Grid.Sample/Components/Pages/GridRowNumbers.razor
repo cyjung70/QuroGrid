@@ -1,0 +1,47 @@
+@page "/row-numbers"
+@rendermode InteractiveServer
+@using System.Globalization
+@using Quro.Grid
+@using Quro.Grid.Data
+@using Quro.Grid.Sample.Data
+
+<PageTitle>@L["sample.rownum.title"]</PageTitle>
+
+<h1>@L["sample.rownum.title"]</h1>
+
+@* ShowRowNumbers (GS-100): a display-only number column. Narrow on purpose so it scrolls sideways. ?frozen=1 freezes Name *@
+<div style="width:300px">
+    <QuroGrid @ref="_grid" TItem="SampleProduct" DataSet="_products" Localizer="L" Culture="En" ShowRowNumbers="true"
+              RowNumberHeaderKey="sample.rownum.no" FrozenColumns="Frozen">
+        <QuroColumn Field="Name" HeaderKey="sample.cells.name" Width="120" />
+        <QuroColumn Field="Qty" HeaderKey="sample.editselect.qty" Type="CellType.Number" Format="N0" Width="120" />
+        <QuroColumn Field="Kind" HeaderKey="sample.editselect.kind" Width="120" />
+        <QuroColumn Field="Note" HeaderKey="sample.rownum.note" Width="120" />
+    </QuroGrid>
+</div>
+
+<p>
+    <button type="button" data-testid="add-100" @onclick="AddHundred">@L["sample.rownum.add"]</button>
+</p>
+
+@code {
+    private static readonly SampleLocalizer L = new();
+    private static readonly CultureInfo En = new("en-US", useUserOverride: false);
+    private readonly QuroDataSet<SampleProduct> _products = new();
+    private QuroGrid<SampleProduct>? _grid;
+
+    [SupplyParameterFromQuery(Name = "frozen")] public int Frozen { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _products.Load(
+        [
+            new SampleProduct { Id = 1, Name = "Cherry", Qty = 10m },
+            new SampleProduct { Id = 2, Name = "Apple", Qty = 20m },
+            new SampleProduct { Id = 3, Name = "Banana", Qty = 30m },
+        ]);
+    }
+
+    private Task AddHundred() =>
+        _grid!.ImportRows(["Name"], Enumerable.Range(1, 100).Select(n => new[] { $"N{n}" }).ToList());
+}

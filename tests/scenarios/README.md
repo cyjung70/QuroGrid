@@ -463,3 +463,11 @@ GS-098 — **완료** (2026-11-01 스테이블영 결정 1(a)·2~5 권장안, 6)
 | GS-099 | `RowReadOnly` | Given 화면이 잠근 줄이 있을 때 / When 그리드가 그 줄을 그리면 / Then 셀이 `aria-readonly`이고 회색이다. 기본은 잠금 없음. `BeginEdit`·`OpenPicker`·`CommitEdit`·`ToggleCheck` 거부, `data-edit` 없음, 붙여넣기는 그 행만 `PasteKeys.ReadOnly`. Button 클릭·행 삭제는 동작. 값 변경 없이 잠금만 바뀌면 `Refresh`로 그 행만 다시 그림(`HasChanges` 그대로). 브라우저: 입력·F2·더블클릭 에디터 없음, Tab은 잠긴 행을 건너뜀, Check 클릭·Space 거부, Ctrl+C 동작, `EditOnSelect` 에디터 없음, 잠금이 오면 열린 에디터 닫힘 | bUnit · Playwright | A-70 |
 
 GS-099 — **완료** (2026-11-07 스테이블영 결정 1(a)·2·3, QuroERP 요청 R6).
+
+### 6-9 행 번호 열 (A-71)
+
+| ID | 시나리오 | 기대 결과 | 계층 | 근거 |
+|---|---|---|---|---|
+| GS-100 | `ShowRowNumbers` | Given 줄이 추가·제거되거나 삭제 표시되었을 때 / When 순서가 바뀌면 / Then 행 상태를 바꾸지 않고 번호 열이 갱신된다 (Ctrl+Z 뒤에도). 기본 끔. 첫 칸 `rowheader`(data-field 없음), `aria-colindex`·`aria-colcount` 1 증가. 헤더는 `RowNumberHeaderKey` 또는 빈 칸. 정렬·필터·그룹 뒤 1..N, 그룹 머리·소계 행은 빈 칸, 접힌 행 제외. 보이는 삭제 표시 행은 번호 유지. 페이징은 절대 위치. 폭은 그리드 변수 하나(최소 2자리), 자릿수가 늘어도 행을 다시 그리지 않음. 고정 열은 번호 열 뒤. 내보내기 열 변화 없음. 브라우저: Insert·Ctrl+Delete·Ctrl+Z 뒤 번호 갱신, 클릭은 아무것도 선택하지 않고 열린 에디터 유지, 화살표·Tab이 건너뜀, 복사에서 빠짐, 끝까지 가로 스크롤해도 번호·고정 열 유지, 키보드 이동 셀이 번호 열에 가려지지 않음, 세 자리 잘리지 않음 | bUnit · Playwright | A-71 |
+
+GS-100 — **완료** (2026-11-07 스테이블영 결정 4·5(a)·6, QuroERP 요청 R7).

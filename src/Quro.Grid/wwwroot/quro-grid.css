@@ -30,6 +30,7 @@
     display: inline-block;
     overflow: auto;
     max-width: 100%;
+    scroll-padding-left: var(--qg-row-number-width, 0px);   /* keyboard scrolling stops clear of the sticky number column */
     border: 1px solid var(--qg-border);
     background: var(--qg-bg);
     color: var(--qg-text);
@@ -37,6 +38,7 @@
 
 .quro-row {
     display: flex;
+    width: max-content;   /* as wide as its cells: a sticky cell cannot leave its row, so a narrower row lets frozen cells scroll away */
 }
 
 /* 드래그 범위 선택 중 글자 선택이 생기지 않도록 */
@@ -83,6 +85,17 @@
    before the tones and marks so Highlight, errors and warnings still show */
 :where(.quro-row-readonly) .quro-cell {
     background: var(--qg-readonly-bg);
+}
+
+/* Row number column (ShowRowNumbers, GS-100). The width variable is set on the root by the grid.
+   After the read-only rule with the same specificity: the gutter stays the header color on a locked row */
+.quro-row-number {
+    left: 0;
+    width: var(--qg-row-number-width);
+    background: var(--qg-head-bg);
+    color: var(--qg-label);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
 }
 
 /* CellStyle tones (A-59). Before the marks so an error or warning background wins over Highlight */

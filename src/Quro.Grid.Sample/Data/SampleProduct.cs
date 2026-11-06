@@ -21,4 +21,7 @@ public sealed class SampleProduct
 
     /// <summary>Check cell (row read-only sample, GS-099).</summary>
     public bool Active { get; set; }
+
+    /// <summary>Free text (row number sample, GS-100).</summary>
+    public string? Note { get; set; }
 }

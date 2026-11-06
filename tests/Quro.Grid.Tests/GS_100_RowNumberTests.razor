@@ -1,0 +1,251 @@
+@inherits GridTestContext
+
+@code {
+    // GS-100: ShowRowNumbers (QuroERP request R7) — a display-only number column, 1..N in screen order. It is not a QuroColumn
+    // or a DataSet field, so it never changes row state and stays out of copy, paste and export. It renumbers on add, delete,
+    // sort, filter, grouping and Undo. A deleted row that is shown keeps its number. Paged grids show the absolute position.
+
+    public sealed class Line
+    {
+        public int Id { get; set; }
+        public string? Name { get; set; }
+        public decimal Qty { get; set; }
+        public string? Unit { get; set; }
+    }
+
+    private static readonly CultureInfo En = new("en-US", useUserOverride: false);
+    private int _toneCalls;
+
+    private static QuroDataSet<Line> Lines(params string[] names)
+    {
+        var ds = new QuroDataSet<Line>();
+        ds.Load(names.Select((n, i) => new Line { Id = i + 1, Name = n, Qty = i + 1, Unit = i < 2 ? "EA" : "BOX" }));
+        return ds;
+    }
+
+    private static QuroDataSet<Line> Three() => Lines("Cherry", "Apple", "Banana");
+
+    private IRenderedComponent<QuroGrid<Line>> RenderGrid(QuroDataSet<Line> ds, bool show = true, string? headerKey = null,
+        DeletedRowDisplay deleted = DeletedRowDisplay.Hide, int frozen = 0, bool footer = false) =>
+        Render<QuroGrid<Line>>(@<QuroGrid DataSet="ds" Culture="En" ShowRowNumbers="show" RowNumberHeaderKey="@headerKey"
+                                          DeletedRows="deleted" FrozenColumns="frozen" ShowFooter="footer">
+                                   <QuroColumn Field="Name" HeaderKey="line.name" Width="100" CellStyle="Tone" />
+                                   <QuroColumn Field="Qty" HeaderKey="line.qty" Type="CellType.Number" Width="60" Aggregate="Aggregate.Sum" />
+                                   <QuroColumn Field="Unit" HeaderKey="line.unit" Width="60" />
+                               </QuroGrid>);
+
+    private CellTone Tone(object item, object? value)
+    {
+        _toneCalls++;
+        return CellTone.None;
+    }
+
+    private static string[] Numbers(IRenderedComponent<QuroGrid<Line>> cut) =>
+        cut.FindAll("[role=rowheader]").Select(c => c.TextContent.Trim()).ToArray();
+
+    private static string[] Names(IRenderedComponent<QuroGrid<Line>> cut) =>
+        cut.FindAll("[role=gridcell][data-field=Name]").Select(c => c.TextContent.Trim()).ToArray();
+
+    /// <summary>GS-100: off by default: nothing is drawn and columns keep their ARIA positions</summary>
+    [Fact]
+    public void GS_100_Default_Off()
+    {
+        var cut = RenderGrid(Three(), show: false);
+
+        Assert.False(new QuroGrid<Line>().ShowRowNumbers);
+        Assert.Null(new QuroGrid<Line>().RowNumberHeaderKey);
+        Assert.Empty(cut.FindAll(".quro-row-number"));
+        Assert.Equal("3", cut.Find("[role=grid]").GetAttribute("aria-colcount"));
+        Assert.Equal("1", cut.Find("[role=gridcell][data-field=Name]").GetAttribute("aria-colindex"));
+        Assert.Null(cut.Find("[role=grid]").GetAttribute("style"));
+    }
+
+    /// <summary>GS-100: a leading rowheader cell without data-field, so the browser's selection and clipboard never see it</summary>
+    [Fact]
+    public void GS_100_Numbers_LeadingCell_ShiftsAria()
+    {
+        var cut = RenderGrid(Three());
+
+        Assert.Equal(["1", "2", "3"], Numbers(cut));
+        var first = cut.Find("[role=row][data-row] > :first-child");
+        Assert.Equal("rowheader", first.GetAttribute("role"));
+        Assert.Equal("1", first.GetAttribute("aria-colindex"));
+        Assert.Null(first.GetAttribute("data-field"));
+        Assert.Equal("4", cut.Find("[role=grid]").GetAttribute("aria-colcount"));
+        Assert.Equal("2", cut.Find("[role=gridcell][data-field=Name]").GetAttribute("aria-colindex"));
+        Assert.Equal("2", cut.Find("[role=columnheader][data-field=Name]").GetAttribute("aria-colindex"));
+    }
+
+    /// <summary>GS-100: the header is empty unless the app gives a resource key; it is not a sortable or resizable column</summary>
+    [Fact]
+    public void GS_100_Header_OptionalKey()
+    {
+        var empty = RenderGrid(Three()).Find(".quro-head .quro-row-number");
+        Assert.Equal("", empty.TextContent.Trim());
+        Assert.Null(empty.GetAttribute("data-field"));
+        Assert.Empty(empty.QuerySelectorAll(".quro-resize"));
+
+        Assert.Equal("line.no", RenderGrid(Three(), headerKey: "line.no").Find(".quro-head .quro-row-number").TextContent.Trim());
+    }
+
+    /// <summary>GS-100 (R7 request): add, delete and Undo renumber; showing numbers changes no row state</summary>
+    [Fact]
+    public async Task GS_100_AddDeleteUndo_Renumbers_NoRowStateChange()
+    {
+        var ds = Three();
+        var cut = RenderGrid(ds);
+        Assert.False(ds.HasChanges);
+        var (first, second, third) = (ds.RowKeys[0], ds.RowKeys[1], ds.RowKeys[2]);
+
+        await cut.InvokeAsync(() => cut.Instance.AddRow(afterRowKey: first));
+        Assert.Equal(["1", "2", "3", "4"], Numbers(cut));
+        Assert.Equal(["Cherry", "", "Apple", "Banana"], Names(cut));
+
+        await cut.InvokeAsync(() => cut.Instance.DeleteRows([second]));
+        Assert.Equal(["1", "2", "3"], Numbers(cut));
+        Assert.Equal(["Cherry", "", "Banana"], Names(cut));
+        Assert.Equal(RowState.Deleted, ds.GetState(second));
+        Assert.Equal(RowState.Normal, ds.GetState(third));
+
+        Assert.True(await cut.InvokeAsync(() => cut.Instance.Undo()));     // the delete comes back
+        Assert.Equal(["1", "2", "3", "4"], Numbers(cut));
+        Assert.Equal(RowState.Normal, ds.GetState(second));
+
+        Assert.True(await cut.InvokeAsync(() => cut.Instance.Undo()));     // the add goes away
+        Assert.Equal(["1", "2", "3"], Numbers(cut));
+        Assert.Equal(["Cherry", "Apple", "Banana"], Names(cut));
+        Assert.False(ds.HasChanges);
+    }
+
+    /// <summary>GS-100: numbers follow the screen, not the row: sorting and filtering keep 1..N from the top</summary>
+    [Fact]
+    public async Task GS_100_SortAndFilter_ScreenOrder()
+    {
+        var cut = RenderGrid(Three());
+
+        await cut.InvokeAsync(() => cut.Instance.SetSort([new SortColumn("Name", SortDirection.Ascending)]));
+        Assert.Equal(["Apple", "Banana", "Cherry"], Names(cut));
+        Assert.Equal(["1", "2", "3"], Numbers(cut));
+
+        await cut.InvokeAsync(() => cut.Instance.SetFilters([new ColumnFilter("Unit") { Contains = "EA" }]));
+        Assert.Equal(["Apple", "Cherry"], Names(cut));
+        Assert.Equal(["1", "2"], Numbers(cut));
+    }
+
+    /// <summary>GS-100: group head and subtotal rows are not counted but keep the column aligned; collapsed rows drop out</summary>
+    [Fact]
+    public async Task GS_100_Grouping_CountsDataRowsOnly()
+    {
+        var cut = RenderGrid(Three());
+
+        await cut.InvokeAsync(() => cut.Instance.SetGroupBy(["Unit"]));
+        Assert.Equal(["1", "2", "3"], Numbers(cut));   // BOX: Banana · EA: Cherry, Apple
+        Assert.Equal(["Banana", "Cherry", "Apple"], Names(cut));
+        Assert.All(cut.FindAll(".quro-group-head-row, .quro-subtotal-row"), row =>
+        {
+            var lead = row.QuerySelector(":scope > .quro-row-number");
+            Assert.NotNull(lead);
+            Assert.Equal("", lead!.TextContent.Trim());
+        });
+
+        var box = cut.FindAll(".quro-group-head-row")[0].GetAttribute("data-group")!;
+        await cut.InvokeAsync(() => cut.Instance.ExpandGroup(box, false));
+        Assert.Equal(["Cherry", "Apple"], Names(cut));
+        Assert.Equal(["1", "2"], Numbers(cut));
+    }
+
+    /// <summary>GS-100: a deleted row keeps a number when it is shown (decision 5(a)) and drops out when it is hidden</summary>
+    [Fact]
+    public async Task GS_100_DeletedRows_ShownKeepNumber()
+    {
+        var ds = Three();
+        var cut = RenderGrid(ds, deleted: DeletedRowDisplay.Strikethrough);
+
+        await cut.InvokeAsync(() => cut.Instance.DeleteRows([ds.RowKeys[1]]));
+
+        Assert.Equal(["1", "2", "3"], Numbers(cut));
+        Assert.Equal("2", cut.Find(".quro-deleted [role=rowheader]").TextContent.Trim());
+    }
+
+    /// <summary>GS-100: paged grids show the absolute position; an added row is at the top and shifts the rest</summary>
+    [Fact]
+    public async Task GS_100_Paging_AbsolutePosition()
+    {
+        var all = Enumerable.Range(1, 150).Select(n => new Line { Id = n, Name = $"N{n}" }).ToArray();
+        var ds = new QuroDataSet<Line>(l => l.Id);
+        Func<GridItemsRequest, Task<GridItemsResult<Line>>> provide = r =>
+            Task.FromResult(new GridItemsResult<Line>(all.Skip(r.StartIndex).Take(r.Count).Select(l => new Line { Id = l.Id, Name = l.Name }).ToList(), all.Length));
+        var cut = Render<QuroGrid<Line>>(@<QuroGrid DataSet="ds" ItemsProvider="provide" PageSize="100" Culture="En" ShowRowNumbers="true">
+                                            <QuroColumn Field="Name" HeaderKey="line.name" />
+                                        </QuroGrid>);
+
+        cut.WaitForAssertion(() => Assert.Equal("100", Numbers(cut)[99]));
+        Assert.Contains("calc(3 *", cut.Find("[role=grid]").GetAttribute("style"));   // 150 rows: three digits
+
+        await cut.InvokeAsync(() => cut.Instance.AddRow());
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("", Names(cut)[0]);
+            Assert.Equal("1", Numbers(cut)[0]);
+            Assert.Equal("N1", Names(cut)[1]);
+            Assert.Equal("2", Numbers(cut)[1]);
+        });
+    }
+
+    /// <summary>GS-100: the width follows the digit count through one root variable, so a longer count redraws no row (R4)</summary>
+    [Fact]
+    public async Task GS_100_Width_FollowsDigits_ThroughRootVariable()
+    {
+        var ds = Lines(Enumerable.Range(1, 99).Select(n => $"N{n}").ToArray());
+        var cut = RenderGrid(ds);
+        Assert.Contains("--qg-row-number-width:calc(2 *", cut.Find("[role=grid]").GetAttribute("style"));
+
+        _toneCalls = 0;
+        await cut.InvokeAsync(() => cut.Instance.AddRow());
+
+        Assert.Contains("--qg-row-number-width:calc(3 *", cut.Find("[role=grid]").GetAttribute("style"));
+        Assert.Equal(1, _toneCalls);   // only the new row at the end
+        Assert.Null(cut.Find("[role=rowheader]").GetAttribute("style"));
+
+        Assert.Contains("calc(2 *", RenderGrid(Three()).Find("[role=grid]").GetAttribute("style"));   // never narrower than two digits
+    }
+
+    /// <summary>GS-100: frozen columns start after the number column; without numbers they keep plain pixels</summary>
+    [Fact]
+    public void GS_100_Frozen_ShiftsAfterNumberColumn()
+    {
+        var cut = RenderGrid(Three(), frozen: 2);
+
+        Assert.Contains("left:calc(var(--qg-row-number-width) + 0px)", cut.Find("[role=gridcell][data-field=Name]").GetAttribute("style"));
+        Assert.Contains("left:calc(var(--qg-row-number-width) + 100px)", cut.Find("[role=columnheader][data-field=Qty]").GetAttribute("style"));
+        Assert.Contains("quro-frozen", cut.Find("[role=rowheader]").ClassList);
+
+        Assert.Contains("left:100px", RenderGrid(Three(), show: false, frozen: 2).Find("[role=gridcell][data-field=Qty]").GetAttribute("style")!.Replace(" ", ""));
+    }
+
+    /// <summary>GS-100: the footer keeps the column aligned; export gets the same columns as without numbers</summary>
+    [Fact]
+    public void GS_100_Footer_Aligned_ExportUnchanged()
+    {
+        var cut = RenderGrid(Three(), footer: true);
+
+        Assert.Equal("", cut.Find(".quro-foot .quro-row-number").TextContent.Trim());
+        Assert.Equal(["Name", "Qty", "Unit"], cut.Instance.GetExportRequest().Columns.Select(c => c.Field));
+    }
+
+    /// <summary>GS-100: turning the option on redraws the rows; the look uses the existing tokens</summary>
+    [Fact]
+    public void GS_100_Toggle_Redraws_Css()
+    {
+        var cut = RenderGrid(Three(), show: false);
+        Assert.Empty(cut.FindAll("[role=rowheader]"));
+
+        cut.Render(p => p.Add(g => g.ShowRowNumbers, true));
+        Assert.Equal(["1", "2", "3"], Numbers(cut));
+
+        var css = File.ReadAllText(Path.Combine(GS_080_ThemeTokenTests.Root(), "src", "Quro.Grid", "wwwroot", "quro-grid.css"));
+        Assert.Matches(@"\.quro-row-number \{[^}]*width:\s*var\(--qg-row-number-width\)", css);
+        Assert.Matches(@"scroll-padding-left:\s*var\(--qg-row-number-width, 0px\)", css);
+    }
+}
