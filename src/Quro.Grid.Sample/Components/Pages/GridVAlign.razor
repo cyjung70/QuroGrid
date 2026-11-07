@@ -16,7 +16,7 @@
     <QuroColumn Field="Name" HeaderKey="sample.cells.name" Width="120" />
     <QuroColumn Field="Kind" HeaderKey="sample.editselect.kind" Width="100" VAlign="ColumnVAlign.Top" />
     <QuroColumn Field="Note" HeaderKey="sample.rownum.note" Width="100" VAlign="ColumnVAlign.Middle" />
-    <QuroColumn Field="Qty" HeaderKey="sample.editselect.qty" Type="CellType.Number" Format="N0" Width="100" Aggregate="Aggregate.Sum" VAlign="ColumnVAlign.Bottom" />
+    <QuroColumn Field="Qty" HeaderKey="sample.editselect.qty" Type="CellType.Number" Format="N0" Width="100" Aggregate="@(Blank ? Aggregate.Count : Aggregate.Sum)" VAlign="ColumnVAlign.Bottom" />
     <QuroColumn Field="Active" HeaderKey="sample.rowlock.active" Type="CellType.Check" Width="80" VAlign="ColumnVAlign.Middle" />
 </QuroGrid>
 
@@ -24,6 +24,8 @@
     private static readonly SampleLocalizer L = new();
     private static readonly CultureInfo En = new("en-US", useUserOverride: false);
     private readonly QuroDataSet<SampleProduct> _products = new(p => p.Id);
+
+    [SupplyParameterFromQuery(Name = "blank")] public bool Blank { get; set; }
 
     private static Task<GridItemsResult<SampleProduct>> Provide(GridItemsRequest request)
     {
