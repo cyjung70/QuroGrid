@@ -55,6 +55,14 @@ public sealed class QuroColumn : ComponentBase, IDisposable
     /// </summary>
     [Parameter] public ColumnVAlign? VAlign { get; set; }
 
+    /// <summary>
+    /// Draws a value equal to the one above as blank, with no line between them (A-78). Display only: each cell keeps its value for
+    /// editing, selection, copy and screen readers. The active cell, a selected range and an open editor show the value. Compares the
+    /// shown text and never merges blanks. A run ends at a change in a merged column to the left, a deleted row, a marked cell and a
+    /// group head or subtotal. No effect on Check, Button and Image columns, or on paged and tree grids.
+    /// </summary>
+    [Parameter] public bool MergeRepeated { get; set; }
+
     /// <summary>열 너비 (px).</summary>
     [Parameter] public int Width { get; set; } = 120;
 
@@ -156,7 +164,7 @@ public sealed class QuroColumn : ComponentBase, IDisposable
     {
         object now = (Field, HeaderKey, Type, Format, ReadOnly, Width, Aggregate, CurrencyField, Required, Min, Max,
             (Lookup, Options, CheckedValue, UncheckedValue, TextKey), (NewRowOnly, Filterable, Sortable, Groupable),
-            (Compute, CellStyle, Align, VAlign), (OptionsSource, ValueField, TextField, FilterField, ParentField), Mask);
+            (Compute, CellStyle, Align, VAlign, MergeRepeated), (OptionsSource, ValueField, TextField, FilterField, ParentField), Mask);
         if (_rendered is not null && !Equals(now, _rendered))
         {
             CheckCodeSource();

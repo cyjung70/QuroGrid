@@ -1,7 +1,7 @@
 # QuroGrid Spec v1 보완 문서 (Addendum A)
 
 - 대상: `docs/QuroGrid_FeatureMatrix_Spec_v1.pdf` (Spec v1 초안 Draft v0.2, 2026-10-28 — 4.9·5장 본문 개정)
-- 문서 상태: A.42 (2026-11-07) · 스테이블영 결정 사항 반영
+- 문서 상태: A.43 (2026-11-07) · 스테이블영 결정 사항 반영
 - 이 문서는 Spec v1의 일부입니다. **아래 항목은 Spec 본문보다 우선합니다.** 본문에 없는 내용은 "보완", 본문과 다른 내용은 "변경"으로 표시합니다.
 
 ---
@@ -87,6 +87,7 @@
 | A-75 | Control Spec 2-5, A-50 | 결정 | **DataSet `LoadAsync(http, url)`·`Clear()` (GS-107, 2026-11-07 스테이블영 결정 1~9 권장안).** ① GET, 최상위 JSON 행 배열만. 감싼 형식은 앱이 가져와 `Load` ② `Task<LoadResult>`(`Status`·`StatusCode`·`RowCount`). 2xx 아님 `Failed`, 배열 아님 `Invalid`, 네트워크 오류·취소는 `SaveAsync`처럼 예외 ③ 실패하면 행·변경분·Undo 유지, 응답을 다 읽은 뒤에만 교체 ④ 성공하면 `Load`처럼 변경분을 버리고 확인은 앱이 `HasChanges`로 ⑤ 겹치면 가장 나중 호출이 이기고 이전 응답은 `Superseded` (`Load`·`Clear`도 이전 응답을 무효로 함) ⑥ JSON은 웹 기본값, 옵션 파라미터 없음 ⑦ `Clear()` = `Load([])`, 새 이벤트 없음 ⑧ `QuroDataSet<T>`에만, `IQuroDataSet`에 두지 않음 ⑨ 페이징 그리드는 `ReloadAsync()` (A-24), `IsLoading` 없음 | 2026-11-07 |
 | A-76 | Control Spec 2-13·3-9, A-50 | 결정 | **`Aggregate.Count`·`Avg`·`Min`·`Max`와 DataSet 집계 함수 (GS-108, 2026-11-07 스테이블영 결정 1~10 권장안).** ① 열거형에 추가, `QuroColumn.Aggregate`로 사용, `ExportColumn.Aggregate`에도 실림(내보내기 서버 코드 처리 필요) ② `Count`는 값이 있는 행(null·빈 글자 제외) ③ `Avg`는 빈 값을 건너뜀 ④ `Count`는 모든 열, `Avg`는 숫자, `Min`·`Max`는 숫자·날짜, 맞지 않으면 예외 없이 빈칸. `Sum`은 그대로 ⑤ 값이 없으면 `Count` 0, `Avg`·`Min`·`Max` 빈칸, `Sum` 0 ⑥ `Avg`·`Min`·`Max`는 열 서식, `Count`는 정수, 값만 표시(라벨·툴팁·`AggregateFormat` 없음) ⑦ 소계는 열의 집계를 쓰고 집계 열이 하나라도 있으면 소계 행 표시, 대상 행은 `Sum`과 같음 ⑧ 페이징 그리드에서 새 집계는 빈칸, `Sum`은 서버 합계 ⑨ `QuroDataSet<T>`에 `Sum`·`Count`·`Average`·`Min`·`Max`(같은 규칙, 삭제 행 제외, 필터·계산 열 모름). 열거형은 `Quro.Grid`에 유지 ⑩ TOON은 `sum` 유지, 새 키는 v0.3. 구현 세부: `Button` 열은 바인딩 값이 없어 `Count`도 빈칸. `Combo`·`Check`·`Popup`·`Mask`·`Image` 값은 수량이 아니어서 `Avg`·`Min`·`Max` 빈칸 | 2026-11-07 |
 | A-77 | Control Spec 3-2, A-50, A-72 | 결정 | **`QuroColumn.VAlign` 셀 세로 정렬 (GS-109, 2026-11-07 스테이블영 결정 1~6 권장안).** A-72가 범위 밖으로 둔 세로 정렬을 추가한다. ① `ColumnVAlign?`(`Top`·`Middle`·`Bottom`, `Quro.Grid.Definition`), 클래스 `quro-valign-middle`·`quro-valign-bottom` ② null은 지금의 위쪽 정렬, 기존 화면 변경 없음 ③ 본문·합계·소계 셀과 열린 에디터. 헤더는 그대로 ④ 행 높이는 바꾸지 않는다. 일반 그리드의 행은 내용만큼 높고 `RowHeight`는 페이징 행만 정하므로 글자보다 높은 행에서만 보임을 문서화 ⑤ CSS `align-content`(셀을 블록으로 유지해 `...`와 `text-align` 보존), 지원하지 않는 브라우저는 위쪽 ⑥ TOON 키는 v0.3 | 2026-11-07 |
+| A-78 | Control Spec 3-11, A-50 | 결정 | **`QuroColumn.MergeRepeated` 같은 값 합쳐 보이기 (GS-110, 2026-11-07 스테이블영 결정 1~9 권장안).** 표시만 합치며 v1 제외인 본문 셀 병합(Control Spec 7-11)이 아니다. ① 열 파라미터 `bool`, 기본 끔 ② 바로 위아래 행의 보이는 글자로 비교, 빈 값은 합치지 않음 ③ 왼쪽 합침 열이 바뀌면 묶음이 끝남 ④ 현재 셀·선택 범위·열린 에디터는 값을 보임. 오류·경고 표시 셀과 삭제 표시 행은 값을 보이고 묶음을 끊음 ⑤ `Text`·`Number`·`Currency`·`Date`·`Combo`·`Popup`·`Mask`·`Label`. `Check`·`Button`·`Image`는 효과 없음, `Compute`는 보이는 글자 ⑥ 복사·붙여넣기·정렬·필터·스크린 리더는 실제 값(글자는 CSS로만 숨김), `ExportColumn` 변경 없음 ⑦ 그룹 머리·소계에서 묶음이 끝남. 페이징·트리 그리드는 무시 ⑧ 스크롤로 첫 행이 사라지면 비어 보일 수 있음을 수용, 스크롤 추적 없음 ⑨ TOON 키는 v0.3 | 2026-11-07 |
 
 ## 2. 이벤트 API 보완 (4.10)
 

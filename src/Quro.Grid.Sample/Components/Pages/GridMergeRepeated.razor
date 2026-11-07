@@ -1,0 +1,39 @@
+@page "/merge-repeated"
+@rendermode InteractiveServer
+@using System.Globalization
+@using Quro.Grid
+@using Quro.Grid.Data
+@using Quro.Grid.Sample.Data
+
+<PageTitle>@L["sample.merge.title"]</PageTitle>
+
+<h1>@L["sample.merge.title"]</h1>
+
+@* MergeRepeated (GS-110): repeated values look blank, but every cell stays and keeps its value *@
+<QuroGrid TItem="SampleProduct" DataSet="_products" Localizer="L" Culture="En" EditOnSelect="Select" DeletedRows="DeletedRowDisplay.Strikethrough">
+    <QuroColumn Field="Kind" HeaderKey="sample.editselect.kind" Width="120" MergeRepeated="true" />
+    <QuroColumn Field="Name" HeaderKey="sample.cells.name" Width="120" MergeRepeated="true" />
+    <QuroColumn Field="Qty" HeaderKey="sample.editselect.qty" Type="CellType.Number" Format="N0" Width="100" />
+</QuroGrid>
+
+@code {
+    private static readonly SampleLocalizer L = new();
+    private static readonly CultureInfo En = new("en-US", useUserOverride: false);
+    private readonly QuroDataSet<SampleProduct> _products = new();
+
+    [SupplyParameterFromQuery(Name = "select")] public bool Select { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _products.Load(
+        [
+            new SampleProduct { Id = 1, Kind = "Fruit", Name = "Apple", Qty = 3m },
+            new SampleProduct { Id = 2, Kind = "Fruit", Name = "Apple", Qty = 5m },
+            new SampleProduct { Id = 3, Kind = "Fruit", Name = "Pear", Qty = 2m },
+            new SampleProduct { Id = 4, Kind = "Veg", Name = "Pear", Qty = 7m },
+            new SampleProduct { Id = 5, Kind = "Veg", Name = "Onion", Qty = 1m },
+            new SampleProduct { Id = 6, Kind = "Veg", Qty = 4m },
+            new SampleProduct { Id = 7, Kind = "Veg", Qty = 6m },
+        ]);
+    }
+}

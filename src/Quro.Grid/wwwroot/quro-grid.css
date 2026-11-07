@@ -207,6 +207,12 @@
 .quro-tone-highlight { background: var(--qg-tone-highlight); }
 .quro-tone-bold { font-weight: 600; }
 
+/* MergeRepeated (GS-110). The text stays in the cell for copy, editors and screen readers. Two classes so it beats a tone's color;
+   the active cell and a selected range have aria-selected and show their value */
+.quro-cell.quro-merge-repeat:not([aria-selected=true]) { color: transparent; }
+.quro-merge-repeat .quro-editor { color: var(--qg-text); }
+.quro-cell.quro-merge-continues { border-bottom-color: transparent; }
+
 .quro-mark-error {
     background: var(--qg-error);
     box-shadow: inset 0 0 0 1px var(--qg-error-line);

@@ -70,6 +70,7 @@ public sealed class SampleLocalizer : IStringLocalizer
         ["sample.tree.expand"] = ("모두 펼치기", "Expand all"),
         ["sample.tree.collapse"] = ("모두 접기", "Collapse all"),
         ["sample.valign.title"] = ("세로 정렬", "Vertical alignment"),
+        ["sample.merge.title"] = ("같은 값 합쳐 보이기", "Merge repeated values"),
         ["sample.rowstate.title"] = ("행 상태", "Row state"),
         ["sample.rowstate.accept"] = ("변경 확정", "Accept changes"),
         ["quro.rowstate.inserted"] = ("신규", "New"),
