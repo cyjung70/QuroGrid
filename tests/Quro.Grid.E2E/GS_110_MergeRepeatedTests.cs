@@ -130,11 +130,12 @@ public class GS_110_MergeRepeatedTests(SampleServer server) : PageTest
         await Expect(Cell(2, "Name")).ToHaveCSSAsync("color", Transparent);
 
         await Cell(1, "Name").DblClickAsync();
+        await Expect(Cell(1, "Name").Locator("input.quro-editor")).ToBeFocusedAsync();
         await Page.Keyboard.PressAsync("Control+a");
         await Page.Keyboard.TypeAsync("Plum");
         await Page.Keyboard.PressAsync("Tab");
 
-        await Expect(Cell(1, "Name")).ToContainTextAsync("Plum");
+        await Expect(Cell(1, "Name")).ToHaveTextAsync("Plum");
         await Expect(Cell(2, "Name")).Not.ToHaveCSSAsync("color", Transparent);
     }
 

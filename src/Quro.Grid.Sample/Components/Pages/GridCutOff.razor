@@ -1,0 +1,46 @@
+@page "/cut-off"
+@rendermode InteractiveServer
+@using System.Globalization
+@using Quro.Grid
+@using Quro.Grid.Data
+@using Quro.Grid.Sample.Data
+
+<PageTitle>@L["sample.cutoff.title"]</PageTitle>
+
+<h1>@L["sample.cutoff.title"]</h1>
+
+@* Tooltip for cut-off text (GS-111): quro-grid.js sets it while the pointer is on the cell. Narrow on purpose *@
+<QuroGrid @ref="_grid" TItem="SampleProduct" DataSet="_products" Localizer="L" Culture="En" ShowFooter="true" ShowRowNumbers="true">
+    <QuroColumn Field="Name" HeaderKey="sample.cells.name" Width="@(Wide ? 500 : 100)" />
+    <QuroColumn Field="Note" HeaderKey="sample.rownum.note" Width="80" MergeRepeated="true" />
+    <QuroColumn Field="Qty" HeaderKey="sample.editselect.qty" Type="CellType.Number" Format="N2" Width="60" Aggregate="Aggregate.Sum" />
+    <QuroColumn Field="Kind" HeaderKey="sample.cutoff.kind" Type="CellType.Combo" Options="Kinds" Width="80" />
+    <QuroColumn Field="Active" HeaderKey="sample.rowlock.active" Type="CellType.Check" Width="70" />
+    <QuroColumn Field="Go" HeaderKey="sample.rowlock.go" Type="CellType.Button" TextKey="sample.cutoff.kind" Width="50" />
+</QuroGrid>
+
+<p>
+    <button type="button" data-testid="group" @onclick="@(() => _grid.SetGroupBy(["Note"]))">@L["sample.cutoff.group"]</button>
+</p>
+
+@code {
+    private static readonly SampleLocalizer L = new();
+    private static readonly CultureInfo En = new("en-US", useUserOverride: false);
+    private static readonly ComboOption[] Kinds = [new("A", "A rather long option name")];
+    private readonly QuroDataSet<SampleProduct> _products = new();
+    private QuroGrid<SampleProduct> _grid = default!;
+
+    [SupplyParameterFromQuery(Name = "wide")] public bool Wide { get; set; }
+
+    protected override void OnInitialized()
+    {
+        const string longName = "A very long product name that is cut off";
+        _products.Load(
+        [
+            new SampleProduct { Id = 1, Name = longName, Note = "ok", Qty = 1234567m, Kind = "A" },
+            new SampleProduct { Id = 2, Name = "Pear", Note = "ok", Qty = 3m, Kind = "A" },
+            new SampleProduct { Id = 3, Name = longName, Note = "other", Qty = 20m, Kind = "A" },
+        ]);
+        _products.SetCellMark(_products.RowKeys[2], "Name", new CellMark(CellMarkLevel.Warning, "sample.cutoff.warning"));
+    }
+}

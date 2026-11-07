@@ -31,6 +31,8 @@ export function init(root, dotnet, options) {
     s.onDblClick = e => onDblClick(s, e);
     s.onFocusOut = e => onFocusOut(s, e);
     s.onMouseMove = e => onMouseMove(s, e);
+    s.onMouseOver = e => updateCutOffTip(s, e.target);
+    s.onMouseLeave = () => clearCutOffTip(s);
     s.onMouseUp = () => { s.dragging = false; };
     s.onCopy = e => onCopy(s, e);
     s.onScroll = () => { placePicker(s); placeFilter(s); updateScrollButtons(s); };
@@ -44,6 +46,8 @@ export function init(root, dotnet, options) {
     root.addEventListener('compositionend', s.onInput);
     root.addEventListener('mousedown', s.onMouseDown);
     root.addEventListener('mousemove', s.onMouseMove);
+    root.addEventListener('mouseover', s.onMouseOver);
+    root.addEventListener('mouseleave', s.onMouseLeave);
     root.addEventListener('dblclick', s.onDblClick);
     root.addEventListener('focusout', s.onFocusOut);
     // 포커스된 div에는 copy·paste 이벤트가 오지 않을 수 있어 문서에서 받고 그리드 포커스 여부로 거른다
@@ -73,6 +77,8 @@ export function dispose(root) {
     root.removeEventListener('dblclick', s.onDblClick);
     root.removeEventListener('focusout', s.onFocusOut);
     root.removeEventListener('mousemove', s.onMouseMove);
+    root.removeEventListener('mouseover', s.onMouseOver);
+    root.removeEventListener('mouseleave', s.onMouseLeave);
     document.removeEventListener('mouseup', s.onMouseUp);
     document.removeEventListener('mousedown', s.onDocMouseDown, true);
     document.removeEventListener('copy', s.onCopy);
@@ -1080,6 +1086,48 @@ async function addRow(s, afterRow, child = false) {
     if (!row) return;
     const first = cellsOf(row).find(editable);
     if (first) activate(s, key, first.dataset.field);
+}
+
+// ── Tooltip for cut-off text (GS-111, A-79): browser only, no server call ──
+
+const CUT_OFF_CELLS = '.quro-body-cell,.quro-footer,.quro-subtotal,.quro-header';
+const NO_CUT_OFF_TIP_CELLS = '.quro-row-number,.quro-row-state';
+const NO_CUT_OFF_TIP_CONTENT = '.quro-editor,.quro-check,.quro-button,.quro-image';
+
+/** Sets the title while the pointer is on the cell. A title the server rendered is a mark's message, which wins. */
+function updateCutOffTip(s, target) {
+    const cell = target.closest?.(CUT_OFF_CELLS) ?? null;
+    if (cell === s.tip?.cell) return;
+    clearCutOffTip(s);
+    if (!cell || cell.hasAttribute('title') || cell.matches(NO_CUT_OFF_TIP_CELLS) || cell.querySelector(NO_CUT_OFF_TIP_CONTENT)) return;
+
+    const text = cell.textContent.trim();
+    if (!text || !(cell.classList.contains('quro-merge-repeat') || isCutOff(cell))) return;
+    cell.title = text;
+    s.tip = { cell, text };
+}
+
+function clearCutOffTip(s) {
+    // a title that differs now came from the server: a mark added while the pointer was here
+    if (s.tip?.cell.title === s.tip?.text) s.tip?.cell.removeAttribute('title');
+    s.tip = null;
+}
+
+/** Measures the text itself: scrollWidth rounds, and misses text that overflows by less than a pixel. */
+function isCutOff(cell) {
+    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+    const range = document.createRange();
+    let found = false;
+    while (walker.nextNode()) {
+        if (!walker.currentNode.nodeValue.trim()) continue;
+        if (!found) range.setStartBefore(walker.currentNode);
+        range.setEndAfter(walker.currentNode);
+        found = true;
+    }
+    if (!found) return false;
+    const style = getComputedStyle(cell);
+    const edge = cell.getBoundingClientRect().right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight);
+    return range.getBoundingClientRect().right > edge + 0.01;
 }
 
 /**
