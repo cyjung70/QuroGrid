@@ -1,0 +1,135 @@
+@inherits GridTestContext
+@using Quro.Grid.Definition
+
+@code {
+    // GS-109: vertical cell alignment (A-77, Control Spec 3-2). QuroColumn.VAlign sets a class on the column's body, footer and subtotal
+    // cells. Null and Top have no class, so today's top alignment stays. Headers and the row number and state columns aren't affected.
+
+    public sealed class Line
+    {
+        public string? Name { get; set; }
+        public string? Kind { get; set; }
+        public decimal Qty { get; set; }
+    }
+
+    private const string Middle = "quro-valign-middle";
+    private const string Bottom = "quro-valign-bottom";
+
+    private static readonly CultureInfo En = new("en-US", useUserOverride: false);
+
+    private ColumnVAlign? _changing;
+
+    private static QuroDataSet<Line> Lines()
+    {
+        var ds = new QuroDataSet<Line>();
+        ds.Load([new Line { Name = "Apple", Kind = "A", Qty = 1 }, new Line { Name = "Pear", Kind = "B", Qty = 3 }]);
+        return ds;
+    }
+
+    private IRenderedComponent<QuroGrid<Line>> RenderGrid(ColumnVAlign? name, ColumnVAlign? qty = null) =>
+        Render<QuroGrid<Line>>(@<QuroGrid DataSet="Lines()" Culture="En" ShowFooter="true" ShowRowNumbers="true" ShowRowState="true">
+                                    <QuroColumn Field="Name" HeaderKey="n" VAlign="name" />
+                                    <QuroColumn Field="Kind" HeaderKey="k" />
+                                    <QuroColumn Field="Qty" HeaderKey="q" Type="CellType.Number" Aggregate="Aggregate.Sum" VAlign="qty" />
+                                </QuroGrid>);
+
+    private static AngleSharp.Dom.IElement Cell(IRenderedComponent<QuroGrid<Line>> cut, string field) =>
+        cut.Find($"[role=gridcell][data-field={field}]");
+
+    private static bool HasVAlign(AngleSharp.Dom.IElement el) => el.ClassList.Contains(Middle) || el.ClassList.Contains(Bottom);
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData(ColumnVAlign.Top, null)]
+    [InlineData(ColumnVAlign.Middle, Middle)]
+    [InlineData(ColumnVAlign.Bottom, Bottom)]
+    public void GS_109_ClassFollowsVAlign(ColumnVAlign? value, string? expected)
+    {
+        var cell = Cell(RenderGrid(value), "Name");
+
+        if (expected is null)
+            Assert.False(HasVAlign(cell));
+        else
+            Assert.Contains(expected, cell.ClassList);
+    }
+
+    [Fact]
+    public void GS_109_OnlyThatColumnChanges()
+    {
+        var cut = RenderGrid(ColumnVAlign.Middle);
+
+        Assert.False(HasVAlign(Cell(cut, "Kind")));
+        Assert.False(HasVAlign(Cell(cut, "Qty")));
+    }
+
+    [Fact]
+    public void GS_109_EveryRowGetsIt()
+    {
+        var cells = RenderGrid(ColumnVAlign.Bottom).FindAll("[role=gridcell][data-field=Name]");
+
+        Assert.Equal(2, cells.Count);
+        Assert.All(cells, c => Assert.Contains(Bottom, c.ClassList));
+    }
+
+    [Fact]
+    public void GS_109_FooterFollows()
+    {
+        var cut = RenderGrid(null, ColumnVAlign.Middle);
+
+        Assert.Contains(Middle, cut.Find("[data-footer-field=Qty]").ClassList);
+        Assert.False(HasVAlign(cut.Find("[data-footer-field=Name]")));
+    }
+
+    [Fact]
+    public async Task GS_109_SubtotalFollows()
+    {
+        var cut = RenderGrid(null, ColumnVAlign.Bottom);
+
+        await cut.InvokeAsync(() => cut.Instance.SetGroupBy(["Kind"]));
+
+        Assert.All(cut.FindAll(".quro-subtotal-row [data-subtotal-field=Qty]"), c => Assert.Contains(Bottom, c.ClassList));
+    }
+
+    [Fact]
+    public void GS_109_Headers_RowNumbers_AndRowState_AreNotAffected()
+    {
+        var cut = RenderGrid(ColumnVAlign.Middle, ColumnVAlign.Bottom);
+
+        Assert.All(cut.FindAll("[role=columnheader]"), h => Assert.False(HasVAlign(h)));
+        Assert.All(cut.FindAll(".quro-row-number"), c => Assert.False(HasVAlign(c)));
+        Assert.All(cut.FindAll(".quro-row-state"), c => Assert.False(HasVAlign(c)));
+    }
+
+    [Fact]
+    public void GS_109_WorksAlongsideAlign()
+    {
+        var cell = Cell(RenderGrid(null, ColumnVAlign.Bottom), "Qty");
+
+        Assert.Contains("quro-align-right", cell.ClassList);
+        Assert.Contains(Bottom, cell.ClassList);
+    }
+
+    [Fact]
+    public void GS_109_ChangingVAlign_RedrawsTheCells()
+    {
+        _changing = null;
+        var cut = Render<QuroGrid<Line>>(@<QuroGrid DataSet="Lines()" Culture="En">
+                                              <QuroColumn Field="Name" HeaderKey="n" VAlign="_changing" />
+                                          </QuroGrid>);
+        Assert.False(HasVAlign(Cell(cut, "Name")));
+
+        _changing = ColumnVAlign.Middle;
+        cut.Render();
+
+        cut.WaitForAssertion(() => Assert.Contains(Middle, Cell(cut, "Name").ClassList));
+    }
+
+    [Fact]
+    public void GS_109_Css_KeepsTheCellABlock()
+    {
+        var css = File.ReadAllText(Path.Combine(GS_080_ThemeTokenTests.Root(), "src", "Quro.Grid", "wwwroot", "quro-grid.css"));
+
+        Assert.Matches(@"\.quro-valign-middle \{[^}]*align-content:\s*center", css);
+        Assert.Matches(@"\.quro-valign-bottom \{[^}]*align-content:\s*end", css);
+    }
+}

@@ -48,6 +48,13 @@ public sealed class QuroColumn : ComponentBase, IDisposable
     /// </summary>
     [Parameter] public ColumnAlign? Align { get; set; }
 
+    /// <summary>
+    /// Vertical alignment of the body, footer and subtotal cells and an open editor (A-77). Null keeps them at the top. Rows are only as
+    /// tall as their content unless the grid is paged (<see cref="QuroGrid{TItem}.RowHeight"/>), so it shows only in a taller row.
+    /// Headers are not affected.
+    /// </summary>
+    [Parameter] public ColumnVAlign? VAlign { get; set; }
+
     /// <summary>열 너비 (px).</summary>
     [Parameter] public int Width { get; set; } = 120;
 
@@ -149,7 +156,7 @@ public sealed class QuroColumn : ComponentBase, IDisposable
     {
         object now = (Field, HeaderKey, Type, Format, ReadOnly, Width, Aggregate, CurrencyField, Required, Min, Max,
             (Lookup, Options, CheckedValue, UncheckedValue, TextKey), (NewRowOnly, Filterable, Sortable, Groupable),
-            (Compute, CellStyle, Align), (OptionsSource, ValueField, TextField, FilterField, ParentField), Mask);
+            (Compute, CellStyle, Align, VAlign), (OptionsSource, ValueField, TextField, FilterField, ParentField), Mask);
         if (_rendered is not null && !Equals(now, _rendered))
         {
             CheckCodeSource();

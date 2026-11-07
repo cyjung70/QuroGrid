@@ -164,6 +164,11 @@
 .quro-align-right { text-align: right; }
 .quro-align-center { text-align: center; }
 
+/* Vertical alignment (GS-109, QuroColumn.VAlign). align-content keeps the cell a block, so the ellipsis and text-align still work.
+   A browser without it leaves the content at the top. Top has no class */
+.quro-valign-middle { align-content: center; }
+.quro-valign-bottom { align-content: end; }
+
 /* Row number column (ShowRowNumbers, GS-100). The width variable is set on the root by the grid.
    After the read-only rule with the same specificity: the gutter stays the header color on a locked row */
 .quro-row-number {
