@@ -7,4 +7,8 @@
     <Description>QuroGrid data set: row states, original values, validation and change set for saving. UI-free.</Description>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Quro.Grid" />
+  </ItemGroup>
+
 </Project>
