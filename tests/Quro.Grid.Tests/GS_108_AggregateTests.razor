@@ -1,0 +1,361 @@
+@inherits GridTestContext
+
+@code {
+    // GS-108: Aggregate.Count, Avg, Min and Max in the footer and group subtotals (A-76, Control Spec 2-13 and 3-9).
+    // Count counts non-empty values on any column except Button, and shows a whole number. Avg works on numbers; Min and Max on numbers
+    // and dates, all with the column's format. A combination that doesn't fit is blank, with no exception. With no values Count shows 0
+    // and the others are blank. They cover the same rows as Sum. On a paged grid they stay blank because only loaded rows are known.
+
+    public sealed class Line
+    {
+        public string? Name { get; set; }
+        public string? Kind { get; set; }
+        public decimal? Qty { get; set; }
+        public int Whole { get; set; }
+        public DateOnly? Due { get; set; }
+        public string? Code { get; set; }
+        public string Done { get; set; } = "N";
+    }
+
+    private static readonly CultureInfo En = new("en-US", useUserOverride: false);
+    private static readonly ComboOption[] Kinds = [new("A", "Alpha"), new("B", "Beta")];
+    private static readonly Aggregate[] New = [Aggregate.Count, Aggregate.Avg, Aggregate.Min, Aggregate.Max];
+
+    private sealed class GroupTexts : IStringLocalizer
+    {
+        public LocalizedString this[string name] => new(name, name == "quro.group.subtotal" ? "Subtotal" : name);
+        public LocalizedString this[string name, params object[] arguments] => this[name];
+        public IEnumerable<LocalizedString> GetAllStrings(bool includeParentCultures) => [];
+    }
+
+    private static QuroDataSet<Line> DataOf(params Line[] rows)
+    {
+        var ds = new QuroDataSet<Line>();
+        ds.Load(rows);
+        return ds;
+    }
+
+    /// <summary>Qty 10, blank, 20. Due 2026-03-01, blank, 2026-01-15. Whole 3, 1, 2. Kind A, A, B.</summary>
+    private static QuroDataSet<Line> Lines() => DataOf(
+        new Line { Name = "x", Kind = "A", Qty = 10m, Whole = 3, Due = new DateOnly(2026, 3, 1), Code = "C1" },
+        new Line { Name = "", Kind = "A", Qty = null, Whole = 1, Due = null, Code = "C2" },
+        new Line { Name = "z", Kind = "B", Qty = 20m, Whole = 2, Due = new DateOnly(2026, 1, 15), Code = "C3" });
+
+    private IRenderedComponent<QuroGrid<Line>> One(QuroDataSet<Line> ds, string field, CellType type, Aggregate aggregate, string? format = null) =>
+        Render<QuroGrid<Line>>(@<QuroGrid DataSet="ds" Culture="En" ShowFooter="true" CurrencyDigits="@(_ => 2)" DeletedRows="DeletedRowDisplay.Strikethrough">
+                                    <QuroColumn Field="@field" HeaderKey="h" Type="type" Format="@format" Aggregate="aggregate" Options="@(type == CellType.Combo ? Kinds : null)"
+                                                CheckedValue="@(type == CellType.Check ? "Y" : null)" UncheckedValue="@(type == CellType.Check ? "N" : null)" />
+                                </QuroGrid>);
+
+    private static string Foot(IRenderedComponent<QuroGrid<Line>> cut, string field) =>
+        cut.Find($"[data-footer-field={field}]").TextContent.Trim();
+
+    private string FootOf(QuroDataSet<Line> ds, string field, CellType type, Aggregate aggregate, string? format = null) =>
+        Foot(One(ds, field, type, aggregate, format), field);
+
+    [Fact]
+    public void GS_108_Footer_ShowsEachAggregate()
+    {
+        Assert.Equal("2", FootOf(Lines(), "Qty", CellType.Number, Aggregate.Count));
+        Assert.Equal("15", FootOf(Lines(), "Qty", CellType.Number, Aggregate.Avg));   // blank is skipped, not 0
+        Assert.Equal("10", FootOf(Lines(), "Qty", CellType.Number, Aggregate.Min));
+        Assert.Equal("20", FootOf(Lines(), "Qty", CellType.Number, Aggregate.Max));
+        Assert.Equal("30", FootOf(Lines(), "Qty", CellType.Number, Aggregate.Sum));
+    }
+
+    [Fact]
+    public void GS_108_Formats_AvgMinMaxUseTheColumn_CountIsAWholeNumber()
+    {
+        Assert.Equal("15.00", FootOf(Lines(), "Qty", CellType.Number, Aggregate.Avg, "N2"));
+        Assert.Equal("10.00", FootOf(Lines(), "Qty", CellType.Number, Aggregate.Min, "N2"));
+        Assert.Equal("20.00", FootOf(Lines(), "Qty", CellType.Number, Aggregate.Max, "N2"));
+        Assert.Equal("2", FootOf(Lines(), "Qty", CellType.Number, Aggregate.Count, "N2"));
+    }
+
+    [Fact]
+    public void GS_108_Avg_RoundsToTheColumnFormat_OrShowsDecimals()
+    {
+        var ds = DataOf(new Line { Whole = 1 }, new Line { Whole = 2 });
+
+        Assert.Equal("2", FootOf(ds, "Whole", CellType.Number, Aggregate.Avg, "N0"));
+        Assert.Equal("1.5", FootOf(ds, "Whole", CellType.Number, Aggregate.Avg));
+    }
+
+    [Fact]
+    public void GS_108_Count_HasThousandSeparators()
+    {
+        var ds = DataOf(Enumerable.Range(0, 1234).Select(_ => new Line { Whole = 1 }).ToArray());
+
+        Assert.Equal("1,234", FootOf(ds, "Whole", CellType.Number, Aggregate.Count));
+    }
+
+    [Fact]
+    public void GS_108_NoRows_CountIsZero_OthersBlank_SumStillZero()
+    {
+        Assert.Equal("0", FootOf(DataOf(), "Qty", CellType.Number, Aggregate.Count));
+        Assert.Equal("", FootOf(DataOf(), "Qty", CellType.Number, Aggregate.Avg));
+        Assert.Equal("", FootOf(DataOf(), "Qty", CellType.Number, Aggregate.Min));
+        Assert.Equal("", FootOf(DataOf(), "Qty", CellType.Number, Aggregate.Max));
+        Assert.Equal("0", FootOf(DataOf(), "Qty", CellType.Number, Aggregate.Sum));
+    }
+
+    [Fact]
+    public void GS_108_AllBlank_CountIsZero_OthersBlank()
+    {
+        var ds = DataOf(new Line(), new Line());
+
+        Assert.Equal("0", FootOf(ds, "Qty", CellType.Number, Aggregate.Count));
+        Assert.Equal("", FootOf(ds, "Qty", CellType.Number, Aggregate.Avg));
+        Assert.Equal("", FootOf(ds, "Qty", CellType.Number, Aggregate.Min));
+    }
+
+    [Fact]
+    public void GS_108_Dates_MinMaxWork_AvgIsBlank()
+    {
+        Assert.Equal("1/15/2026", FootOf(Lines(), "Due", CellType.Date, Aggregate.Min));
+        Assert.Equal("3/1/2026", FootOf(Lines(), "Due", CellType.Date, Aggregate.Max));
+        Assert.Equal("2026-01", FootOf(Lines(), "Due", CellType.Date, Aggregate.Min, "yyyy-MM"));
+        Assert.Equal("2", FootOf(Lines(), "Due", CellType.Date, Aggregate.Count));
+        Assert.Equal("", FootOf(Lines(), "Due", CellType.Date, Aggregate.Avg));
+    }
+
+    [Fact]
+    public void GS_108_Text_OnlyCountWorks_NoException()
+    {
+        Assert.Equal("2", FootOf(Lines(), "Name", CellType.Text, Aggregate.Count));   // "" isn't counted
+        Assert.Equal("", FootOf(Lines(), "Name", CellType.Text, Aggregate.Avg));
+        Assert.Equal("", FootOf(Lines(), "Name", CellType.Text, Aggregate.Min));
+        Assert.Equal("", FootOf(Lines(), "Name", CellType.Text, Aggregate.Max));
+    }
+
+    [Fact]
+    public void GS_108_TextColumnOverANumberField_AvgMinMaxWork()
+    {
+        Assert.Equal("15", FootOf(Lines(), "Qty", CellType.Text, Aggregate.Avg));
+        Assert.Equal("10", FootOf(Lines(), "Qty", CellType.Text, Aggregate.Min));
+    }
+
+    [Fact]
+    public void GS_108_Combo_And_Check_OnlyCountWorks_EvenOverNumbers()
+    {
+        // a code is a label, not a quantity, and its footer couldn't show the option text
+        Assert.Equal("3", FootOf(Lines(), "Whole", CellType.Combo, Aggregate.Count));
+        Assert.Equal("", FootOf(Lines(), "Whole", CellType.Combo, Aggregate.Avg));
+        Assert.Equal("", FootOf(Lines(), "Whole", CellType.Combo, Aggregate.Min));
+        Assert.Equal("3", FootOf(Lines(), "Done", CellType.Check, Aggregate.Count));   // an unchecked value is still a value
+        Assert.Equal("", FootOf(Lines(), "Done", CellType.Check, Aggregate.Max));
+    }
+
+    [Fact]
+    public void GS_108_ButtonColumn_IsBlank_EvenWithNoSuchField()
+    {
+        foreach (var aggregate in New)
+            Assert.Equal("", FootOf(Lines(), "NotAField", CellType.Button, aggregate));
+    }
+
+    [Fact]
+    public void GS_108_Currency_UsesItsDigits_CountDoesNotNeedThem()
+    {
+        Assert.Equal("15.00", FootOf(Lines(), "Qty", CellType.Currency, Aggregate.Avg));
+        Assert.Equal("10.00", FootOf(Lines(), "Qty", CellType.Currency, Aggregate.Min));
+        Assert.Equal("20.00", FootOf(Lines(), "Qty", CellType.Currency, Aggregate.Max));
+
+        var ds = Lines();
+        var cut = Render<QuroGrid<Line>>(@<QuroGrid DataSet="ds" Culture="En" ShowFooter="true">
+                                              <QuroColumn Field="Name" HeaderKey="h" />
+                                              <QuroColumn Field="Qty" HeaderKey="q" Type="CellType.Currency" Format="N1" Aggregate="Aggregate.Count" />
+                                          </QuroGrid>);
+        Assert.Equal("2", Foot(cut, "Qty"));
+    }
+
+    [Fact]
+    public void GS_108_DeletedRowsAreLeftOut_AndEditsRecalculate()
+    {
+        var ds = Lines();
+        var count = One(ds, "Qty", CellType.Number, Aggregate.Count);
+        var max = One(ds, "Qty", CellType.Number, Aggregate.Max);
+
+        ds.DeleteRow(ds.RowKeys[2]);     // 20 goes away, though it stays on screen with DeletedRowDisplay.Strikethrough
+        count.Render();
+        max.Render();
+
+        Assert.Equal("1", Foot(count, "Qty"));
+        Assert.Equal("10", Foot(max, "Qty"));
+
+        ds.SetValue(ds.RowKeys[1], "Qty", 50m);
+        count.Render();
+        max.Render();
+
+        Assert.Equal("2", Foot(count, "Qty"));
+        Assert.Equal("50", Foot(max, "Qty"));
+    }
+
+    [Fact]
+    public async Task GS_108_FilteredRowsAreLeftOut()
+    {
+        var cut = One(Lines(), "Qty", CellType.Number, Aggregate.Avg);
+
+        await cut.InvokeAsync(() => cut.Instance.ApplyFilter("Qty", new FilterInput(Min: "15")));
+
+        Assert.Equal("20", Foot(cut, "Qty"));
+    }
+
+    [Fact]
+    public void GS_108_ComputeColumn_UsesComputedValues()
+    {
+        Func<object, object?> doubled = item => ((Line)item).Qty * 2;
+        var ds = Lines();
+
+        var cut = Render<QuroGrid<Line>>(@<QuroGrid DataSet="ds" Culture="En" ShowFooter="true">
+                                              <QuroColumn Field="C1" HeaderKey="h" Type="CellType.Number" Compute="doubled" Aggregate="Aggregate.Count" />
+                                              <QuroColumn Field="C2" HeaderKey="h" Type="CellType.Number" Compute="doubled" Aggregate="Aggregate.Avg" />
+                                              <QuroColumn Field="C3" HeaderKey="h" Type="CellType.Number" Compute="doubled" Aggregate="Aggregate.Min" />
+                                              <QuroColumn Field="C4" HeaderKey="h" Type="CellType.Number" Compute="doubled" Aggregate="Aggregate.Max" />
+                                          </QuroGrid>);
+
+        Assert.Equal(["2", "30", "20", "40"], new[] { "C1", "C2", "C3", "C4" }.Select(f => Foot(cut, f)));
+    }
+
+    private IRenderedComponent<QuroGrid<Line>> Grouped(QuroDataSet<Line> ds, Aggregate qty, Aggregate first = Aggregate.None) =>
+        Render<QuroGrid<Line>>(@<QuroGrid DataSet="ds" Culture="En" ShowFooter="true" Localizer="new GroupTexts()">
+                                    <QuroColumn Field="Code" HeaderKey="c" Aggregate="first" />
+                                    <QuroColumn Field="Kind" HeaderKey="k" Type="CellType.Combo" Options="Kinds" />
+                                    <QuroColumn Field="Qty" HeaderKey="q" Type="CellType.Number" Format="N1" Aggregate="qty" />
+                                </QuroGrid>);
+
+    private static string[] Subtotals(IRenderedComponent<QuroGrid<Line>> cut, string field) =>
+        cut.FindAll($".quro-subtotal-row [data-subtotal-field={field}]").Select(c => c.TextContent.Trim()).ToArray();
+
+    [Theory]
+    [InlineData(Aggregate.Count, "1", "1")]
+    [InlineData(Aggregate.Avg, "10.0", "20.0")]
+    [InlineData(Aggregate.Min, "10.0", "20.0")]
+    [InlineData(Aggregate.Max, "10.0", "20.0")]
+    [InlineData(Aggregate.Sum, "10.0", "20.0")]
+    public async Task GS_108_Subtotal_UsesTheColumnsAggregate(Aggregate aggregate, string alpha, string beta)
+    {
+        var cut = Grouped(Lines(), aggregate);
+
+        await cut.InvokeAsync(() => cut.Instance.SetGroupBy(["Kind"]));
+
+        Assert.Equal([alpha, beta], Subtotals(cut, "Qty"));
+        Assert.Equal(["Subtotal", "Subtotal"], Subtotals(cut, "Code"));
+    }
+
+    [Fact]
+    public async Task GS_108_Subtotal_WithNoValues_CountZero_OthersBlank()
+    {
+        var ds = DataOf(new Line { Kind = "A" }, new Line { Kind = "B", Qty = 1m });
+        var cut = Grouped(ds, Aggregate.Avg, Aggregate.None);
+        await cut.InvokeAsync(() => cut.Instance.SetGroupBy(["Kind"]));
+        Assert.Equal(["", "1.0"], Subtotals(cut, "Qty"));
+
+        var counted = Grouped(ds, Aggregate.Count);
+        await counted.InvokeAsync(() => counted.Instance.SetGroupBy(["Kind"]));
+        Assert.Equal(["0", "1"], Subtotals(counted, "Qty"));
+    }
+
+    [Fact]
+    public async Task GS_108_Subtotal_FirstColumnWithAnAggregate_ShowsTheValueNotTheLabel()
+    {
+        var cut = Grouped(Lines(), Aggregate.None, Aggregate.Count);
+
+        await cut.InvokeAsync(() => cut.Instance.SetGroupBy(["Kind"]));
+
+        Assert.Equal(["2", "1"], Subtotals(cut, "Code"));
+    }
+
+    [Fact]
+    public async Task GS_108_Subtotal_NoRowWithoutAnyAggregate()
+    {
+        var cut = Grouped(Lines(), Aggregate.None);
+
+        await cut.InvokeAsync(() => cut.Instance.SetGroupBy(["Kind"]));
+
+        Assert.Empty(cut.FindAll(".quro-subtotal-row"));
+    }
+
+    [Fact]
+    public async Task GS_108_CollapsedGroup_StillCounts()
+    {
+        var cut = Grouped(Lines(), Aggregate.Count);
+        await cut.InvokeAsync(() => cut.Instance.SetGroupBy(["Kind"]));
+
+        var id = cut.Find(".quro-group-head-row").GetAttribute("data-group")!;
+        await cut.InvokeAsync(() => cut.Instance.ExpandGroup(id, false));
+
+        Assert.Equal("2", Foot(cut, "Qty"));
+        Assert.Equal(["1", "1"], Subtotals(cut, "Qty"));
+    }
+
+    public sealed class Node
+    {
+        public string Key { get; set; } = "";
+        public string? Parent { get; set; }
+        public decimal Amount { get; set; }
+    }
+
+    [Fact]
+    public async Task GS_108_TreeGrid_CollapsedRowsCount()
+    {
+        var ds = new QuroDataSet<Node>();
+        ds.Load([new Node { Key = "A", Amount = 1 }, new Node { Key = "A1", Parent = "A", Amount = 3 }, new Node { Key = "B", Amount = 8 }]);
+        var cut = Render<QuroGrid<Node>>(@<QuroGrid DataSet="ds" Culture="En" ShowFooter="true" TreeKeyField="Key" TreeParentField="Parent">
+                                              <QuroColumn Field="Key" HeaderKey="k" Aggregate="Aggregate.Count" />
+                                              <QuroColumn Field="Amount" HeaderKey="a" Type="CellType.Number" Aggregate="Aggregate.Avg" />
+                                          </QuroGrid>);
+
+        await cut.InvokeAsync(() => cut.Instance.ExpandTreeRow(ds.RowKeys[0], false));
+
+        Assert.Equal(2, cut.FindAll("[role=row][data-row]").Count);
+        Assert.Equal("3", cut.Find("[data-footer-field=Key]").TextContent.Trim());
+        Assert.Equal("4", cut.Find("[data-footer-field=Amount]").TextContent.Trim());
+    }
+
+    [Fact]
+    public void GS_108_PagedGrid_NewAggregatesStayBlank_SumKeepsTheServerTotal()
+    {
+        Task<GridItemsResult<Line>> Provide(GridItemsRequest request) => Task.FromResult(new GridItemsResult<Line>(
+            [new Line { Code = "C1", Qty = 1m }, new Line { Code = "C2", Qty = 2m }], 2,
+            new Dictionary<string, decimal> { ["Qty"] = 999m, ["Whole"] = 999m, ["Due"] = 999m, ["Code"] = 999m, ["Name"] = 999m }));
+        var ds = new QuroDataSet<Line>(l => l.Code!);
+
+        var cut = Render<QuroGrid<Line>>(@<QuroGrid DataSet="ds" ItemsProvider="Provide" PageSize="100" ShowFooter="true" Culture="En">
+                                              <QuroColumn Field="Qty" HeaderKey="q" Type="CellType.Number" Aggregate="Aggregate.Sum" />
+                                              <QuroColumn Field="Whole" HeaderKey="w" Type="CellType.Number" Aggregate="Aggregate.Avg" />
+                                              <QuroColumn Field="Due" HeaderKey="d" Type="CellType.Date" Aggregate="Aggregate.Min" />
+                                              <QuroColumn Field="Code" HeaderKey="c" Aggregate="Aggregate.Count" />
+                                              <QuroColumn Field="Name" HeaderKey="n" Type="CellType.Number" Aggregate="Aggregate.Max" />
+                                          </QuroGrid>);
+
+        cut.WaitForAssertion(() => Assert.Equal("999", Foot(cut, "Qty")));
+        foreach (var field in new[] { "Whole", "Due", "Code", "Name" })
+            Assert.Equal("", Foot(cut, field));
+    }
+
+    [Fact]
+    public void GS_108_Export_CarriesTheAggregate_ByName()
+    {
+        var ds = Lines();
+        var cut = Render<QuroGrid<Line>>(@<QuroGrid DataSet="ds" Culture="En">
+                                              <QuroColumn Field="Code" HeaderKey="c" Aggregate="Aggregate.Count" />
+                                              <QuroColumn Field="Qty" HeaderKey="q" Type="CellType.Number" Aggregate="Aggregate.Avg" />
+                                              <QuroColumn Field="Whole" HeaderKey="w" Type="CellType.Number" Aggregate="Aggregate.Min" />
+                                              <QuroColumn Field="Due" HeaderKey="d" Type="CellType.Date" Aggregate="Aggregate.Max" />
+                                          </QuroGrid>);
+
+        var request = cut.Instance.GetExportRequest();
+
+        Assert.Equal(New, request.Columns.Select(c => c.Aggregate));
+        var json = System.Text.Json.JsonSerializer.Serialize(request, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        foreach (var name in new[] { "Count", "Avg", "Min", "Max" })
+            Assert.Contains($"\"aggregate\":\"{name}\"", json);
+    }
+
+    [Fact]
+    public void GS_108_ExistingEnumValues_KeepTheirNumbers()
+    {
+        Assert.Equal(0, (int)Aggregate.None);
+        Assert.Equal(1, (int)Aggregate.Sum);
+    }
+}

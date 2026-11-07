@@ -51,7 +51,7 @@ public sealed class QuroColumn : ComponentBase, IDisposable
     /// <summary>열 너비 (px).</summary>
     [Parameter] public int Width { get; set; } = 120;
 
-    /// <summary>Footer aggregate.</summary>
+    /// <summary>Footer and group subtotal aggregate. On a paged grid only Sum shows a value, from the server total (A-76).</summary>
     [Parameter] public Aggregate Aggregate { get; set; }
 
     /// <summary>Currency 컬럼에서 행의 통화 코드를 읽을 필드 (Spec 4.6).</summary>

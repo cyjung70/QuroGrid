@@ -20,6 +20,7 @@ paths:
 - 저장 payload: `{ inserted[], updated[], deleted[] }`. 수정·삭제 행은 `version` 포함
 - `SaveAsync(http, url)`: 2xx → `AcceptChanges`, 409 → `Conflict`, 그 밖 → `Failed` (변경분 유지). 성공 후 재조회는 앱이 한다
 - `LoadAsync(http, url)` (A-75): GET, 최상위 JSON 배열. 2xx 아님 → `Failed`, 배열 아님 → `Invalid`, 더 나중 호출이 있으면 → `Superseded`, 이 셋은 아무것도 바꾸지 않음. 성공은 `Load`와 같아 변경분을 버린다(확인은 앱). `Clear()` = `Load([])`
+- 집계 `Sum`·`Count`·`Average`·`Min`·`Max(field)` (A-76): 읽기 전용, 삭제 행 제외. 빈 값과 맞지 않는 형식은 건너뛰고 예외 없음. 값이 없으면 `Sum`·`Count`는 0, 나머지는 null. 규칙은 `ColumnAggregates`에 있고 그리드 합계 행과 함께 쓴다
 - URL·엔드포인트 이름은 앱(QuroERP)이 넘긴다. 이 프로젝트에 하드코딩하지 않는다
 - 서버 저장은 한 트랜잭션에서 삭제 → 수정 → 추가 순서, `version` 불일치 시 충돌 (저장 API 쪽 책임)
 - `AcceptChanges()`는 저장 성공 응답을 받은 뒤에만 호출한다

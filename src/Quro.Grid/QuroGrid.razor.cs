@@ -1683,7 +1683,7 @@ public partial class QuroGrid<TItem> where TItem : class
                     foreach (var key in run)
                         items.Add(new BodyItem(BodyItemKind.Row, items.Count, key));
             }
-            if (Columns.Any(c => c.Aggregate == Aggregate.Sum))
+            if (Columns.Any(c => c.Aggregate != Aggregate.None))
                 items.Add(new BodyItem(BodyItemKind.Subtotal, items.Count, GroupId: id, Level: level, Rows: live));
             i = j;
         }
@@ -1720,9 +1720,9 @@ public partial class QuroGrid<TItem> where TItem : class
         _ => Format(value, col),
     };
 
-    /// <summary>소계 행의 셀: Sum 컬럼은 그룹 합계, 첫 컬럼(합계가 아니면)은 "소계" 문구</summary>
+    /// <summary>A subtotal cell: the column's aggregate over the group, or the subtotal label in a first column without one.</summary>
     internal string SubtotalText(QuroColumn col, IReadOnlyList<int> rows) =>
-        col.Aggregate == Aggregate.Sum ? SumText(col, rows)
+        col.Aggregate != Aggregate.None ? AggregateText(col, rows)
         : Columns.Count > 0 && Columns[0] == col ? Text(GridKeys.GroupSubtotal)
         : "";
 
@@ -2196,12 +2196,16 @@ public partial class QuroGrid<TItem> where TItem : class
 
     private string FooterText(QuroColumn col)
     {
-        if (col.Aggregate != Aggregate.Sum)
+        if (col.Aggregate == Aggregate.None)
             return "";
 
         var keys = DataSet.RowKeys.Where(k => DataSet.GetState(k) != RowState.Deleted && !FilteredOut(k)).ToList();   // 보이는 행 (A-31, 접힌 그룹 포함)
         if (!Paging)
-            return SumText(col, keys);
+            return AggregateText(col, keys);
+
+        // Only loaded rows are known, and a server value can't be corrected for unsaved edits except by adding to a sum (A-76)
+        if (col.Aggregate != Aggregate.Sum)
+            return "";
 
         // 적재되지 않은 행이 있으므로 서버 합계 + 저장 전 변경분 (A-24). 서버 합계가 없으면 비운다.
         // A Compute column has no server total (A-59)
@@ -2209,6 +2213,35 @@ public partial class QuroGrid<TItem> where TItem : class
             return "";
         return FormatNumber(total + PendingDelta(col.Field), SumFormat(col, keys));
     }
+
+    private string AggregateText(QuroColumn col, IReadOnlyList<int> keys)
+    {
+        if (col.Aggregate == Aggregate.Sum)
+            return SumText(col, keys);
+        if (col.Type == CellType.Button)
+            return "";   // no bound value
+
+        var values = keys.Select(k => CellValue(k, col)).ToList();
+        if (col.Aggregate == Aggregate.Count)
+            return ColumnAggregates.Count(values).ToString("N0", EffectiveCulture);
+
+        // A Combo, Check or Popup value is a code and a Mask or Image value is text, whatever its C# type
+        if (col.Type is not (CellType.Number or CellType.Currency or CellType.Date or CellType.Text or CellType.Label))
+            return "";
+
+        return col.Aggregate switch
+        {
+            Aggregate.Avg when ColumnAggregates.Average(values) is { } average => FormatNumber(average, SumFormat(col, keys)),
+            Aggregate.Min => ExtremeText(ColumnAggregates.Min(values), col, keys),
+            Aggregate.Max => ExtremeText(ColumnAggregates.Max(values), col, keys),
+            _ => "",
+        };
+    }
+
+    private string ExtremeText(object? value, QuroColumn col, IReadOnlyList<int> keys) =>
+        value is null ? ""
+        : col.Type == CellType.Currency ? FormatNumber(value, SumFormat(col, keys))
+        : Format(value, col);
 
     private string SumText(QuroColumn col, IReadOnlyList<int> keys) =>
         FormatNumber(keys.Sum(k => Number(CellValue(k, col))), SumFormat(col, keys));

@@ -69,6 +69,14 @@ public enum Aggregate
     None,
     /// <summary>Sum of the column.</summary>
     Sum,
+    /// <summary>How many rows have a value (A-76). Null and empty text don't count. Any column except Button. Shown as a whole number.</summary>
+    Count,
+    /// <summary>Average of the numbers, skipping blanks (A-76). Blank on other kinds of column and when there are no values.</summary>
+    Avg,
+    /// <summary>Smallest number or earliest date (A-76). Blank on other kinds of column and when there are no values.</summary>
+    Min,
+    /// <summary>Largest number or latest date (A-76). Blank on other kinds of column and when there are no values.</summary>
+    Max,
 }
 
 /// <summary>삭제 표시 행의 화면 처리 (O-02 잠정안: 기본 숨김).</summary>

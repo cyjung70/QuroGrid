@@ -243,6 +243,27 @@ public sealed class QuroDataSet<T> : IQuroDataSet where T : class
     /// <summary>Current value of a field in a row.</summary>
     public object? GetValue(int rowKey, string field) => Field(field).GetValue(Find(rowKey).Item);
 
+    /// <summary>Sum of a field's numbers in the rows that aren't deleted (A-76). 0 if there are none.</summary>
+    public decimal Sum(string field) => ColumnAggregates.Sum(LiveValues(field));
+
+    /// <summary>How many rows that aren't deleted have a value in a field (A-76). Null and empty text don't count.</summary>
+    public int Count(string field) => ColumnAggregates.Count(LiveValues(field));
+
+    /// <summary>Average of a field's numbers in the rows that aren't deleted, skipping blanks (A-76). Null if there are none.</summary>
+    public decimal? Average(string field) => ColumnAggregates.Average(LiveValues(field));
+
+    /// <summary>Smallest number or earliest date of a field in the rows that aren't deleted, as the field's own type (A-76). Null if there are none.</summary>
+    public object? Min(string field) => ColumnAggregates.Min(LiveValues(field));
+
+    /// <summary>Largest number or latest date of a field in the rows that aren't deleted, as the field's own type (A-76). Null if there are none.</summary>
+    public object? Max(string field) => ColumnAggregates.Max(LiveValues(field));
+
+    private List<object?> LiveValues(string field)
+    {
+        var prop = Field(field);
+        return _rows.Where(r => r.State != RowState.Deleted).Select(r => prop.GetValue(r.Item)).ToList();
+    }
+
     /// <summary>행의 현재 값을 복사한 새 객체 (행 복사용, 목록에는 넣지 않는다).</summary>
     public T CopyOf(int rowKey) => Clone(Find(rowKey).Item);
 

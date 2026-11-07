@@ -4,6 +4,7 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 소비자(QuroERP)는 버전을 올리기 전에 이 파일을 읽는다.
 
 ## Unreleased
+- Added: `Aggregate.Count`·`Avg`·`Min`·`Max` (합계 행·그룹 소계), `QuroDataSet<T>.Sum`·`Count`·`Average`·`Min`·`Max` (A-76, GS-108). 서버 페이징 그리드에서 새 집계는 빈칸. 소비자 조치: 기존 화면은 없음. 새 집계를 쓰는 화면은 내보내기 서버 코드가 `ExportColumn.Aggregate`의 새 값을 처리해야 한다
 - Added: `QuroDataSet<T>.LoadAsync(http, url)`·`Clear()`, `LoadResult`·`LoadStatus` — REST(JSON) 조회와 비우기 (A-75, GS-107). 소비자 조치: 없음
 - Fixed: 삭제 표시 행의 고정 셀이 반투명해 스크롤된 셀이 비치던 문제. 고정 셀은 글자 색으로 흐려진다 (GS-106). 소비자 조치: 없음
 - Added: 행 상태 열 `ShowRowState` — 신규·수정·삭제 행에 기호 표시, `GridKeys.RowStateInserted`·`RowStateUpdated`·`RowStateDeleted`, 색 토큰 `--quro-row-state-*` (A-74, GS-106). 소비자 조치: 켜는 화면은 로컬라이저에 `quro.rowstate.*` 키를 추가
