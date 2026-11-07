@@ -14,6 +14,7 @@ paths:
 - `Popup`: 코드 입력 후 Tab → 1건 일치면 자동 확정, 복수면 팝업, **0건이면 팝업 없음**(2026-10-28, Spec 4.6과 다름). 0건 입력값은 잠정으로 확정하지 않고 편집 유지. F4는 항상 팝업.
 - 기본 정렬 (A-72): 숫자(`Number`·`Currency`·숫자 필드의 `Text`·`Label`) 오른쪽, `Check`·`Combo`·`Button`·`Image` 가운데, 나머지 왼쪽. `QuroColumn.Align`이 덮어쓴다. 헤더는 왼쪽.
 - 세로 정렬 (A-77): `QuroColumn.VAlign`. 기본은 위쪽. 셀을 flex로 바꾸지 않고 `align-content`를 쓴다(`...`와 `text-align` 유지). 글자보다 높은 행에서만 보인다.
+- 같은 값 합쳐 보이기 (A-78): `QuroColumn.MergeRepeated`. 표시만 합친다. 글자는 셀에 남기고 CSS로 숨긴다(복사·에디터·스크린 리더가 읽음). 합침 상태는 행의 렌더 키에 있어 이웃 편집 때 바뀐 행만 다시 그린다.
 - 코드 목록·코드도움 데이터는 앱이 제공한다(`ICodeListSource`, `ILookupSource` 성격의 추상화 — 이름은 consumer-contract.md에서 확정). 그리드는 HTTP를 직접 호출하지 않는다.
 
 ## 키보드 맵 (P0)
@@ -42,7 +43,7 @@ Enter(확정·이동, 기본 오른쪽 O-05, 마지막 셀 새 행은 옵션·�
 `OnCellValueChanging`(취소 가능), `OnCellValueChanged`, `OnRowAdding`/`OnRowAdded`, `OnRowDeleting`(취소 가능), `OnPopupRequested`, `OnPasting`(취소 가능), `OnSelectionChanged`, `OnCellButtonClick`, `OnCellClick`(Image 셀만, A-56)
 
 ## v1 범위 외
-그리드가 평가하는 셀 수식, 피벗, 인쇄 레이아웃, 본문 셀 병합, 행 끌어 놓기 순서 변경. 요청이 오면 Spec 범위 밖임을 알린다. 트리 그리드는 v1 포함 (A-61).
+그리드가 평가하는 셀 수식, 피벗, 인쇄 레이아웃, 본문 셀 병합(colspan·rowspan. 표시만 합치는 `MergeRepeated`는 A-78), 행 끌어 놓기 순서 변경. 요청이 오면 Spec 범위 밖임을 알린다. 트리 그리드는 v1 포함 (A-61).
 
 ## 성능 목표 (초안, 벤치로 확정)
 | 항목 | 목표 |

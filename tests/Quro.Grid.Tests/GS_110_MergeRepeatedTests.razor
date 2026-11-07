@@ -1,0 +1,319 @@
+@inherits GridTestContext
+
+@code {
+    // GS-110: MergeRepeated (A-78, Control Spec 3-11). Display only: every cell stays, with its text. A cell equal to the one
+    // above gets quro-merge-repeat (CSS hides the text) and the cell above gets quro-merge-continues (no line under it). "Equal" is the
+    // shown text, and blanks never merge. A run ends at a change in a merged column to the left, a deleted row, a marked cell and a group
+    // head or subtotal. Check, Button and Image columns, paged grids and tree grids are left alone.
+
+    public sealed class Line
+    {
+        public string? Cat { get; set; }
+        public string? Item { get; set; }
+        public decimal Qty { get; set; }
+        public string? Key { get; set; }
+        public string? Parent { get; set; }
+        public string Done { get; set; } = "N";
+    }
+
+    private const string Repeat = "quro-merge-repeat";
+    private const string Continues = "quro-merge-continues";
+
+    private static readonly CultureInfo En = new("en-US", useUserOverride: false);
+
+    private static Line L(string? cat, string? item, decimal qty = 0) => new() { Cat = cat, Item = item, Qty = qty, Key = $"{cat}{item}{qty}" };
+
+    private static QuroDataSet<Line> DataOf(params Line[] rows)
+    {
+        var ds = new QuroDataSet<Line>();
+        ds.Load(rows);
+        return ds;
+    }
+
+    /// <summary>Row keys 1 to 5. "Pear" repeats across the change from Fruit to Veg.</summary>
+    private static QuroDataSet<Line> Sample() => DataOf(
+        L("Fruit", "Apple", 3), L("Fruit", "Apple", 5), L("Fruit", "Pear", 2), L("Veg", "Pear", 7), L("Veg", "Onion", 1));
+
+    private IRenderedComponent<QuroGrid<Line>> Merged(QuroDataSet<Line> ds, DeletedRowDisplay deleted = DeletedRowDisplay.Hide) =>
+        Render<QuroGrid<Line>>(@<QuroGrid DataSet="ds" Culture="En" DeletedRows="deleted" Localizer="new GroupTexts()">
+                                    <QuroColumn Field="Cat" HeaderKey="c" MergeRepeated="true" />
+                                    <QuroColumn Field="Item" HeaderKey="i" MergeRepeated="true" />
+                                    <QuroColumn Field="Qty" HeaderKey="q" Type="CellType.Number" Aggregate="Aggregate.Sum" />
+                                </QuroGrid>);
+
+    private sealed class GroupTexts : IStringLocalizer
+    {
+        public LocalizedString this[string name] => new(name, name);
+        public LocalizedString this[string name, params object[] arguments] => this[name];
+        public IEnumerable<LocalizedString> GetAllStrings(bool includeParentCultures) => [];
+    }
+
+    /// <summary>One letter per shown row: r repeats the row above, c continues into the row below, b both, - neither.</summary>
+    private static string Pattern(IRenderedComponent<QuroGrid<Line>> cut, string field) =>
+        string.Concat(cut.FindAll($"[role=row][data-row] [data-field={field}]").Select(c =>
+            (c.ClassList.Contains(Repeat), c.ClassList.Contains(Continues)) switch
+            {
+                (true, true) => 'b',
+                (true, false) => 'r',
+                (false, true) => 'c',
+                _ => '-',
+            }));
+
+    [Fact]
+    public void GS_110_RepeatedValues_GetTheClasses()
+    {
+        var cut = Merged(Sample());
+
+        Assert.Equal("cbr" + "cr", Pattern(cut, "Cat"));
+        Assert.Equal("cr" + "---", Pattern(cut, "Item"));   // Pear under Veg is not merged with Pear under Fruit
+    }
+
+    [Fact]
+    public void GS_110_OffByDefault()
+    {
+        var ds = Sample();
+        var cut = Render<QuroGrid<Line>>(@<QuroGrid DataSet="ds" Culture="En">
+                                              <QuroColumn Field="Cat" HeaderKey="c" />
+                                          </QuroGrid>);
+
+        Assert.Equal("-----", Pattern(cut, "Cat"));
+    }
+
+    [Fact]
+    public void GS_110_ChangeInAMergedColumnToTheLeft_EndsTheRun()
+    {
+        var cut = Merged(DataOf(L("A", "X"), L("B", "X"), L("B", "X")));
+
+        Assert.Equal("-cr", Pattern(cut, "Cat"));
+        Assert.Equal("-cr", Pattern(cut, "Item"));
+    }
+
+    [Fact]
+    public void GS_110_ChangeInAnUnmergedColumnToTheLeft_DoesNot()
+    {
+        var ds = DataOf(L("A", "X", 1), L("A", "X", 2));
+        var cut = Render<QuroGrid<Line>>(@<QuroGrid DataSet="ds" Culture="En">
+                                              <QuroColumn Field="Qty" HeaderKey="q" Type="CellType.Number" />
+                                              <QuroColumn Field="Item" HeaderKey="i" MergeRepeated="true" />
+                                          </QuroGrid>);
+
+        Assert.Equal("cr", Pattern(cut, "Item"));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void GS_110_BlankValues_NeverMerge(string? blank)
+    {
+        var cut = Merged(DataOf(L(blank, "X"), L(blank, "X")));
+
+        Assert.Equal("--", Pattern(cut, "Cat"));
+        Assert.Equal("--", Pattern(cut, "Item"));   // the blank column to its left ended the run
+    }
+
+    [Fact]
+    public void GS_110_ComparesTheShownText()
+    {
+        var ds = DataOf(new Line { Qty = 1.2m }, new Line { Qty = 1.4m }, new Line { Qty = 2m });
+        var cut = Render<QuroGrid<Line>>(@<QuroGrid DataSet="ds" Culture="En">
+                                              <QuroColumn Field="Qty" HeaderKey="q" Type="CellType.Number" Format="N0" MergeRepeated="true" />
+                                          </QuroGrid>);
+
+        Assert.Equal("cr-", Pattern(cut, "Qty"));
+    }
+
+    [Fact]
+    public void GS_110_ComboComparesItsOptionText()
+    {
+        ComboOption[] same = [new("A", "Same"), new("B", "Same"), new("C", "Other")];
+        var ds = DataOf(L("A", null), L("B", null), L("C", null));
+        var cut = Render<QuroGrid<Line>>(@<QuroGrid DataSet="ds" Culture="En">
+                                              <QuroColumn Field="Cat" HeaderKey="c" Type="CellType.Combo" Options="same" MergeRepeated="true" />
+                                          </QuroGrid>);
+
+        Assert.Equal("cr-", Pattern(cut, "Cat"));
+    }
+
+    [Fact]
+    public void GS_110_ComputeColumn_ComparesItsText()
+    {
+        Func<object, object?> upper = item => ((Line)item).Cat?.ToUpperInvariant();
+        var ds = DataOf(L("a", null), L("A", null), L("b", null));
+        var cut = Render<QuroGrid<Line>>(@<QuroGrid DataSet="ds" Culture="En">
+                                              <QuroColumn Field="Calc" HeaderKey="c" Compute="upper" MergeRepeated="true" />
+                                          </QuroGrid>);
+
+        Assert.Equal("cr-", Pattern(cut, "Calc"));
+    }
+
+    [Fact]
+    public void GS_110_Check_Button_AndImage_AreLeftAlone()
+    {
+        var ds = DataOf(new Line { Cat = "A", Item = "u", Done = "N" }, new Line { Cat = "A", Item = "u", Done = "N" });
+        var cut = Render<QuroGrid<Line>>(@<QuroGrid DataSet="ds" Culture="En">
+                                              <QuroColumn Field="Done" HeaderKey="d" Type="CellType.Check" CheckedValue="@("Y")" UncheckedValue="@("N")" MergeRepeated="true" />
+                                              <QuroColumn Field="Go" HeaderKey="g" Type="CellType.Button" TextKey="g" MergeRepeated="true" />
+                                              <QuroColumn Field="Item" HeaderKey="p" Type="CellType.Image" MergeRepeated="true" />
+                                              <QuroColumn Field="Cat" HeaderKey="c" MergeRepeated="true" />
+                                          </QuroGrid>);
+
+        Assert.Equal("--", Pattern(cut, "Done"));
+        Assert.Equal("--", Pattern(cut, "Go"));
+        Assert.Equal("--", Pattern(cut, "Item"));
+        Assert.Equal("cr", Pattern(cut, "Cat"));   // they don't end the run either
+    }
+
+    [Fact]
+    public void GS_110_DeletedRow_ShowsItsValue_AndEndsTheRun()
+    {
+        var ds = DataOf(L("A", "X"), L("A", "X"), L("A", "X"));
+        ds.DeleteRow(ds.RowKeys[1]);
+
+        Assert.Equal("---", Pattern(Merged(ds, DeletedRowDisplay.Strikethrough), "Cat"));
+    }
+
+    [Fact]
+    public void GS_110_HiddenDeletedRow_DoesNotEndTheRun()
+    {
+        var ds = DataOf(L("A", "X"), L("A", "X"), L("A", "X"));
+        ds.DeleteRow(ds.RowKeys[1]);
+
+        Assert.Equal("cr", Pattern(Merged(ds), "Cat"));
+    }
+
+    [Fact]
+    public void GS_110_MarkedCell_ShowsItsValue_AndEndsTheRun()
+    {
+        var ds = DataOf(L("A", "X"), L("A", "X"), L("A", "X"));
+        ds.SetCellMark(ds.RowKeys[1], "Cat", new CellMark(CellMarkLevel.Warning, "w"));
+
+        var cut = Merged(ds);
+
+        Assert.Equal("---", Pattern(cut, "Cat"));
+        Assert.Equal("---", Pattern(cut, "Item"));
+    }
+
+    [Fact]
+    public async Task GS_110_GroupHeadAndSubtotal_EndTheRun()
+    {
+        var ds = DataOf(new Line { Cat = "A", Item = "X", Key = "1" }, new Line { Cat = "A", Item = "X", Key = "2" }, new Line { Cat = "B", Item = "X", Key = "3" });
+        var cut = Render<QuroGrid<Line>>(@<QuroGrid DataSet="ds" Culture="En" Localizer="new GroupTexts()">
+                                              <QuroColumn Field="Cat" HeaderKey="c" />
+                                              <QuroColumn Field="Item" HeaderKey="i" MergeRepeated="true" />
+                                              <QuroColumn Field="Qty" HeaderKey="q" Type="CellType.Number" Aggregate="Aggregate.Sum" />
+                                          </QuroGrid>);
+        Assert.Equal("cbr", Pattern(cut, "Item"));
+
+        await cut.InvokeAsync(() => cut.Instance.SetGroupBy(["Cat"]));
+
+        Assert.Equal("cr-", Pattern(cut, "Item"));
+    }
+
+    [Fact]
+    public async Task GS_110_Filter_And_Sort_Recalculate()
+    {
+        var ds = DataOf(L("A", null, 1), L("B", null, 2), L("A", null, 3));
+        var cut = Render<QuroGrid<Line>>(@<QuroGrid DataSet="ds" Culture="En">
+                                              <QuroColumn Field="Cat" HeaderKey="c" MergeRepeated="true" />
+                                              <QuroColumn Field="Qty" HeaderKey="q" Type="CellType.Number" />
+                                          </QuroGrid>);
+        Assert.Equal("---", Pattern(cut, "Cat"));
+
+        await cut.InvokeAsync(() => cut.Instance.ApplyFilter("Cat", new FilterInput(Text: "A")));
+        Assert.Equal("cr", Pattern(cut, "Cat"));
+
+        await cut.InvokeAsync(() => cut.Instance.ApplyFilter("Cat", new FilterInput()));
+        Assert.Equal("---", Pattern(cut, "Cat"));
+
+        await cut.InvokeAsync(() => cut.Instance.Sort("Cat", false));
+        Assert.Equal("cr-", Pattern(cut, "Cat"));
+    }
+
+    [Fact]
+    public void GS_110_TreeGrid_IgnoresIt()
+    {
+        var ds = DataOf(
+            new Line { Key = "A", Cat = "x" },
+            new Line { Key = "A1", Parent = "A", Cat = "x" },
+            new Line { Key = "B", Cat = "x" });
+        var cut = Render<QuroGrid<Line>>(@<QuroGrid DataSet="ds" Culture="En" TreeKeyField="Key" TreeParentField="Parent">
+                                              <QuroColumn Field="Cat" HeaderKey="c" MergeRepeated="true" />
+                                          </QuroGrid>);
+
+        Assert.Equal("---", Pattern(cut, "Cat"));
+    }
+
+    [Fact]
+    public void GS_110_PagedGrid_IgnoresIt()
+    {
+        Task<GridItemsResult<Line>> Provide(GridItemsRequest request) => Task.FromResult(new GridItemsResult<Line>(
+            [new Line { Key = "1", Cat = "x" }, new Line { Key = "2", Cat = "x" }], 2));
+        var ds = new QuroDataSet<Line>(l => l.Key!);
+        var cut = Render<QuroGrid<Line>>(@<QuroGrid DataSet="ds" ItemsProvider="Provide" PageSize="100" Culture="En">
+                                              <QuroColumn Field="Cat" HeaderKey="c" MergeRepeated="true" />
+                                          </QuroGrid>);
+
+        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("[role=row][data-row]").Count));
+        Assert.Equal("--", Pattern(cut, "Cat"));
+    }
+
+    [Fact]
+    public void GS_110_RepeatedCell_KeepsItsText()
+    {
+        var cell = Merged(Sample()).FindAll("[role=row][data-row] [data-field=Cat]")[1];
+
+        Assert.Contains(Repeat, cell.ClassList);
+        Assert.Equal("Fruit", cell.TextContent.Trim());
+    }
+
+    [Fact]
+    public async Task GS_110_Edit_UpdatesTheNeighbours()
+    {
+        var ds = DataOf(L("A", null), L("A", null), L("A", null));
+        var cut = Merged(ds);
+        Assert.Equal("cbr", Pattern(cut, "Cat"));
+
+        await cut.InvokeAsync(() => cut.Instance.CommitEdit(ds.RowKeys[1], "Cat", "B"));
+
+        Assert.Equal("---", Pattern(cut, "Cat"));
+    }
+
+    private int _styleCalls;
+
+    private CellTone Count(object item, object? value)
+    {
+        _styleCalls++;
+        return CellTone.None;
+    }
+
+    [Fact]
+    public async Task GS_110_Edit_RedrawsOnlyTheRowsWhoseMergeChanged_R4()
+    {
+        var ds = DataOf(L("A", null), L("A", null), L("B", null), L("C", null), L("D", null), L("E", null));
+        var cut = Render<QuroGrid<Line>>(@<QuroGrid DataSet="ds" Culture="En">
+                                              <QuroColumn Field="Cat" HeaderKey="c" MergeRepeated="true" CellStyle="Count" />
+                                          </QuroGrid>);
+        Assert.Equal("cr----", Pattern(cut, "Cat"));
+        _styleCalls = 0;
+
+        await cut.InvokeAsync(() => cut.Instance.CommitEdit(ds.RowKeys[1], "Cat", "Z"));
+
+        Assert.Equal("------", Pattern(cut, "Cat"));
+        Assert.Equal(2, _styleCalls);   // the edited row and the one above it
+    }
+
+    [Fact]
+    public void GS_110_ValueEqualNeighbourOutOfDisplayOrder_DoesNotMerge()
+    {
+        Assert.Equal("---", Pattern(Merged(DataOf(L("A", null), L("B", null), L("A", null))), "Cat"));
+    }
+
+    [Fact]
+    public void GS_110_Css_HidesTheTextOnlyOutsideTheSelection()
+    {
+        var css = File.ReadAllText(Path.Combine(GS_080_ThemeTokenTests.Root(), "src", "Quro.Grid", "wwwroot", "quro-grid.css"));
+
+        Assert.Matches(@"\.quro-cell\.quro-merge-repeat:not\(\[aria-selected=true\]\) \{[^}]*color:\s*transparent", css);
+        Assert.Matches(@"\.quro-cell\.quro-merge-continues \{[^}]*border-bottom-color:\s*transparent", css);
+    }
+}

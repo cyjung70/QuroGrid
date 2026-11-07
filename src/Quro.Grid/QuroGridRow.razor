@@ -22,7 +22,7 @@
         var col = Grid.Columns[i];
         var mark = Grid.Mark(RowKey, col);
         var treeCell = Level > 0 && Grid.IsTreeCell(col);
-        <div class="@(MarkClass(Grid.CellClass(i, "quro-body-cell"), mark) + Grid.ToneClass(RowKey, col) + Grid.AlignClass(col) + (treeCell ? " quro-tree-cell" : ""))"
+        <div class="@(MarkClass(Grid.CellClass(i, "quro-body-cell"), mark) + Grid.ToneClass(RowKey, col) + Grid.AlignClass(col) + Grid.MergeClass(Merge, i) + (treeCell ? " quro-tree-cell" : ""))"
              style="@(Grid.CellStyle(i) + (treeCell ? $";--qg-tree-level:{Level - 1}" : ""))" role="gridcell"
              aria-colindex="@Grid.ColIndex(i)" data-field="@col.Field" data-type="@Grid.TypeAttribute(col)"
              data-copy="@Grid.CopyText(RowKey, col)" data-edit="@Grid.EditAttribute(RowKey, col)" data-mask="@(Grid.EditOnSelect ? col.Mask : null)"
@@ -88,7 +88,7 @@
 </div>
 
 @code {
-    private (int Revision, int Epoch, int RowIndex, int Number, bool Locked, string? EditingField, bool PickerOpen, int Level, bool? Expanded)? _rendered;
+    private (int Revision, int Epoch, int RowIndex, int Number, bool Locked, string? EditingField, bool PickerOpen, int Level, bool? Expanded, string? Merge)? _rendered;
 
     [Parameter, EditorRequired] public QuroGrid<TItem> Grid { get; set; } = default!;
     [Parameter, EditorRequired] public int RowKey { get; set; }
@@ -103,13 +103,15 @@
     [Parameter] public int Level { get; set; }
     /// <summary>Whether the row's children show (GS-104); null when it has none.</summary>
     [Parameter] public bool? Expanded { get; set; }
+    /// <summary>The merge state of each column (GS-110), or null. A neighbor's edit can change it, so it is in the render key.</summary>
+    [Parameter] public string? Merge { get; set; }
     [Parameter] public string? EditingField { get; set; }
     [Parameter] public bool PickerOpen { get; set; }
 
     /// <summary>행 단위 렌더 (R4): 행 리비전·편집 셀·선택 목록·위치·그리드 epoch가 바뀐 행만 다시 그린다.</summary>
     protected override bool ShouldRender()
     {
-        var now = (Revision, Epoch, RowIndex, Number, Locked, EditingField, PickerOpen, Level, Expanded);
+        var now = (Revision, Epoch, RowIndex, Number, Locked, EditingField, PickerOpen, Level, Expanded, Merge);
         if (_rendered == now)
             return false;
         _rendered = now;
@@ -117,7 +119,7 @@
     }
 
     // 첫 렌더는 ShouldRender를 거치지 않으므로 여기서 기록한다.
-    protected override void OnInitialized() => _rendered = (Revision, Epoch, RowIndex, Number, Locked, EditingField, PickerOpen, Level, Expanded);
+    protected override void OnInitialized() => _rendered = (Revision, Epoch, RowIndex, Number, Locked, EditingField, PickerOpen, Level, Expanded, Merge);
 
     private static string MarkClass(string cls, CellMark? mark) => mark?.Level switch
     {

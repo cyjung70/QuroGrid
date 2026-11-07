@@ -2146,6 +2146,61 @@ public partial class QuroGrid<TItem> where TItem : class
     }
 
 
+    private const int MergeRepeats = 1, MergeContinues = 2;
+
+    /// <summary>
+    /// The merge state of the rows that take part in a merge (GS-110), one digit per column. Compares only adjacent body rows, so a group
+    /// head or subtotal ends a run. Null when no column asks for it, which keeps the cost at zero for other grids.
+    /// </summary>
+    internal Dictionary<int, string>? MergeStates(List<BodyItem>? body)
+    {
+        if (body is null || TreeMode || !Columns.Any(Merges))
+            return null;
+
+        var states = new Dictionary<int, char[]>();
+        for (var i = 1; i < body.Count; i++)
+        {
+            var (above, row) = (body[i - 1], body[i]);
+            if (above.Kind != BodyItemKind.Row || row.Kind != BodyItemKind.Row
+                || DataSet.GetState(above.RowKey) == RowState.Deleted || DataSet.GetState(row.RowKey) == RowState.Deleted)
+                continue;
+
+            for (var c = 0; c < Columns.Count; c++)
+            {
+                if (!Merges(Columns[c]))
+                    continue;
+                if (!SameShown(above.RowKey, row.RowKey, Columns[c]))
+                    break;   // the merged columns to the right can't continue across this change
+                AddMerge(states, above.RowKey, c, MergeContinues);
+                AddMerge(states, row.RowKey, c, MergeRepeats);
+            }
+        }
+        return states.ToDictionary(s => s.Key, s => new string(s.Value));
+    }
+
+    private static bool Merges(QuroColumn col) =>
+        col.MergeRepeated && col.Type is not (CellType.Check or CellType.Button or CellType.Image);
+
+    private bool SameShown(int a, int b, QuroColumn col) =>
+        Mark(a, col) is null && Mark(b, col) is null
+        && DisplayText(a, col) is { Length: > 0 } shown && shown == DisplayText(b, col);
+
+    private void AddMerge(Dictionary<int, char[]> states, int rowKey, int column, int flag)
+    {
+        if (!states.TryGetValue(rowKey, out var state))
+            states[rowKey] = state = Enumerable.Repeat('0', Columns.Count).ToArray();
+        state[column] = (char)(state[column] | flag);
+    }
+
+    /// <summary>Merge classes of a body cell (GS-110). The CSS hides the text; the value stays in the cell.</summary>
+    internal string MergeClass(string? merge, int column) => merge is null ? "" : (merge[column] - '0') switch
+    {
+        MergeRepeats => " quro-merge-repeat",
+        MergeContinues => " quro-merge-continues",
+        MergeRepeats | MergeContinues => " quro-merge-repeat quro-merge-continues",
+        _ => "",
+    };
+
     /// <summary>Alignment classes of a body, footer or subtotal cell (GS-102, GS-109). Left and top are the browser's default, so they have none.</summary>
     internal string AlignClass(QuroColumn col) => (col.Align ?? DefaultAlign(col)) switch
     {
