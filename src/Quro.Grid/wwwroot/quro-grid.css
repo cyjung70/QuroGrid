@@ -137,6 +137,11 @@
     font-weight: 600;
 }
 
+/* A blank cell has no line of text, so a footer of blank cells would collapse. A zero-width character keeps its height (GS-112) */
+.quro-footer::before {
+    content: "\200b";
+}
+
 .quro-head {
     position: sticky;
     top: 0;
