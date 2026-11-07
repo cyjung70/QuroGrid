@@ -4,6 +4,7 @@ QuroGrid 공개 API 변경 기록. 형식: 버전 — 날짜, 그 아래 Added /
 소비자(QuroERP)는 버전을 올리기 전에 이 파일을 읽는다.
 
 ## Unreleased
+- Added: 글자가 잘린 셀에 마우스를 올리면 전체 글자를 브라우저 툴팁으로 표시 (A-79, GS-111). 소비자 조치: 없음
 - Added: `QuroColumn.MergeRepeated`, CSS 클래스 `quro-merge-repeat`·`quro-merge-continues` — 같은 값이 이어지는 셀을 합쳐 보이기 (표시만, A-78, GS-110). 소비자 조치: 없음
 - Added: `QuroColumn.VAlign`, `ColumnVAlign`, CSS 클래스 `quro-valign-middle`·`quro-valign-bottom` — 셀 세로 정렬 (A-77, GS-109). 기본은 지금처럼 위쪽. 소비자 조치: 없음
 - Added: `Aggregate.Count`·`Avg`·`Min`·`Max` (합계 행·그룹 소계), `QuroDataSet<T>.Sum`·`Count`·`Average`·`Min`·`Max` (A-76, GS-108). 서버 페이징 그리드에서 새 집계는 빈칸. 소비자 조치: 기존 화면은 없음. 새 집계를 쓰는 화면은 내보내기 서버 코드가 `ExportColumn.Aggregate`의 새 값을 처리해야 한다

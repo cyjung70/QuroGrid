@@ -15,6 +15,7 @@ paths:
 - 기본 정렬 (A-72): 숫자(`Number`·`Currency`·숫자 필드의 `Text`·`Label`) 오른쪽, `Check`·`Combo`·`Button`·`Image` 가운데, 나머지 왼쪽. `QuroColumn.Align`이 덮어쓴다. 헤더는 왼쪽.
 - 세로 정렬 (A-77): `QuroColumn.VAlign`. 기본은 위쪽. 셀을 flex로 바꾸지 않고 `align-content`를 쓴다(`...`와 `text-align` 유지). 글자보다 높은 행에서만 보인다.
 - 같은 값 합쳐 보이기 (A-78): `QuroColumn.MergeRepeated`. 표시만 합친다. 글자는 셀에 남기고 CSS로 숨긴다(복사·에디터·스크린 리더가 읽음). 합침 상태는 행의 렌더 키에 있어 이웃 편집 때 바뀐 행만 다시 그린다.
+- 잘린 글자 툴팁 (A-79): JS만(서버 호출 없음). 포인터가 있는 동안만 `title`을 넣는다. 서버가 그린 `title`(`CellMark` 메시지)이 있으면 건드리지 않는다.
 - 코드 목록·코드도움 데이터는 앱이 제공한다(`ICodeListSource`, `ILookupSource` 성격의 추상화 — 이름은 consumer-contract.md에서 확정). 그리드는 HTTP를 직접 호출하지 않는다.
 
 ## 키보드 맵 (P0)
