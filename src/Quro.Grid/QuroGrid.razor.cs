@@ -2146,11 +2146,16 @@ public partial class QuroGrid<TItem> where TItem : class
     }
 
 
-    /// <summary>Alignment class of a body, footer or subtotal cell (GS-102). Left is the browser's default, so it has no class.</summary>
+    /// <summary>Alignment classes of a body, footer or subtotal cell (GS-102, GS-109). Left and top are the browser's default, so they have none.</summary>
     internal string AlignClass(QuroColumn col) => (col.Align ?? DefaultAlign(col)) switch
     {
         ColumnAlign.Right => " quro-align-right",
         ColumnAlign.Center => " quro-align-center",
+        _ => "",
+    } + col.VAlign switch
+    {
+        ColumnVAlign.Middle => " quro-valign-middle",
+        ColumnVAlign.Bottom => " quro-valign-bottom",
         _ => "",
     };
 

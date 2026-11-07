@@ -257,6 +257,17 @@ public enum ColumnEdit
     NewRowOnly,
 }
 
+/// <summary>Vertical alignment of a column's cells (A-77). It shows only in a row taller than its text.</summary>
+public enum ColumnVAlign
+{
+    /// <summary>Top, the same as no value.</summary>
+    Top,
+    /// <summary>Middle.</summary>
+    Middle,
+    /// <summary>Bottom.</summary>
+    Bottom,
+}
+
 /// <summary>Column text alignment.</summary>
 public enum ColumnAlign
 {

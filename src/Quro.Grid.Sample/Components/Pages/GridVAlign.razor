@@ -1,0 +1,35 @@
+@page "/valign"
+@rendermode InteractiveServer
+@using System.Globalization
+@using Quro.Grid
+@using Quro.Grid.Data
+@using Quro.Grid.Definition
+@using Quro.Grid.Sample.Data
+
+<PageTitle>@L["sample.valign.title"]</PageTitle>
+
+<h1>@L["sample.valign.title"]</h1>
+
+@* VAlign (GS-109). It only shows in a row taller than its text, so this is a paged grid with a large RowHeight *@
+<QuroGrid TItem="SampleProduct" DataSet="_products" ItemsProvider="Provide" PageSize="20" RowHeight="56" Height="320px"
+          Localizer="L" Culture="En" ShowFooter="true">
+    <QuroColumn Field="Name" HeaderKey="sample.cells.name" Width="120" />
+    <QuroColumn Field="Kind" HeaderKey="sample.editselect.kind" Width="100" VAlign="ColumnVAlign.Top" />
+    <QuroColumn Field="Note" HeaderKey="sample.rownum.note" Width="100" VAlign="ColumnVAlign.Middle" />
+    <QuroColumn Field="Qty" HeaderKey="sample.editselect.qty" Type="CellType.Number" Format="N0" Width="100" Aggregate="Aggregate.Sum" VAlign="ColumnVAlign.Bottom" />
+    <QuroColumn Field="Active" HeaderKey="sample.rowlock.active" Type="CellType.Check" Width="80" VAlign="ColumnVAlign.Middle" />
+</QuroGrid>
+
+@code {
+    private static readonly SampleLocalizer L = new();
+    private static readonly CultureInfo En = new("en-US", useUserOverride: false);
+    private readonly QuroDataSet<SampleProduct> _products = new(p => p.Id);
+
+    private static Task<GridItemsResult<SampleProduct>> Provide(GridItemsRequest request)
+    {
+        var rows = Enumerable.Range(request.StartIndex + 1, Math.Max(0, Math.Min(request.Count, 30 - request.StartIndex)))
+            .Select(n => new SampleProduct { Id = n, Name = $"Item {n}", Kind = "A", Note = "A note too long for its column", Qty = n, Active = n % 2 == 0 })
+            .ToList();
+        return Task.FromResult(new GridItemsResult<SampleProduct>(rows, 30, new Dictionary<string, decimal> { ["Qty"] = 465m }));
+    }
+}

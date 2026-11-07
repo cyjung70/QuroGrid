@@ -13,6 +13,7 @@ paths:
 - `Currency`의 소수 자릿수는 통화 마스터를 따른다 (로캘과 분리). 통화 정보는 앱이 주입한다.
 - `Popup`: 코드 입력 후 Tab → 1건 일치면 자동 확정, 복수면 팝업, **0건이면 팝업 없음**(2026-10-28, Spec 4.6과 다름). 0건 입력값은 잠정으로 확정하지 않고 편집 유지. F4는 항상 팝업.
 - 기본 정렬 (A-72): 숫자(`Number`·`Currency`·숫자 필드의 `Text`·`Label`) 오른쪽, `Check`·`Combo`·`Button`·`Image` 가운데, 나머지 왼쪽. `QuroColumn.Align`이 덮어쓴다. 헤더는 왼쪽.
+- 세로 정렬 (A-77): `QuroColumn.VAlign`. 기본은 위쪽. 셀을 flex로 바꾸지 않고 `align-content`를 쓴다(`...`와 `text-align` 유지). 글자보다 높은 행에서만 보인다.
 - 코드 목록·코드도움 데이터는 앱이 제공한다(`ICodeListSource`, `ILookupSource` 성격의 추상화 — 이름은 consumer-contract.md에서 확정). 그리드는 HTTP를 직접 호출하지 않는다.
 
 ## 키보드 맵 (P0)
